@@ -17,6 +17,7 @@ import { searchTmdb } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
+// Note: audioTranscriber.ts removed — audio path now uses audioExtractor.ts (Gemini Files API)
 
 const router: IRouter = Router();
 

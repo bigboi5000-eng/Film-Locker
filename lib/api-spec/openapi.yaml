@@ -99,9 +99,10 @@ paths:
       tags: [movies]
       summary: >
         Extract movies from a social media URL. Fetches the post caption via
-        RapidAPI; falls back to yt-dlp audio download + Whisper transcription
-        when no caption is present. The resulting text is fed through the
-        Gemini pipeline and matched movies are saved to the locker.
+        RapidAPI (source="caption"); falls back to yt-dlp audio download
+        processed natively by Gemini 2.5 Flash via the Files API
+        (source="audio") when no caption is present. Matched movies are saved
+        to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
       requestBody:
         required: true
         content:
@@ -289,11 +290,12 @@ components:
       properties:
         source:
           type: string
-          enum: [caption, transcript, none]
+          enum: [caption, audio, none]
           description: >
             How the text was obtained: "caption" = RapidAPI scraper returned
-            post text; "transcript" = audio downloaded with yt-dlp and
-            transcribed via Whisper; "none" = no text could be extracted.
+            post text fed into Gemini; "audio" = yt-dlp downloaded the audio
+            and Gemini 2.5 Flash processed it natively via the Files API;
+            "none" = no data could be extracted.
         text:
           type: string
           nullable: true

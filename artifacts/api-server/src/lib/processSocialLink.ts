@@ -4,25 +4,35 @@
  * Main entry point fired whenever a user submits a social media URL.
  *
  * Strategy:
- *   1. Try RapidAPI caption scraper (fast, free-tier friendly).
- *   2. If caption is absent/empty, download audio with yt-dlp and transcribe
- *      via OpenAI Whisper (audio fallback).
- *   3. Feed whichever text is available into the Gemini → TMDB → DB pipeline.
- *   4. If neither source yields text, return an empty result instead of throwing.
+ *   1. RapidAPI caption scraper (fast, no AI cost).
+ *        → text → Gemini text pipeline → TMDB → DB
+ *   2. If caption absent/empty: yt-dlp downloads audio, Gemini 2.5 Flash
+ *      processes it natively via the Files API (multimodal, no transcription step).
+ *        → Gemini audio extraction → TMDB → DB
+ *   3. If both fail: return an empty result instead of throwing.
  *
- * The `source` field in the result tells the caller how text was obtained so
- * the UI can display a meaningful label ("from caption" vs "from audio").
+ * Only credential required: GEMINI_API_KEY (and RAPIDAPI_KEY for captions).
+ * OpenAI is not used anywhere in this file or its dependencies.
+ *
+ * The `source` field tells the UI how movies were found:
+ *   "caption"   — RapidAPI returned post text → Gemini parsed it
+ *   "audio"     — yt-dlp + Gemini native audio understanding
+ *   "none"      — neither source yielded usable data
  */
 
 import { fetchSocialCaption } from "./socialScraper";
-import { transcribeAudio } from "./audioTranscriber";
-import { runMoviePipeline, type PipelineResult } from "./moviePipeline";
+import { extractMoviesFromAudio } from "./audioExtractor";
+import {
+  runMoviePipeline,
+  enrichAndSaveMatches,
+  type PipelineResult,
+} from "./moviePipeline";
 
-export type SocialLinkSource = "caption" | "transcript" | "none";
+export type SocialLinkSource = "caption" | "audio" | "none";
 
 export interface ProcessSocialLinkResult extends PipelineResult {
   source: SocialLinkSource;
-  /** The raw text that was sent to Gemini; null when no text could be obtained. */
+  /** Raw caption text when source is "caption"; null for audio or none. */
   text: string | null;
 }
 
@@ -42,42 +52,39 @@ export async function processSocialLink(
   url: string,
   warn?: WarnFn
 ): Promise<ProcessSocialLinkResult> {
-  let text: string | null = null;
-  let source: SocialLinkSource = "none";
-
   // ── Step 1: caption via RapidAPI ──────────────────────────────────────────
   try {
-    text = await fetchSocialCaption(url);
-    if (text) {
-      source = "caption";
+    const caption = await fetchSocialCaption(url);
+
+    if (caption) {
+      // Caption found — run through the full text pipeline
+      try {
+        const { matches, saved } = await runMoviePipeline(caption, warn);
+        return { source: "caption", text: caption, matches, saved };
+      } catch (err) {
+        warn?.({ url, err }, "processSocialLink: Gemini text pipeline failed");
+        return { source: "caption", text: caption, matches: [], saved: [] };
+      }
     }
   } catch (err) {
     warn?.({ url, err }, "processSocialLink: caption fetch failed — trying audio fallback");
   }
 
-  // ── Step 2: audio fallback via yt-dlp + Whisper ───────────────────────────
-  if (!text) {
-    try {
-      text = await transcribeAudio(url);
-      if (text) {
-        source = "transcript";
-      }
-    } catch (err) {
-      warn?.({ url, err }, "processSocialLink: audio transcription failed — no text available");
-    }
-  }
-
-  // ── Step 3: no text from either source ────────────────────────────────────
-  if (!text) {
-    return { source: "none", text: null, matches: [], saved: [] };
-  }
-
-  // ── Step 4: Gemini → TMDB → DB ────────────────────────────────────────────
+  // ── Step 2: audio fallback via yt-dlp + Gemini native audio ──────────────
   try {
-    const { matches, saved } = await runMoviePipeline(text, warn);
-    return { source, text, matches, saved };
+    const audioMatches = await extractMoviesFromAudio(url);
+
+    try {
+      const { matches, saved } = await enrichAndSaveMatches(audioMatches, warn);
+      return { source: "audio", text: null, matches, saved };
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: TMDB/DB enrichment failed after audio extraction");
+      return { source: "audio", text: null, matches: [], saved: [] };
+    }
   } catch (err) {
-    warn?.({ url, err }, "processSocialLink: Gemini pipeline failed — returning empty matches");
-    return { source, text, matches: [], saved: [] };
+    warn?.({ url, err }, "processSocialLink: audio extraction failed — no data available");
   }
+
+  // ── Step 3: nothing worked ────────────────────────────────────────────────
+  return { source: "none", text: null, matches: [], saved: [] };
 }

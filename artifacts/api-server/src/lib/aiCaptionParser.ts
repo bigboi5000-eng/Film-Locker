@@ -1,60 +1,26 @@
-import OpenAI from "openai";
-import { extractTitleCandidates } from "./captionParser";
+/**
+ * aiCaptionParser.ts
+ *
+ * AI-powered caption parser used by the /movies/parse-caption route.
+ * Delegates to the shared Gemini extraction pipeline (extractMoviesWithGemini)
+ * and returns just the movie title strings for TMDB lookup.
+ *
+ * Replaced the previous OpenAI GPT-4o-mini implementation; now uses only
+ * GEMINI_API_KEY — no OPENAI_API_KEY required.
+ */
 
-let _client: OpenAI | null = null;
+import { extractMoviesWithGemini } from "./geminiParser";
 
-function getClient(): OpenAI | null {
-  const apiKey = process.env["OPENAI_API_KEY"];
-  if (!apiKey) return null;
-  if (!_client) _client = new OpenAI({ apiKey });
-  return _client;
-}
+/** Minimum confidence to include a Gemini match as a title candidate. */
+const CONFIDENCE_THRESHOLD = 0.45;
 
 /**
- * Uses GPT to extract movie titles from a social media caption.
- * Falls back to heuristic extraction if OpenAI is unavailable.
+ * Extract movie title candidates from a social media caption using Gemini.
+ * Returns an array of title strings for the caller to look up in TMDB.
  */
 export async function extractMovieTitlesAI(caption: string): Promise<string[]> {
-  const client = getClient();
-
-  if (!client) {
-    return extractTitleCandidates(caption);
-  }
-
-  try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_tokens: 512,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You extract movie and TV film titles from social media captions. " +
-            "Return ONLY a JSON array of title strings, e.g. [\"Inception\", \"The Godfather\"]. " +
-            "Include every film or movie mentioned, even oblique references. " +
-            "Do not include TV shows, books, or songs — only theatrical/streaming films. " +
-            "Return [] if no films are mentioned. Never return anything except the JSON array.",
-        },
-        {
-          role: "user",
-          content: caption,
-        },
-      ],
-    });
-
-    const raw = response.choices[0]?.message?.content?.trim() ?? "[]";
-    // Strip markdown code fences if GPT wraps the JSON
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    const parsed = JSON.parse(cleaned);
-
-    if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
-      return (parsed as string[]).filter((t) => t.trim().length > 0).slice(0, 15);
-    }
-
-    return extractTitleCandidates(caption);
-  } catch (err) {
-    // Log and fall back to heuristics on any OpenAI error
-    return extractTitleCandidates(caption);
-  }
+  const matches = await extractMoviesWithGemini(caption);
+  return matches
+    .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD)
+    .map((m) => m.movie_title);
 }

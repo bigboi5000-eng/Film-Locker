@@ -435,7 +435,7 @@ export const getProcessSocialLinkUrl = () => {
 }
 
 /**
- * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI; falls back to yt-dlp audio download + Whisper transcription when no caption is present. The resulting text is fed through the Gemini pipeline and matched movies are saved to the locker.
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
 
  */
 export const processSocialLink = async (processSocialLinkBody: ProcessSocialLinkBody, options?: RequestInit): Promise<ProcessSocialLinkResponse> => {
@@ -484,7 +484,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ProcessSocialLinkMutationError = ErrorType<unknown>
 
     /**
- * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI; falls back to yt-dlp audio download + Whisper transcription when no caption is present. The resulting text is fed through the Gemini pipeline and matched movies are saved to the locker.
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
 
  */
 export const useProcessSocialLink = <TError = ErrorType<unknown>,

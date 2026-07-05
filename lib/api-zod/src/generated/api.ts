@@ -101,7 +101,7 @@ export const AiExtractResponse = zod.object({
 
 
 /**
- * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI; falls back to yt-dlp audio download + Whisper transcription when no caption is present. The resulting text is fed through the Gemini pipeline and matched movies are saved to the locker.
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
 
  */
 export const ProcessSocialLinkBody = zod.object({
@@ -109,7 +109,7 @@ export const ProcessSocialLinkBody = zod.object({
 })
 
 export const ProcessSocialLinkResponse = zod.object({
-  "source": zod.enum(['caption', 'transcript', 'none']).describe('How the text was obtained: \"caption\" = RapidAPI scraper returned post text; \"transcript\" = audio downloaded with yt-dlp and transcribed via Whisper; \"none\" = no text could be extracted.\n'),
+  "source": zod.enum(['caption', 'audio', 'none']).describe('How the text was obtained: \"caption\" = RapidAPI scraper returned post text fed into Gemini; \"audio\" = yt-dlp downloaded the audio and Gemini 2.5 Flash processed it natively via the Files API; \"none\" = no data could be extracted.\n'),
   "text": zod.string().nullish().describe('The raw text that was sent to Gemini; null when source is \"none\".'),
   "matches": zod.array(zod.object({
   "movie_title": zod.string().describe('Canonical movie title as returned by Gemini'),

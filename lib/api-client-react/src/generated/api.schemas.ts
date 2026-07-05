@@ -79,19 +79,19 @@ export interface ProcessSocialLinkBody {
 }
 
 /**
- * How the text was obtained: "caption" = RapidAPI scraper returned post text; "transcript" = audio downloaded with yt-dlp and transcribed via Whisper; "none" = no text could be extracted.
+ * How the text was obtained: "caption" = RapidAPI scraper returned post text fed into Gemini; "audio" = yt-dlp downloaded the audio and Gemini 2.5 Flash processed it natively via the Files API; "none" = no data could be extracted.
  */
 export type ProcessSocialLinkResponseSource = typeof ProcessSocialLinkResponseSource[keyof typeof ProcessSocialLinkResponseSource];
 
 
 export const ProcessSocialLinkResponseSource = {
   caption: 'caption',
-  transcript: 'transcript',
+  audio: 'audio',
   none: 'none',
 } as const;
 
 export interface ProcessSocialLinkResponse {
-  /** How the text was obtained: "caption" = RapidAPI scraper returned post text; "transcript" = audio downloaded with yt-dlp and transcribed via Whisper; "none" = no text could be extracted. */
+  /** How the text was obtained: "caption" = RapidAPI scraper returned post text fed into Gemini; "audio" = yt-dlp downloaded the audio and Gemini 2.5 Flash processed it natively via the Files API; "none" = no data could be extracted. */
   source: ProcessSocialLinkResponseSource;
   /** The raw text that was sent to Gemini; null when source is "none". */
   text?: string | null;

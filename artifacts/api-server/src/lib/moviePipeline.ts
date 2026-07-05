@@ -1,20 +1,20 @@
 /**
  * moviePipeline.ts
  *
- * Shared Gemini → TMDB → DB pipeline used by both /movies/ai-extract and
- * /movies/process-social-link. Keeps the two routes DRY.
+ * Shared Gemini → TMDB → DB pipeline used by:
+ *   - /movies/ai-extract         (text → Gemini → TMDB → DB)
+ *   - /movies/process-social-link caption path  (text → Gemini → TMDB → DB)
+ *   - /movies/process-social-link audio path    (Gemini already ran on audio
+ *                                                → TMDB → DB only)
  *
- * Steps:
- *   1. extractMoviesWithGemini(text)  — structured extraction with confidence scores
- *   2. Sanitise / sort confidence scores
- *   3. For each match above the threshold: searchTmdb → insert or select from DB
- *
- * Returns enriched matches (with resolved tmdb_id) and the list of saved Movie rows.
+ * Exported functions:
+ *   enrichAndSaveMatches(rawMatches, warn?)  — TMDB + DB only (skip Gemini)
+ *   runMoviePipeline(text, warn?)            — Gemini + TMDB + DB
  */
 
 import { eq } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
-import { extractMoviesWithGemini } from "./geminiParser";
+import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
 import { searchTmdb } from "./tmdb";
 
 export type SavedMovie = typeof moviesTable.$inferSelect;
@@ -31,40 +31,40 @@ export interface PipelineResult {
   saved: SavedMovie[];
 }
 
+type WarnFn = (data: Record<string, unknown>, msg: string) => void;
+
 /** Minimum Gemini confidence score to attempt a TMDB lookup and DB save. */
 const CONFIDENCE_THRESHOLD = 0.45;
 
 /**
- * Run the full Gemini → TMDB → DB pipeline on a block of text.
+ * TMDB enrichment + DB upsert for a pre-extracted list of movie matches.
  *
- * @param text    Raw text to analyse (caption, transcript, freeform, etc.)
- * @param warn    Optional logger to emit per-match warnings without aborting the loop.
+ * Call this when Gemini has already run (e.g. the audio extraction path)
+ * and you just need to resolve TMDB IDs and persist to the locker.
+ *
+ * @param rawMatches  Matches from extractMoviesWithGemini (or extractMoviesFromAudio)
+ * @param warn        Optional structured logger for per-match warnings
  */
-export async function runMoviePipeline(
-  text: string,
-  warn?: (data: Record<string, unknown>, msg: string) => void
+export async function enrichAndSaveMatches(
+  rawMatches: GeminiMovieMatch[],
+  warn?: WarnFn
 ): Promise<PipelineResult> {
-  // 1. Gemini structured extraction
-  let rawMatches = await extractMoviesWithGemini(text);
+  // Sanitise and sort by confidence descending
+  const sanitised = rawMatches
+    .map((m) => ({
+      ...m,
+      confidence_score: Number.isFinite(m.confidence_score)
+        ? Math.min(1, Math.max(0, m.confidence_score))
+        : 0,
+    }))
+    .sort((a, b) => b.confidence_score - a.confidence_score);
 
-  // Sanitise: guard against NaN / non-finite values from the model
-  rawMatches = rawMatches.map((m) => ({
-    ...m,
-    confidence_score: Number.isFinite(m.confidence_score)
-      ? Math.min(1, Math.max(0, m.confidence_score))
-      : 0,
-  }));
-
-  // Sort highest confidence first
-  rawMatches.sort((a, b) => b.confidence_score - a.confidence_score);
-
-  // 2. TMDB enrichment + DB upsert
   const seenTmdb = new Set<number>();
   const saved: SavedMovie[] = [];
   const enrichedMatches: EnrichedMatch[] = [];
 
-  for (const match of rawMatches) {
-    // Skip low-confidence matches — still include them in the response, just without tmdb_id
+  for (const match of sanitised) {
+    // Skip low-confidence matches — include in response but without tmdb_id
     if (!(match.confidence_score >= CONFIDENCE_THRESHOLD)) {
       enrichedMatches.push({ ...match, tmdb_id: null });
       continue;
@@ -114,4 +114,21 @@ export async function runMoviePipeline(
   }
 
   return { matches: enrichedMatches, saved };
+}
+
+/**
+ * Full text → Gemini → TMDB → DB pipeline.
+ *
+ * Use this when starting from raw text (caption, transcript, freeform prose).
+ * Calls Gemini for structured extraction, then delegates to enrichAndSaveMatches.
+ *
+ * @param text  Raw text to analyse
+ * @param warn  Optional structured logger
+ */
+export async function runMoviePipeline(
+  text: string,
+  warn?: WarnFn
+): Promise<PipelineResult> {
+  const rawMatches = await extractMoviesWithGemini(text);
+  return enrichAndSaveMatches(rawMatches, warn);
 }
