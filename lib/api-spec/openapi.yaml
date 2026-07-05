@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: movies
+    description: Film Locker movie operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /movies:
+    get:
+      operationId: listMovies
+      tags: [movies]
+      summary: List all movies in the locker
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMoviesResponse"
+    post:
+      operationId: addMovie
+      tags: [movies]
+      summary: Add a movie to the locker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMovieBody"
+      responses:
+        "201":
+          description: Movie added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movie"
+  /movies/parse-caption:
+    post:
+      operationId: parseCaption
+      tags: [movies]
+      summary: Parse a social media caption and find matching movies via TMDB
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseCaptionBody"
+      responses:
+        "200":
+          description: Candidate movies found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParseCaptionResponse"
+  /movies/{id}:
+    delete:
+      operationId: deleteMovie
+      tags: [movies]
+      summary: Remove a movie from the locker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Movie removed
 components:
   schemas:
     HealthStatus:
@@ -33,4 +96,92 @@ components:
           type: string
       required:
         - status
-
+    Movie:
+      type: object
+      properties:
+        id:
+          type: integer
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        releaseYear:
+          type: string
+        posterUrl:
+          type: string
+        overview:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tmdbId
+        - title
+        - releaseYear
+        - posterUrl
+        - overview
+        - addedAt
+    MovieCandidate:
+      type: object
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        releaseYear:
+          type: string
+        posterUrl:
+          type: string
+        overview:
+          type: string
+      required:
+        - tmdbId
+        - title
+        - releaseYear
+        - posterUrl
+        - overview
+    ListMoviesResponse:
+      type: object
+      properties:
+        movies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Movie"
+      required:
+        - movies
+    AddMovieBody:
+      type: object
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        releaseYear:
+          type: string
+        posterUrl:
+          type: string
+        overview:
+          type: string
+      required:
+        - tmdbId
+        - title
+        - releaseYear
+        - posterUrl
+        - overview
+    ParseCaptionBody:
+      type: object
+      properties:
+        caption:
+          type: string
+      required:
+        - caption
+    ParseCaptionResponse:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/MovieCandidate"
+      required:
+        - candidates

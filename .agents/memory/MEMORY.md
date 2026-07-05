@@ -1,0 +1,2 @@
+- [Orval zod barrel dupe fix](orval-zod-barrel.md) — codegen script must patch lib/api-zod/src/index.ts after orval to prevent TS2308 duplicate export errors.
+- [expo-image placeholder](expo-image-placeholder.md) — placeholder prop on expo-image Image does not accept `{ color }` — use require() or URI string.

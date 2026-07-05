@@ -1,36 +1,53 @@
-# [Project name]
+# Film Locker
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A dark-mode native mobile app where users paste social media captions, AI-style heuristics extract movie titles, TMDB confirms them with poster art, and the resulting films are saved to a personal "locker" that persists across sessions.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/film-locker run dev` — run the Expo mobile app
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — Postgres connection string, `TMDB_API_KEY` — TMDB v3 API key
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
+- Mobile: Expo SDK 54, Expo Router v6, React Native 0.81
 - API: Express 5
-- DB: PostgreSQL + Drizzle ORM
+- DB: PostgreSQL + Drizzle ORM (`lib/db/src/schema/movies.ts`)
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- API codegen: Orval (from OpenAPI spec in `lib/api-spec/openapi.yaml`)
+- Movie data: TMDB API v3 (server-side, via `artifacts/api-server/src/lib/tmdb.ts`)
+- Caption parsing: heuristic text extraction (`artifacts/api-server/src/lib/captionParser.ts`)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — source of truth for API contract
+- `lib/db/src/schema/movies.ts` — movies table (unique constraint on tmdb_id)
+- `artifacts/api-server/src/routes/movies/` — CRUD + parse-caption routes
+- `artifacts/api-server/src/lib/tmdb.ts` — TMDB search helper
+- `artifacts/api-server/src/lib/captionParser.ts` — heuristic title extractor
+- `artifacts/film-locker/app/(tabs)/index.tsx` — main locker screen
+- `artifacts/film-locker/components/MovieCard.tsx` — poster card (long-press to delete)
+- `artifacts/film-locker/components/ExtractSheet.tsx` — bottom sheet with TMDB results
+- `artifacts/film-locker/constants/colors.ts` — dark cinema palette (gold accent #C8A84B)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Caption parsing is heuristic-only (no AI API key required): extracts quoted strings, hashtags, and Title Case runs, then confirms each against TMDB search.
+- `POST /movies/parse-caption` is declared before `DELETE /movies/:id` in the router to prevent Express 5 param collision.
+- Movies are unique by `tmdb_id` (DB unique index); the POST route is idempotent — returns existing record on conflict rather than erroring.
+- `lib/api-spec/package.json` codegen script patches `lib/api-zod/src/index.ts` after orval runs to remove the duplicate `./generated/types` barrel export that causes TS2308 errors.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Users paste any social media caption into the top input and tap "Extract Movies"
+- The server extracts potential movie titles using text heuristics, searches TMDB for each, and returns up to 24 poster candidates
+- A bottom sheet shows each candidate with poster, title, year and overview — tap + to lock it in
+- The locker grid shows all saved movies as poster cards; long-press to remove
+- Data persists in PostgreSQL across sessions
 
 ## User preferences
 
@@ -38,8 +55,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Always run `pnpm --filter @workspace/api-spec run codegen` after editing `lib/api-spec/openapi.yaml`
+- The codegen script patches `lib/api-zod/src/index.ts` after orval — don't manually restore the two-line barrel
+- `expo-image` placeholder prop accepts require() or URI, not `{ color }` object
+- useNativeDriver warnings in web preview are expected — app targets iOS/Android via Expo Go
