@@ -6,12 +6,15 @@
  * so the caller can fall back to audio transcription.
  *
  * Platform routing:
- *   instagram.com  →  instagram-scraper-api2.p.rapidapi.com
+ *   instagram.com  →  instagram-scraper-stable-api.p.rapidapi.com
+ *                     • primary:  GET /get_media_data.php
+ *                     • fallback: GET /get_reel_title.php
  *   tiktok.com     →  tiktok-scraper7.p.rapidapi.com
  *   anything else  →  null (let the audio fallback handle it)
  */
 
 const RAPIDAPI_KEY = process.env["RAPIDAPI_KEY"];
+const IG_HOST = "instagram-scraper-stable-api.p.rapidapi.com";
 
 type Platform = "instagram" | "tiktok" | "unknown";
 
@@ -35,29 +38,92 @@ function requireApiKey(): string {
   return RAPIDAPI_KEY;
 }
 
-/** Fetch caption for an Instagram post/reel/story URL. */
-async function fetchInstagramCaption(url: string): Promise<string | null> {
-  const key = requireApiKey();
-  const endpoint = `https://instagram-scraper-api2.p.rapidapi.com/v1/post_info?code_or_id_or_url=${encodeURIComponent(url)}`;
+/**
+ * Detect whether an Instagram URL is a reel or a regular post.
+ * Defaults to "post" for unknown shapes (IGTV, carousels, etc.).
+ */
+function igType(url: string): "post" | "reel" {
+  return url.includes("/reel/") ? "reel" : "post";
+}
+
+/**
+ * Walk the response JSON looking for a non-empty caption/title string.
+ * Instagram's API can return data under several different shapes depending
+ * on which endpoint and version was hit, so we probe the common locations.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractIgCaption(data: any): string | null {
+  const candidates: unknown[] = [
+    data?.caption,
+    data?.title,
+    data?.description,
+    data?.text,
+    data?.data?.caption,
+    data?.data?.title,
+    data?.data?.description,
+    data?.node?.edge_media_to_caption?.edges?.[0]?.node?.text,
+    data?.edge_media_to_caption?.edges?.[0]?.node?.text,
+    data?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) return c.trim();
+  }
+  return null;
+}
+
+/**
+ * Call one Instagram Scraper Stable API endpoint and return the raw JSON,
+ * or null if the response contains an `error` field (post inaccessible).
+ * Throws on HTTP errors so the caller can decide whether to try the fallback.
+ */
+async function igRequest(
+  key: string,
+  path: string,
+  url: string
+): Promise<Record<string, unknown> | null> {
+  const type = igType(url);
+  const endpoint = `https://${IG_HOST}/${path}?reel_post_code_or_url=${encodeURIComponent(url)}&type=${type}`;
 
   const res = await fetch(endpoint, {
     headers: {
       "x-rapidapi-key": key,
-      "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com",
+      "x-rapidapi-host": IG_HOST,
     },
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      `Instagram scraper returned ${res.status} ${res.statusText}: ${body.slice(0, 200)}`
+      `Instagram scraper (${path}) returned ${res.status} ${res.statusText}: ${body.slice(0, 200)}`
     );
   }
 
-  const data = await res.json() as { data?: { caption?: string | null } };
-  // Shape: { data: { caption: string | null, ... } }
-  const caption: string | null = data?.data?.caption ?? null;
-  return caption && caption.trim().length > 0 ? caption.trim() : null;
+  const data = await res.json() as Record<string, unknown>;
+  // API signals "not found" or "rate limited" via an `error` field rather
+  // than an HTTP error status — treat these as null (no caption available).
+  if (typeof data?.error === "string") return null;
+  return data;
+}
+
+/** Fetch caption for an Instagram post/reel URL. */
+async function fetchInstagramCaption(url: string): Promise<string | null> {
+  const key = requireApiKey();
+
+  // Primary: get_media_data.php (most complete data)
+  try {
+    const data = await igRequest(key, "get_media_data.php", url);
+    if (data) {
+      const caption = extractIgCaption(data);
+      if (caption) return caption;
+    }
+  } catch {
+    // Primary failed — fall through to the title endpoint
+  }
+
+  // Fallback: get_reel_title.php (lighter, but returns title/caption text)
+  const data = await igRequest(key, "get_reel_title.php", url);
+  if (!data) return null; // post not accessible to the scraper
+  return extractIgCaption(data);
 }
 
 /** Fetch caption/description for a TikTok video URL. */
