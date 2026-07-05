@@ -10,7 +10,7 @@ import {
   DeleteMovieParams,
 } from "@workspace/api-zod";
 import { searchTmdb } from "../../lib/tmdb";
-import { extractTitleCandidates } from "../../lib/captionParser";
+import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 
 const router: IRouter = Router();
 
@@ -32,8 +32,8 @@ router.post("/movies/parse-caption", async (req, res): Promise<void> => {
     return;
   }
 
-  const titleCandidates = extractTitleCandidates(parsed.data.caption);
-  req.log.info({ count: titleCandidates.length, candidates: titleCandidates }, "Extracted caption candidates");
+  const titleCandidates = await extractMovieTitlesAI(parsed.data.caption);
+  req.log.info({ count: titleCandidates.length, candidates: titleCandidates }, "Extracted caption candidates (AI)");
 
   const seen = new Set<number>();
   const results: Array<{
