@@ -93,6 +93,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiExtractResponse"
+  /movies/process-social-link:
+    post:
+      operationId: processSocialLink
+      tags: [movies]
+      summary: >
+        Extract movies from a social media URL. Fetches the post caption via
+        RapidAPI; falls back to yt-dlp audio download + Whisper transcription
+        when no caption is present. The resulting text is fed through the
+        Gemini pipeline and matched movies are saved to the locker.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessSocialLinkBody"
+      responses:
+        "200":
+          description: Processing complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessSocialLinkResponse"
   /movies/{id}:
     delete:
       operationId: deleteMovie
@@ -251,5 +273,42 @@ components:
           items:
             $ref: "#/components/schemas/Movie"
       required:
+        - matches
+        - saved
+    ProcessSocialLinkBody:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Public social media post URL (Instagram, TikTok, YouTube, etc.)
+      required:
+        - url
+    ProcessSocialLinkResponse:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [caption, transcript, none]
+          description: >
+            How the text was obtained: "caption" = RapidAPI scraper returned
+            post text; "transcript" = audio downloaded with yt-dlp and
+            transcribed via Whisper; "none" = no text could be extracted.
+        text:
+          type: string
+          nullable: true
+          description: The raw text that was sent to Gemini; null when source is "none".
+        matches:
+          type: array
+          description: Every movie Gemini identified, ordered by confidence_score descending
+          items:
+            $ref: "#/components/schemas/GeminiMovieMatch"
+        saved:
+          type: array
+          description: Movie records successfully found on TMDB and saved to the locker
+          items:
+            $ref: "#/components/schemas/Movie"
+      required:
+        - source
         - matches
         - saved

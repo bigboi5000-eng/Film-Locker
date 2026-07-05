@@ -27,7 +27,9 @@ import type {
   ListMoviesResponse,
   Movie,
   ParseCaptionBody,
-  ParseCaptionResponse
+  ParseCaptionResponse,
+  ProcessSocialLinkBody,
+  ProcessSocialLinkResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -422,6 +424,78 @@ export const useAiExtract = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getAiExtractMutationOptions(options));
+    }
+
+export const getProcessSocialLinkUrl = () => {
+
+
+
+
+  return `/api/movies/process-social-link`
+}
+
+/**
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI; falls back to yt-dlp audio download + Whisper transcription when no caption is present. The resulting text is fed through the Gemini pipeline and matched movies are saved to the locker.
+
+ */
+export const processSocialLink = async (processSocialLinkBody: ProcessSocialLinkBody, options?: RequestInit): Promise<ProcessSocialLinkResponse> => {
+
+  return customFetch<ProcessSocialLinkResponse>(getProcessSocialLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(processSocialLinkBody)
+  }
+);}
+
+
+
+
+export const getProcessSocialLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext> => {
+
+const mutationKey = ['processSocialLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof processSocialLink>>, {data: BodyType<ProcessSocialLinkBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  processSocialLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProcessSocialLinkMutationResult = NonNullable<Awaited<ReturnType<typeof processSocialLink>>>
+    export type ProcessSocialLinkMutationBody = BodyType<ProcessSocialLinkBody>
+    export type ProcessSocialLinkMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI; falls back to yt-dlp audio download + Whisper transcription when no caption is present. The resulting text is fed through the Gemini pipeline and matched movies are saved to the locker.
+
+ */
+export const useProcessSocialLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof processSocialLink>>,
+        TError,
+        {data: BodyType<ProcessSocialLinkBody>},
+        TContext
+      > => {
+      return useMutation(getProcessSocialLinkMutationOptions(options));
     }
 
 export const getDeleteMovieUrl = (id: number,) => {

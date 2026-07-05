@@ -73,3 +73,31 @@ export interface AiExtractResponse {
   saved: Movie[];
 }
 
+export interface ProcessSocialLinkBody {
+  /** Public social media post URL (Instagram, TikTok, YouTube, etc.) */
+  url: string;
+}
+
+/**
+ * How the text was obtained: "caption" = RapidAPI scraper returned post text; "transcript" = audio downloaded with yt-dlp and transcribed via Whisper; "none" = no text could be extracted.
+ */
+export type ProcessSocialLinkResponseSource = typeof ProcessSocialLinkResponseSource[keyof typeof ProcessSocialLinkResponseSource];
+
+
+export const ProcessSocialLinkResponseSource = {
+  caption: 'caption',
+  transcript: 'transcript',
+  none: 'none',
+} as const;
+
+export interface ProcessSocialLinkResponse {
+  /** How the text was obtained: "caption" = RapidAPI scraper returned post text; "transcript" = audio downloaded with yt-dlp and transcribed via Whisper; "none" = no text could be extracted. */
+  source: ProcessSocialLinkResponseSource;
+  /** The raw text that was sent to Gemini; null when source is "none". */
+  text?: string | null;
+  /** Every movie Gemini identified, ordered by confidence_score descending */
+  matches: GeminiMovieMatch[];
+  /** Movie records successfully found on TMDB and saved to the locker */
+  saved: Movie[];
+}
+

@@ -10,12 +10,13 @@ import {
   DeleteMovieParams,
   AiExtractBody,
   AiExtractResponse,
+  ProcessSocialLinkBody,
+  ProcessSocialLinkResponse,
 } from "@workspace/api-zod";
 import { searchTmdb } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
-import { extractMoviesWithGemini } from "../../lib/geminiParser";
-
-type SavedMovie = typeof moviesTable.$inferSelect;
+import { runMoviePipeline } from "../../lib/moviePipeline";
+import { processSocialLink } from "../../lib/processSocialLink";
 
 const router: IRouter = Router();
 
@@ -78,84 +79,38 @@ router.post("/movies/ai-extract", async (req, res): Promise<void> => {
     return;
   }
 
-  // 1. Gemini structured extraction
-  let rawMatches = await extractMoviesWithGemini(parsed.data.text);
-  req.log.info({ count: rawMatches.length }, "Gemini extracted movie matches");
+  req.log.info("ai-extract: running Gemini pipeline");
+  const { matches, saved } = await runMoviePipeline(
+    parsed.data.text,
+    (data, msg) => req.log.warn(data, msg)
+  );
 
-  // Sanitize confidence scores (guard against NaN / non-finite values from model)
-  rawMatches = rawMatches.map((m) => ({
-    ...m,
-    confidence_score: Number.isFinite(m.confidence_score)
-      ? Math.min(1, Math.max(0, m.confidence_score))
-      : 0,
-  }));
+  req.log.info({ matchCount: matches.length, saved: saved.length }, "ai-extract: complete");
+  res.json(AiExtractResponse.parse({ matches, saved }));
+});
 
-  // Sort by confidence descending
-  rawMatches.sort((a, b) => b.confidence_score - a.confidence_score);
-
-  // 2. For each match: TMDB lookup → DB upsert
-  const seenTmdb = new Set<number>();
-  const saved: SavedMovie[] = [];
-
-  // Enrich matches with resolved TMDB id so frontend can correlate accurately
-  const enrichedMatches: Array<{
-    movie_title: string;
-    release_year: string;
-    confidence_score: number;
-    tmdb_id: number | null;
-  }> = [];
-
-  for (const match of rawMatches) {
-    // Skip low-confidence or non-finite score matches
-    if (!(match.confidence_score >= 0.45)) {
-      enrichedMatches.push({ ...match, tmdb_id: null });
-      continue;
-    }
-
-    try {
-      const hits = await searchTmdb(match.movie_title);
-      const hit = hits[0];
-
-      if (!hit) {
-        enrichedMatches.push({ ...match, tmdb_id: null });
-        continue;
-      }
-
-      enrichedMatches.push({ ...match, tmdb_id: hit.tmdbId });
-
-      if (seenTmdb.has(hit.tmdbId)) continue;
-      seenTmdb.add(hit.tmdbId);
-
-      const [movie] = await db
-        .insert(moviesTable)
-        .values({
-          tmdbId: hit.tmdbId,
-          title: hit.title,
-          releaseYear: hit.releaseYear,
-          posterUrl: hit.posterUrl,
-          overview: hit.overview,
-        })
-        .onConflictDoNothing()
-        .returning();
-
-      if (movie) {
-        saved.push(movie);
-      } else {
-        // Already in locker — return the existing record so the UI can show it
-        const [existing] = await db
-          .select()
-          .from(moviesTable)
-          .where(eq(moviesTable.tmdbId, hit.tmdbId));
-        if (existing) saved.push(existing);
-      }
-    } catch (err) {
-      req.log.warn({ match, err }, "ai-extract: TMDB/DB step failed for match");
-      enrichedMatches.push({ ...match, tmdb_id: null });
-    }
+// POST /movies/process-social-link — fetch caption or transcribe audio → Gemini → save
+// IMPORTANT: must be declared before /movies/:id to avoid param collision
+router.post("/movies/process-social-link", async (req, res): Promise<void> => {
+  const parsed = ProcessSocialLinkBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
   }
 
-  req.log.info({ saved: saved.length }, "ai-extract: movies saved/found");
-  res.json(AiExtractResponse.parse({ matches: enrichedMatches, saved }));
+  req.log.info({ url: parsed.data.url }, "process-social-link: start");
+
+  const result = await processSocialLink(
+    parsed.data.url,
+    (data, msg) => req.log.warn(data, msg)
+  );
+
+  req.log.info(
+    { source: result.source, matches: result.matches.length, saved: result.saved.length },
+    "process-social-link: complete"
+  );
+
+  res.json(ProcessSocialLinkResponse.parse(result));
 });
 
 // POST /movies — add a movie to the locker (idempotent by tmdbId)

@@ -101,6 +101,35 @@ export const AiExtractResponse = zod.object({
 
 
 /**
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI; falls back to yt-dlp audio download + Whisper transcription when no caption is present. The resulting text is fed through the Gemini pipeline and matched movies are saved to the locker.
+
+ */
+export const ProcessSocialLinkBody = zod.object({
+  "url": zod.string().url().describe('Public social media post URL (Instagram, TikTok, YouTube, etc.)')
+})
+
+export const ProcessSocialLinkResponse = zod.object({
+  "source": zod.enum(['caption', 'transcript', 'none']).describe('How the text was obtained: \"caption\" = RapidAPI scraper returned post text; \"transcript\" = audio downloaded with yt-dlp and transcribed via Whisper; \"none\" = no text could be extracted.\n'),
+  "text": zod.string().nullish().describe('The raw text that was sent to Gemini; null when source is \"none\".'),
+  "matches": zod.array(zod.object({
+  "movie_title": zod.string().describe('Canonical movie title as returned by Gemini'),
+  "release_year": zod.string().describe('Four-digit release year, or empty string if unknown'),
+  "confidence_score": zod.number().describe('Gemini confidence 0.0–1.0 that this is a genuine movie reference'),
+  "tmdb_id": zod.number().nullish().describe('TMDB movie ID resolved after lookup. Null when TMDB returned no match or confidence was below threshold.\n')
+}).describe('Single movie reference extracted by Gemini, with confidence score')).describe('Every movie Gemini identified, ordered by confidence_score descending'),
+  "saved": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "addedAt": zod.coerce.date()
+})).describe('Movie records successfully found on TMDB and saved to the locker')
+})
+
+
+/**
  * @summary Remove a movie from the locker
  */
 export const DeleteMovieParams = zod.object({
