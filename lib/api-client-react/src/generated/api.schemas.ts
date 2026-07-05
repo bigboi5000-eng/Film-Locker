@@ -27,6 +27,20 @@ export interface MovieCandidate {
   overview: string;
 }
 
+/**
+ * Single movie reference extracted by Gemini, with confidence score
+ */
+export interface GeminiMovieMatch {
+  /** Canonical movie title as returned by Gemini */
+  movie_title: string;
+  /** Four-digit release year, or empty string if unknown */
+  release_year: string;
+  /** Gemini confidence 0.0–1.0 that this is a genuine movie reference */
+  confidence_score: number;
+  /** TMDB movie ID resolved after lookup. Null when TMDB returned no match or confidence was below threshold. */
+  tmdb_id?: number | null;
+}
+
 export interface ListMoviesResponse {
   movies: Movie[];
 }
@@ -45,5 +59,17 @@ export interface ParseCaptionBody {
 
 export interface ParseCaptionResponse {
   candidates: MovieCandidate[];
+}
+
+export interface AiExtractBody {
+  /** Raw text to analyse — caption, freeform description, list, etc. */
+  text: string;
+}
+
+export interface AiExtractResponse {
+  /** Every movie Gemini identified, ordered by confidence_score descending */
+  matches: GeminiMovieMatch[];
+  /** Movie records that were successfully found on TMDB and saved to the locker */
+  saved: Movie[];
 }
 

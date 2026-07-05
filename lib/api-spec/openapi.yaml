@@ -73,6 +73,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ParseCaptionResponse"
+  /movies/ai-extract:
+    post:
+      operationId: aiExtract
+      tags: [movies]
+      summary: >
+        Use Gemini AI to extract movie references from text, enrich each with
+        TMDB poster data, and automatically save them to the locker.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiExtractBody"
+      responses:
+        "200":
+          description: Extraction complete — returns Gemini matches and saved Movie records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiExtractResponse"
   /movies/{id}:
     delete:
       operationId: deleteMovie
@@ -141,6 +161,30 @@ components:
         - releaseYear
         - posterUrl
         - overview
+    GeminiMovieMatch:
+      type: object
+      description: Single movie reference extracted by Gemini, with confidence score
+      properties:
+        movie_title:
+          type: string
+          description: Canonical movie title as returned by Gemini
+        release_year:
+          type: string
+          description: Four-digit release year, or empty string if unknown
+        confidence_score:
+          type: number
+          format: float
+          description: Gemini confidence 0.0–1.0 that this is a genuine movie reference
+        tmdb_id:
+          type: integer
+          nullable: true
+          description: >
+            TMDB movie ID resolved after lookup. Null when TMDB returned no
+            match or confidence was below threshold.
+      required:
+        - movie_title
+        - release_year
+        - confidence_score
     ListMoviesResponse:
       type: object
       properties:
@@ -185,3 +229,27 @@ components:
             $ref: "#/components/schemas/MovieCandidate"
       required:
         - candidates
+    AiExtractBody:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Raw text to analyse — caption, freeform description, list, etc.
+      required:
+        - text
+    AiExtractResponse:
+      type: object
+      properties:
+        matches:
+          type: array
+          description: Every movie Gemini identified, ordered by confidence_score descending
+          items:
+            $ref: "#/components/schemas/GeminiMovieMatch"
+        saved:
+          type: array
+          description: Movie records that were successfully found on TMDB and saved to the locker
+          items:
+            $ref: "#/components/schemas/Movie"
+      required:
+        - matches
+        - saved

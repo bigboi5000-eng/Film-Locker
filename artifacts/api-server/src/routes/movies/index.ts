@@ -8,9 +8,14 @@ import {
   ParseCaptionBody,
   ParseCaptionResponse,
   DeleteMovieParams,
+  AiExtractBody,
+  AiExtractResponse,
 } from "@workspace/api-zod";
 import { searchTmdb } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
+import { extractMoviesWithGemini } from "../../lib/geminiParser";
+
+type SavedMovie = typeof moviesTable.$inferSelect;
 
 const router: IRouter = Router();
 
@@ -33,7 +38,10 @@ router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   }
 
   const titleCandidates = await extractMovieTitlesAI(parsed.data.caption);
-  req.log.info({ count: titleCandidates.length, candidates: titleCandidates }, "Extracted caption candidates (AI)");
+  req.log.info(
+    { count: titleCandidates.length, candidates: titleCandidates },
+    "Extracted caption candidates (AI)"
+  );
 
   const seen = new Set<number>();
   const results: Array<{
@@ -61,6 +69,95 @@ router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   res.json(ParseCaptionResponse.parse({ candidates: results.slice(0, 24) }));
 });
 
+// POST /movies/ai-extract — Gemini structured extraction → TMDB enrichment → auto-save
+// IMPORTANT: must be declared before /movies/:id to avoid param collision
+router.post("/movies/ai-extract", async (req, res): Promise<void> => {
+  const parsed = AiExtractBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  // 1. Gemini structured extraction
+  let rawMatches = await extractMoviesWithGemini(parsed.data.text);
+  req.log.info({ count: rawMatches.length }, "Gemini extracted movie matches");
+
+  // Sanitize confidence scores (guard against NaN / non-finite values from model)
+  rawMatches = rawMatches.map((m) => ({
+    ...m,
+    confidence_score: Number.isFinite(m.confidence_score)
+      ? Math.min(1, Math.max(0, m.confidence_score))
+      : 0,
+  }));
+
+  // Sort by confidence descending
+  rawMatches.sort((a, b) => b.confidence_score - a.confidence_score);
+
+  // 2. For each match: TMDB lookup → DB upsert
+  const seenTmdb = new Set<number>();
+  const saved: SavedMovie[] = [];
+
+  // Enrich matches with resolved TMDB id so frontend can correlate accurately
+  const enrichedMatches: Array<{
+    movie_title: string;
+    release_year: string;
+    confidence_score: number;
+    tmdb_id: number | null;
+  }> = [];
+
+  for (const match of rawMatches) {
+    // Skip low-confidence or non-finite score matches
+    if (!(match.confidence_score >= 0.45)) {
+      enrichedMatches.push({ ...match, tmdb_id: null });
+      continue;
+    }
+
+    try {
+      const hits = await searchTmdb(match.movie_title);
+      const hit = hits[0];
+
+      if (!hit) {
+        enrichedMatches.push({ ...match, tmdb_id: null });
+        continue;
+      }
+
+      enrichedMatches.push({ ...match, tmdb_id: hit.tmdbId });
+
+      if (seenTmdb.has(hit.tmdbId)) continue;
+      seenTmdb.add(hit.tmdbId);
+
+      const [movie] = await db
+        .insert(moviesTable)
+        .values({
+          tmdbId: hit.tmdbId,
+          title: hit.title,
+          releaseYear: hit.releaseYear,
+          posterUrl: hit.posterUrl,
+          overview: hit.overview,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      if (movie) {
+        saved.push(movie);
+      } else {
+        // Already in locker — return the existing record so the UI can show it
+        const [existing] = await db
+          .select()
+          .from(moviesTable)
+          .where(eq(moviesTable.tmdbId, hit.tmdbId));
+        if (existing) saved.push(existing);
+      }
+    } catch (err) {
+      req.log.warn({ match, err }, "ai-extract: TMDB/DB step failed for match");
+      enrichedMatches.push({ ...match, tmdb_id: null });
+    }
+  }
+
+  req.log.info({ saved: saved.length }, "ai-extract: movies saved/found");
+  res.json(AiExtractResponse.parse({ matches: enrichedMatches, saved }));
+});
+
 // POST /movies — add a movie to the locker (idempotent by tmdbId)
 router.post("/movies", async (req, res): Promise<void> => {
   const parsed = AddMovieBody.safeParse(req.body);
@@ -76,7 +173,6 @@ router.post("/movies", async (req, res): Promise<void> => {
     .returning();
 
   if (!movie) {
-    // Already in locker — return existing record
     const [existing] = await db
       .select()
       .from(moviesTable)

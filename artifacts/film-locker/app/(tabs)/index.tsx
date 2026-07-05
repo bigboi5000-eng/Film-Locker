@@ -20,13 +20,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useListMovies,
   useDeleteMovie,
-  useParseCaption,
+  useAiExtract,
   getListMoviesQueryKey,
   type Movie,
-  type MovieCandidate,
+  type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
-import { ExtractSheet } from '@/components/ExtractSheet';
+import { AiResultSheet } from '@/components/AiResultSheet';
 import { EmptyState } from '@/components/EmptyState';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -37,19 +37,15 @@ export default function LockerScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+
   const [caption, setCaption] = useState('');
-  const [sheetVisible, setSheetVisible] = useState(false);
-  const [candidates, setCandidates] = useState<MovieCandidate[]>([]);
+  const [resultVisible, setResultVisible] = useState(false);
+  const [lastMatches, setLastMatches] = useState<GeminiMovieMatch[]>([]);
+  const [lastSaved, setLastSaved] = useState<Movie[]>([]);
   const inputRef = useRef<TextInput>(null);
 
-  const {
-    data: moviesData,
-    isLoading,
-    isRefetching,
-    refetch,
-  } = useListMovies();
-
-  const { mutateAsync: parseCaption, isPending: isParsing } = useParseCaption();
+  const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies();
+  const { mutateAsync: aiExtract, isPending: isExtracting } = useAiExtract();
   const { mutateAsync: deleteMovie } = useDeleteMovie();
 
   const movies = moviesData?.movies ?? [];
@@ -57,17 +53,21 @@ export default function LockerScreen() {
   const handleExtract = useCallback(async () => {
     const trimmed = caption.trim();
     if (!trimmed) return;
-
     inputRef.current?.blur();
 
     try {
-      const result = await parseCaption({ data: { caption: trimmed } });
-      setCandidates(result.candidates ?? []);
-      setSheetVisible(true);
+      const result = await aiExtract({ data: { text: trimmed } });
+      setLastMatches(result.matches ?? []);
+      setLastSaved(result.saved ?? []);
+      setResultVisible(true);
+      await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+      if (Platform.OS !== 'web' && (result.saved?.length ?? 0) > 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch {
-      Alert.alert('Error', 'Could not parse the caption. Please try again.');
+      Alert.alert('Error', 'Could not extract movies. Please try again.');
     }
-  }, [caption, parseCaption]);
+  }, [caption, aiExtract, queryClient]);
 
   const handleDelete = useCallback(
     (id: number) => {
@@ -141,9 +141,18 @@ export default function LockerScreen() {
 
       {/* Caption Input */}
       <View style={[styles.captionSection, { backgroundColor: colors.muted }]}>
-        <Text style={[styles.captionLabel, { color: colors.mutedForeground }]}>
-          PASTE A CAPTION
-        </Text>
+        {/* AI badge */}
+        <View style={styles.labelRow}>
+          <Text style={[styles.captionLabel, { color: colors.mutedForeground }]}>
+            PASTE A CAPTION OR TEXT
+          </Text>
+          <View style={[styles.aiBadge, { backgroundColor: colors.secondary }]}>
+            <Text style={[styles.aiBadgeText, { color: colors.primary }]}>
+              ✦ Gemini 2.5 Flash
+            </Text>
+          </View>
+        </View>
+
         <View
           style={[
             styles.inputWrapper,
@@ -160,40 +169,50 @@ export default function LockerScreen() {
             numberOfLines={3}
             style={[
               styles.textInput,
-              {
-                color: colors.foreground,
-                fontFamily: 'Inter_400Regular',
-              },
+              { color: colors.foreground, fontFamily: 'Inter_400Regular' },
             ]}
             textAlignVertical="top"
           />
         </View>
+
         <TouchableOpacity
           style={[
             styles.extractButton,
             {
-              backgroundColor: isInputEmpty || isParsing ? colors.secondary : colors.primary,
+              backgroundColor:
+                isInputEmpty || isExtracting ? colors.secondary : colors.primary,
               borderRadius: colors.radius,
               opacity: isInputEmpty ? 0.5 : 1,
             },
           ]}
           onPress={handleExtract}
-          disabled={isInputEmpty || isParsing}
+          disabled={isInputEmpty || isExtracting}
           activeOpacity={0.8}
         >
-          {isParsing ? (
-            <ActivityIndicator color={colors.primaryForeground} size="small" />
+          {isExtracting ? (
+            <View style={styles.extractButtonInner}>
+              <ActivityIndicator color={colors.primaryForeground} size="small" />
+              <Text style={[styles.extractButtonText, { color: colors.primaryForeground }]}>
+                Extracting with Gemini…
+              </Text>
+            </View>
           ) : (
             <Text
               style={[
                 styles.extractButtonText,
-                { color: isInputEmpty ? colors.mutedForeground : colors.primaryForeground },
+                {
+                  color: isInputEmpty ? colors.mutedForeground : colors.primaryForeground,
+                },
               ]}
             >
-              Extract Movies
+              Extract & Save to Locker
             </Text>
           )}
         </TouchableOpacity>
+
+        <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
+          Gemini reads the text, extracts films with confidence scores, queries TMDB for posters, and saves directly to your locker.
+        </Text>
       </View>
 
       {/* Section label */}
@@ -242,7 +261,6 @@ export default function LockerScreen() {
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={<EmptyState />}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={true}
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
@@ -254,37 +272,26 @@ export default function LockerScreen() {
         />
       )}
 
-      <ExtractSheet
-        visible={sheetVisible}
-        candidates={candidates}
-        lockerTmdbIds={new Set(movies.map((m) => m.tmdbId))}
-        onClose={() => setSheetVisible(false)}
+      <AiResultSheet
+        visible={resultVisible}
+        matches={lastMatches}
+        saved={lastSaved}
+        onClose={() => setResultVisible(false)}
       />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: HORIZONTAL_PADDING,
-  },
-  listHeader: {
-    marginBottom: 12,
-  },
+  root: { flex: 1 },
+  contentContainer: { paddingHorizontal: HORIZONTAL_PADDING },
+  listHeader: { marginBottom: 12 },
   appHeader: {
     paddingHorizontal: HORIZONTAL_PADDING,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    marginBottom: 0,
   },
-  appTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  appTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   appTitle: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
@@ -304,20 +311,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 7,
   },
-  badgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter_700Bold',
-  },
+  badgeText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   captionSection: {
     paddingHorizontal: HORIZONTAL_PADDING,
     paddingTop: 16,
-    paddingBottom: 16,
+    paddingBottom: 14,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   captionLabel: {
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
     letterSpacing: 1.5,
-    marginBottom: 8,
+  },
+  aiBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.4,
   },
   inputWrapper: {
     borderWidth: 1,
@@ -330,14 +349,26 @@ const styles = StyleSheet.create({
     minHeight: 80,
   },
   extractButton: {
-    height: 46,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
+  },
+  extractButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   extractButtonText: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     letterSpacing: 0.5,
+  },
+  hintText: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 16,
+    textAlign: 'center',
   },
   sectionLabelRow: {
     flexDirection: 'row',
@@ -352,14 +383,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     letterSpacing: 1.5,
   },
-  sectionHint: {
-    fontSize: 11,
-    fontFamily: 'Inter_400Regular',
-  },
-  columnWrapper: {
-    gap: COLUMN_GAP,
-    marginBottom: COLUMN_GAP,
-  },
+  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular' },
+  columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',

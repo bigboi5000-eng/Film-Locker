@@ -74,6 +74,33 @@ export const ParseCaptionResponse = zod.object({
 
 
 /**
+ * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB poster data, and automatically save them to the locker.
+
+ */
+export const AiExtractBody = zod.object({
+  "text": zod.string().describe('Raw text to analyse — caption, freeform description, list, etc.')
+})
+
+export const AiExtractResponse = zod.object({
+  "matches": zod.array(zod.object({
+  "movie_title": zod.string().describe('Canonical movie title as returned by Gemini'),
+  "release_year": zod.string().describe('Four-digit release year, or empty string if unknown'),
+  "confidence_score": zod.number().describe('Gemini confidence 0.0–1.0 that this is a genuine movie reference'),
+  "tmdb_id": zod.number().nullish().describe('TMDB movie ID resolved after lookup. Null when TMDB returned no match or confidence was below threshold.\n')
+}).describe('Single movie reference extracted by Gemini, with confidence score')).describe('Every movie Gemini identified, ordered by confidence_score descending'),
+  "saved": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "addedAt": zod.coerce.date()
+})).describe('Movie records that were successfully found on TMDB and saved to the locker')
+})
+
+
+/**
  * @summary Remove a movie from the locker
  */
 export const DeleteMovieParams = zod.object({

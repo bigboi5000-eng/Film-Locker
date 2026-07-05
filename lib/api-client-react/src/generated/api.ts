@@ -21,6 +21,8 @@ import type {
 
 import type {
   AddMovieBody,
+  AiExtractBody,
+  AiExtractResponse,
   HealthStatus,
   ListMoviesResponse,
   Movie,
@@ -348,6 +350,78 @@ export const useParseCaption = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getParseCaptionMutationOptions(options));
+    }
+
+export const getAiExtractUrl = () => {
+
+
+
+
+  return `/api/movies/ai-extract`
+}
+
+/**
+ * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB poster data, and automatically save them to the locker.
+
+ */
+export const aiExtract = async (aiExtractBody: AiExtractBody, options?: RequestInit): Promise<AiExtractResponse> => {
+
+  return customFetch<AiExtractResponse>(getAiExtractUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiExtractBody)
+  }
+);}
+
+
+
+
+export const getAiExtractMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext> => {
+
+const mutationKey = ['aiExtract'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof aiExtract>>, {data: BodyType<AiExtractBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  aiExtract(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AiExtractMutationResult = NonNullable<Awaited<ReturnType<typeof aiExtract>>>
+    export type AiExtractMutationBody = BodyType<AiExtractBody>
+    export type AiExtractMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB poster data, and automatically save them to the locker.
+
+ */
+export const useAiExtract = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof aiExtract>>,
+        TError,
+        {data: BodyType<AiExtractBody>},
+        TContext
+      > => {
+      return useMutation(getAiExtractMutationOptions(options));
     }
 
 export const getDeleteMovieUrl = (id: number,) => {
