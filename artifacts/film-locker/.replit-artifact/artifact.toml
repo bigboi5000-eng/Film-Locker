@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/"
+title = "Film Locker"
+version = "1.0.0"
+id = "artifacts/film-locker"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 20165
+
+[services.development]
+run = "pnpm --filter @workspace/film-locker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/film-locker", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/film-locker", "run", "serve" ]
+
+[services.env]
+PORT = "20165"
+BASE_PATH = "/"
