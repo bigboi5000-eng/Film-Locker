@@ -57,14 +57,18 @@ export async function processSocialLink(
     const caption = await fetchSocialCaption(url);
 
     if (caption) {
+      warn?.({ url, captionLength: caption.length, captionPreview: caption.slice(0, 300) }, "processSocialLink: caption fetched — sending to Gemini");
       // Caption found — run through the full text pipeline
       try {
         const { matches, saved } = await runMoviePipeline(caption, warn);
+        warn?.({ url, matchCount: matches.length, savedCount: saved.length, matches }, "processSocialLink: Gemini pipeline complete");
         return { source: "caption", text: caption, matches, saved };
       } catch (err) {
         warn?.({ url, err }, "processSocialLink: Gemini text pipeline failed");
         return { source: "caption", text: caption, matches: [], saved: [] };
       }
+    } else {
+      warn?.({ url }, "processSocialLink: scraper returned no caption — falling back to audio");
     }
   } catch (err) {
     warn?.({ url, err }, "processSocialLink: caption fetch failed — trying audio fallback");

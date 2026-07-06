@@ -100,8 +100,8 @@ async function igRequest(
 
   const data = await res.json() as Record<string, unknown>;
   // API signals "not found" or "rate limited" via an `error` field rather
-  // than an HTTP error status — treat these as null (no caption available).
-  if (typeof data?.error === "string") return null;
+  // than an HTTP error status — treat any non-null error value as failure.
+  if (data?.error != null) return null;
   return data;
 }
 
@@ -170,4 +170,80 @@ export async function fetchSocialCaption(url: string): Promise<string | null> {
   // Unknown platform — caption not available via RapidAPI; return null so
   // the caller can proceed to audio transcription via yt-dlp.
   return null;
+}
+
+export interface InstagramDebugResult {
+  platform: Platform;
+  igType: "post" | "reel";
+  endpoints: {
+    name: string;
+    url: string;
+    status: number | null;
+    rawJson: unknown;
+    error: string | null;
+  }[];
+  extractedCaption: string | null;
+}
+
+/**
+ * Debug variant of fetchInstagramCaption that returns raw API responses
+ * alongside the extracted caption, so callers can inspect every step.
+ */
+export async function debugInstagramScrape(url: string): Promise<InstagramDebugResult> {
+  const platform = detectPlatform(url);
+  const type = igType(url);
+  const result: InstagramDebugResult = {
+    platform,
+    igType: type,
+    endpoints: [],
+    extractedCaption: null,
+  };
+
+  if (platform !== "instagram") return result;
+
+  const key = requireApiKey();
+
+  for (const path of ["get_media_data.php", "get_reel_title.php"]) {
+    const endpointUrl = `https://${IG_HOST}/${path}?reel_post_code_or_url=${encodeURIComponent(url)}&type=${type}`;
+    const entry: InstagramDebugResult["endpoints"][number] = {
+      name: path,
+      url: endpointUrl,
+      status: null,
+      rawJson: null,
+      error: null,
+    };
+
+    try {
+      const res = await fetch(endpointUrl, {
+        headers: { "x-rapidapi-key": key, "x-rapidapi-host": IG_HOST },
+      });
+      entry.status = res.status;
+
+      if (!res.ok) {
+        // Try to get structured JSON even for error responses
+        const bodyText = await res.text().catch(() => "");
+        try { entry.rawJson = JSON.parse(bodyText); } catch { /* ignore */ }
+        entry.error = `HTTP ${res.status} ${res.statusText}: ${bodyText.slice(0, 300)}`;
+      } else {
+        const data = await res.json() as Record<string, unknown>;
+        entry.rawJson = data;
+        // Always annotate API-level errors regardless of caption state
+        if (data?.error != null) {
+          entry.error = `API error field: ${JSON.stringify(data.error).slice(0, 200)}`;
+        } else {
+          // Only pick the caption from the first endpoint that has one
+          if (result.extractedCaption === null) {
+            const caption = extractIgCaption(data);
+            if (caption) result.extractedCaption = caption;
+          }
+        }
+      }
+    } catch (err) {
+      entry.error = err instanceof Error ? err.message : String(err);
+    }
+
+    result.endpoints.push(entry);
+  }
+
+  return result;
 }

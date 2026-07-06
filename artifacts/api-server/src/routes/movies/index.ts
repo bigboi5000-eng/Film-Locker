@@ -26,6 +26,8 @@ import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowP
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
+import { debugInstagramScrape } from "../../lib/socialScraper";
+import { extractMoviesWithGemini } from "../../lib/geminiParser";
 
 const router: IRouter = Router();
 
@@ -129,6 +131,55 @@ router.post("/movies/ai-extract", async (req, res): Promise<void> => {
 
   req.log.info({ matchCount: matches.length, saved: saved.length }, "ai-extract: complete");
   res.json(AiExtractResponse.parse({ matches, saved }));
+});
+
+// ── Social link debug ─────────────────────────────────────────────────────────
+
+// POST /movies/debug-social-link
+// Returns every intermediate value: raw scraper JSON, extracted caption,
+// Gemini input/output. Never saves anything to the DB.
+router.post("/movies/debug-social-link", async (req, res): Promise<void> => {
+  const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+  if (!url) {
+    res.status(400).json({ error: "url is required" });
+    return;
+  }
+
+  req.log.info({ url }, "debug-social-link: start");
+
+  // Step 1 — Instagram scraper (raw + extracted caption)
+  let scraperResult: Awaited<ReturnType<typeof debugInstagramScrape>> | null = null;
+  let scraperError: string | null = null;
+  try {
+    scraperResult = await debugInstagramScrape(url);
+  } catch (err) {
+    scraperError = err instanceof Error ? err.message : String(err);
+  }
+
+  const caption = scraperResult?.extractedCaption ?? null;
+
+  // Step 2 — Gemini (only if caption was found)
+  let geminiInput: string | null = null;
+  let geminiRaw: unknown = null;
+  let geminiError: string | null = null;
+  if (caption) {
+    geminiInput = caption;
+    try {
+      geminiRaw = await extractMoviesWithGemini(caption);
+    } catch (err) {
+      geminiError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  res.json({
+    url,
+    scraper: scraperError ? { error: scraperError } : scraperResult,
+    gemini: {
+      input: geminiInput,
+      output: geminiRaw,
+      error: geminiError,
+    },
+  });
 });
 
 // ── Social link processing ────────────────────────────────────────────────────
