@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import {
   ListMoviesResponse,
@@ -186,7 +186,7 @@ router.get("/movies", async (_req, res): Promise<void> => {
   const movies = await db
     .select()
     .from(moviesTable)
-    .orderBy(moviesTable.addedAt);
+    .orderBy(desc(moviesTable.addedAt));
   res.json(ListMoviesResponse.parse({ movies }));
 });
 

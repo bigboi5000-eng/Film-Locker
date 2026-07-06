@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
+import { ToastProvider } from '@/components/ToastProvider';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -55,10 +56,12 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <RootLayoutNav />
-              <ShareIntentHandler />
-            </KeyboardProvider>
+            <ToastProvider>
+              <KeyboardProvider>
+                <RootLayoutNav />
+                <ShareIntentHandler />
+              </KeyboardProvider>
+            </ToastProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
       </ErrorBoundary>

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useToast } from '@/components/ToastProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -102,6 +103,7 @@ export default function WatchlistScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [filters, setFilters] = useState<FilterState>({});
@@ -160,17 +162,28 @@ export default function WatchlistScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       if (saved.length === 0) {
-        Alert.alert(
-          'No Films Found',
-          result.source === 'none'
-            ? 'Could not extract any movie titles from this link.'
-            : `Processed via ${result.source} — no recognizable film titles found.`
-        );
+        showToast({
+          title: 'No Films Found',
+          subtitle:
+            result.source === 'none'
+              ? 'Could not extract any titles from this link.'
+              : `Processed via ${result.source} — no recognizable titles found.`,
+          variant: 'error',
+        });
       } else {
-        Alert.alert(
-          '🎬 Films Added',
-          `${saved.length} film${saved.length === 1 ? '' : 's'} added to your Watchlist:\n${saved.map((m) => m.title).join(', ')}`
-        );
+        const titleList = saved
+          .slice(0, 3)
+          .map((m) => m.title)
+          .join(' · ');
+        const extra = saved.length > 3 ? ` +${saved.length - 3} more` : '';
+        showToast({
+          title:
+            saved.length === 1
+              ? `"${saved[0]!.title}" added to your Watchlist!`
+              : `${saved.length} films added to your Watchlist!`,
+          subtitle: saved.length > 1 ? `${titleList}${extra}` : undefined,
+          variant: 'success',
+        });
       }
     } catch {
       Alert.alert('Error', 'Could not process the link. Please try again.');

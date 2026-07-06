@@ -20,6 +20,9 @@ Added to `app.json` under `android.intentFilters`:
 ## New Architecture risk
 `react-native-receive-sharing-intent` uses the legacy NativeModules bridge. With `newArchEnabled: true` (Expo 54 / RN 0.81) the interop layer should forward calls, but this is untested on-device. If the share intent doesn't fire on first real APK test, try setting `newArchEnabled: false` in `app.json` as the first debug step.
 
+## yt-dlp (audio fallback)
+yt-dlp must be installed as a Nix system dependency (`installSystemDependencies({ packages: ["yt-dlp"] })`). Without it the audio fallback throws `spawn yt-dlp ENOENT` and every Instagram URL returns `source: "none"`. The `ytDlpBin()` helper in `audioExtractor.ts` already checks `~/.local/bin/yt-dlp` and `YT_DLP_PATH` env var — no code change needed, just install the package.
+
 ## Key implementation notes
 - Component must early-return (`if Platform.OS !== 'android') return null`) — web stub handles web but iOS also hits the native file.
 - `useEffect` must return cleanup: `ReceiveSharingIntent.clearReceivedFiles()` + `mountedRef.current = false` to prevent post-unmount setState.

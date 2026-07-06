@@ -118,11 +118,23 @@ export async function enrichAndSaveMatches(
           })
           .returning());
       } else {
+        // details fetch failed — insert basic data; if already exists don't
+        // overwrite enriched fields.  `.onConflictDoNothing().returning()`
+        // returns nothing when the row already exists, so fall back to a
+        // SELECT to guarantee the movie still appears in `saved`.
         ([movie] = await db
           .insert(moviesTable)
           .values(values)
           .onConflictDoNothing()
           .returning());
+
+        if (!movie) {
+          ([movie] = await db
+            .select()
+            .from(moviesTable)
+            .where(eq(moviesTable.tmdbId, hit.tmdbId))
+            .limit(1));
+        }
       }
 
       if (movie) saved.push(movie);
