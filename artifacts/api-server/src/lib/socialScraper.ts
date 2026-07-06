@@ -1,25 +1,26 @@
 /**
  * socialScraper.ts
  *
- * Fetches the text caption from an Instagram or TikTok post using RapidAPI
- * scrapers. Returns null (not an error) when the post has no caption text,
- * so the caller can fall back to audio transcription.
+ * Fetches the text caption from an Instagram or TikTok post.
+ * Returns null (not an error) when no caption is found, so the caller
+ * can fall back to audio transcription.
  *
- * Platform routing:
- *   instagram.com  →  instagram-scraper-stable-api.p.rapidapi.com
- *                     Endpoint waterfall (first success wins):
- *                       1. GET /get_media_data_v2.php  (recommended by API)
- *                       2. GET /get_media_data.php     (legacy)
- *                       3. GET /get_reel_title.php     (lighter fallback)
- *   tiktok.com     →  tiktok-scraper7.p.rapidapi.com
- *   anything else  →  null (let the audio fallback handle it)
+ * Instagram waterfall (first success wins):
+ *   1. Direct HTML scrape — extracts og:description from the public page.
+ *      No API key needed; works for any public post. Primary approach.
+ *   2. RapidAPI get_media_data_v2.php  (recommended by API, but intermittent)
+ *   3. RapidAPI get_media_data.php     (legacy)
+ *   4. RapidAPI get_reel_title.php     (lighter fallback)
+ *
+ * TikTok:
+ *   RapidAPI tiktok-scraper7.p.rapidapi.com
  */
 
 const RAPIDAPI_KEY = process.env["RAPIDAPI_KEY"];
 const IG_HOST = "instagram-scraper-stable-api.p.rapidapi.com";
 
-// All Instagram endpoints to try, in priority order.
-const IG_ENDPOINTS = [
+// RapidAPI Instagram endpoints, tried in order after the HTML scrape fails.
+const IG_RAPIDAPI_ENDPOINTS = [
   "get_media_data_v2.php",
   "get_media_data.php",
   "get_reel_title.php",
@@ -47,27 +48,118 @@ function requireApiKey(): string {
   return RAPIDAPI_KEY;
 }
 
-/**
- * Detect whether an Instagram URL is a reel or a regular post.
- * Defaults to "post" for unknown shapes (IGTV, carousels, etc.).
- */
+/** Detect whether an Instagram URL is a reel or a regular post. */
 function igType(url: string): "post" | "reel" {
   return url.includes("/reel/") ? "reel" : "post";
 }
 
-// Known generic page-title strings returned by the scraper that are NOT
-// actual post captions and must be ignored.
+/** Decode HTML entities so caption text is clean before sending to Gemini. */
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    // Decimal numeric entities — use codePointAt-safe fromCodePoint for full Unicode
+    .replace(/&#(\d+);/g, (_, n) => {
+      const cp = Number(n);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : "";
+    })
+    // Hex numeric entities
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => {
+      const cp = parseInt(h, 16);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : "";
+    });
+}
+
+/**
+ * Fetch the Instagram page HTML and extract the caption from og:description.
+ *
+ * Instagram renders og:description for public posts without requiring login.
+ * The value is typically: "22K likes, 167 comments - username on date: "caption text""
+ * We send the full string to Gemini — it handles the preamble fine.
+ */
+async function fetchInstagramHtmlCaption(url: string): Promise<string | null> {
+  // Strip tracking params — keep just the canonical reel/post URL
+  const canonical = url.split("?")[0].replace(/\/?$/, "/");
+
+  const res = await fetch(canonical, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Accept-Language": "en-US,en;q=0.9",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+    redirect: "follow",
+  });
+
+  if (!res.ok) return null;
+
+  // Instagram occasionally redirects unauthenticated requests to the login page.
+  // Check the pathname precisely so post shortcodes containing "login" don't
+  // produce a false null (e.g. /p/loginXYZ/).
+  try {
+    const finalPath = new URL(res.url).pathname;
+    if (finalPath.startsWith("/accounts/login") || finalPath === "/login") {
+      return null;
+    }
+  } catch {
+    // If URL parsing fails, fall through and let the HTML body check decide.
+  }
+
+  const html = await res.text();
+
+  // Bail if we landed on a login wall
+  if (
+    html.includes("Log in to Instagram") ||
+    html.includes("loginForm") ||
+    html.includes('"requiresLogin":true')
+  ) {
+    return null;
+  }
+
+  // Extract og:description robustly regardless of attribute order and quote style.
+  // We match the content value up to the closing quote (same style as the opening).
+  function extractOgDescription(html: string): string | null {
+    // Normalise to find all <meta> tags and look for one with og:description
+    const metaRe = /<meta\s[^>]+>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = metaRe.exec(html)) !== null) {
+      const tag = m[0];
+      if (!/og:description/i.test(tag)) continue;
+      // Extract content="..." or content='...' — respecting the opening quote
+      const contentMatch =
+        tag.match(/content=["']([\s\S]*?)["']\s*(?:\/?>|\w)/i) ??
+        tag.match(/content=(["'])([\s\S]*?)\1/i);
+      const val = contentMatch?.[2] ?? contentMatch?.[1] ?? null;
+      if (val && val.trim().length > 0) return val.trim();
+    }
+    return null;
+  }
+
+  const raw = extractOgDescription(html);
+
+  if (!raw || raw.trim().length === 0) return null;
+
+  const decoded = decodeHtmlEntities(raw).trim();
+
+  // Reject obviously empty or login-wall placeholders
+  if (decoded.toLowerCase().includes("log in to instagram")) return null;
+
+  return decoded;
+}
+
+// Known generic page-title strings returned by RapidAPI that are NOT captions.
 const IG_JUNK_TITLES = new Set(["instagram", "instagram - photos and videos"]);
 
 /**
- * Walk the response JSON looking for a non-empty caption/title string.
- * Instagram's API can return data under several different shapes depending
- * on which endpoint and version was hit, so we probe the common locations.
+ * Walk the RapidAPI response JSON looking for a non-empty caption string.
+ * Different endpoints return data under different keys, so we probe all known locations.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractIgCaption(data: any): string | null {
-  // post_caption is the explicit caption field from get_reel_title.php —
-  // check it first before falling back to the generic title/description.
   const candidates: unknown[] = [
     data?.post_caption,
     data?.caption,
@@ -86,7 +178,6 @@ function extractIgCaption(data: any): string | null {
   for (const c of candidates) {
     if (typeof c !== "string") continue;
     const trimmed = c.trim();
-    // Skip empty strings and known junk titles
     if (trimmed.length === 0) continue;
     if (IG_JUNK_TITLES.has(trimmed.toLowerCase())) continue;
     return trimmed;
@@ -95,11 +186,11 @@ function extractIgCaption(data: any): string | null {
 }
 
 /**
- * Call one Instagram Scraper Stable API endpoint and return the raw JSON,
- * or null if the response contains an `error` field (post inaccessible).
- * Throws on HTTP errors so the caller can decide whether to try the fallback.
+ * Call one RapidAPI Instagram endpoint and return the raw JSON,
+ * or null if the response carries an error field.
+ * Throws on HTTP errors so the caller can fall through to the next endpoint.
  */
-async function igRequest(
+async function igRapidApiRequest(
   key: string,
   path: string,
   url: string
@@ -121,27 +212,39 @@ async function igRequest(
     );
   }
 
-  const data = await res.json() as Record<string, unknown>;
-  // API signals "not found" or "rate limited" via an `error` field rather
-  // than an HTTP error status — treat any non-null error value as failure.
+  const data = (await res.json()) as Record<string, unknown>;
+  // Treat any non-null error field as a failure (API uses error strings, objects, etc.)
   if (data?.error != null) return null;
   return data;
 }
 
-/** Fetch caption for an Instagram post/reel URL, trying each endpoint in turn. */
+/**
+ * Fetch the caption for an Instagram post/reel URL.
+ *
+ * Waterfall:
+ *   1. Direct HTML scrape of og:description (primary — no rate limits, no API key)
+ *   2. RapidAPI endpoints (fallback, tried in order)
+ */
 async function fetchInstagramCaption(url: string): Promise<string | null> {
+  // ── 1. HTML scrape (primary) ──────────────────────────────────────────────
+  try {
+    const caption = await fetchInstagramHtmlCaption(url);
+    if (caption) return caption;
+  } catch {
+    // Network error — fall through to RapidAPI
+  }
+
+  // ── 2. RapidAPI fallback ──────────────────────────────────────────────────
   const key = requireApiKey();
 
-  for (const path of IG_ENDPOINTS) {
+  for (const path of IG_RAPIDAPI_ENDPOINTS) {
     try {
-      const data = await igRequest(key, path, url);
-      if (!data) continue; // API-level error on this endpoint — try next
+      const data = await igRapidApiRequest(key, path, url);
+      if (!data) continue;
       const caption = extractIgCaption(data);
       if (caption) return caption;
-      // Data returned but no caption found — still try the next endpoint
-      // in case it carries different fields.
     } catch {
-      // Network / HTTP error on this endpoint — fall through to next
+      // This endpoint failed — try next
     }
   }
 
@@ -167,8 +270,7 @@ async function fetchTikTokCaption(url: string): Promise<string | null> {
     );
   }
 
-  const data = await res.json() as { data?: { desc?: string | null } };
-  // Shape: { data: { desc: string, ... } }
+  const data = (await res.json()) as { data?: { desc?: string | null } };
   const desc: string | null = data?.data?.desc ?? null;
   return desc && desc.trim().length > 0 ? desc.trim() : null;
 }
@@ -176,12 +278,10 @@ async function fetchTikTokCaption(url: string): Promise<string | null> {
 /**
  * Attempt to fetch a text caption from the social post at `url`.
  *
- * Returns:
- *   - A non-empty caption string on success.
- *   - null when the post has no caption or the platform is unsupported
- *     (caller should fall back to audio transcription).
+ * Returns a non-empty caption string on success, or null when nothing is found
+ * (caller should fall back to audio transcription).
  *
- * Throws on network / API key errors so the caller can log and decide.
+ * Throws on unrecoverable errors (bad API key, etc.).
  */
 export async function fetchSocialCaption(url: string): Promise<string | null> {
   const platform = detectPlatform(url);
@@ -189,15 +289,20 @@ export async function fetchSocialCaption(url: string): Promise<string | null> {
   if (platform === "instagram") return fetchInstagramCaption(url);
   if (platform === "tiktok") return fetchTikTokCaption(url);
 
-  // Unknown platform — caption not available via RapidAPI; return null so
-  // the caller can proceed to audio transcription via yt-dlp.
   return null;
 }
+
+// ── Debug helpers ──────────────────────────────────────────────────────────────
 
 export interface InstagramDebugResult {
   platform: Platform;
   igType: "post" | "reel";
-  endpoints: {
+  htmlScrape: {
+    url: string;
+    caption: string | null;
+    error: string | null;
+  };
+  rapidApiEndpoints: {
     name: string;
     url: string;
     status: number | null;
@@ -208,8 +313,8 @@ export interface InstagramDebugResult {
 }
 
 /**
- * Debug variant of fetchInstagramCaption that returns raw API responses
- * alongside the extracted caption, so callers can inspect every step.
+ * Debug variant that returns every intermediate value so the caller can see
+ * exactly which step succeeded or failed.
  */
 export async function debugInstagramScrape(url: string): Promise<InstagramDebugResult> {
   const platform = detectPlatform(url);
@@ -217,17 +322,28 @@ export async function debugInstagramScrape(url: string): Promise<InstagramDebugR
   const result: InstagramDebugResult = {
     platform,
     igType: type,
-    endpoints: [],
+    htmlScrape: { url: url.split("?")[0].replace(/\/?$/, "/"), caption: null, error: null },
+    rapidApiEndpoints: [],
     extractedCaption: null,
   };
 
   if (platform !== "instagram") return result;
 
+  // ── HTML scrape ──────────────────────────────────────────────────────────
+  try {
+    const caption = await fetchInstagramHtmlCaption(url);
+    result.htmlScrape.caption = caption;
+    if (caption) result.extractedCaption = caption;
+  } catch (err) {
+    result.htmlScrape.error = err instanceof Error ? err.message : String(err);
+  }
+
+  // ── RapidAPI endpoints ───────────────────────────────────────────────────
   const key = requireApiKey();
 
-  for (const path of IG_ENDPOINTS) {
+  for (const path of IG_RAPIDAPI_ENDPOINTS) {
     const endpointUrl = `https://${IG_HOST}/${path}?reel_post_code_or_url=${encodeURIComponent(url)}&type=${type}`;
-    const entry: InstagramDebugResult["endpoints"][number] = {
+    const entry: InstagramDebugResult["rapidApiEndpoints"][number] = {
       name: path,
       url: endpointUrl,
       status: null,
@@ -242,29 +358,24 @@ export async function debugInstagramScrape(url: string): Promise<InstagramDebugR
       entry.status = res.status;
 
       if (!res.ok) {
-        // Try to get structured JSON even for error responses
         const bodyText = await res.text().catch(() => "");
         try { entry.rawJson = JSON.parse(bodyText); } catch { /* ignore */ }
         entry.error = `HTTP ${res.status} ${res.statusText}: ${bodyText.slice(0, 300)}`;
       } else {
-        const data = await res.json() as Record<string, unknown>;
+        const data = (await res.json()) as Record<string, unknown>;
         entry.rawJson = data;
-        // Always annotate API-level errors regardless of caption state
         if (data?.error != null) {
           entry.error = `API error field: ${JSON.stringify(data.error).slice(0, 200)}`;
-        } else {
-          // Only pick the caption from the first endpoint that has one
-          if (result.extractedCaption === null) {
-            const caption = extractIgCaption(data);
-            if (caption) result.extractedCaption = caption;
-          }
+        } else if (result.extractedCaption === null) {
+          const caption = extractIgCaption(data);
+          if (caption) result.extractedCaption = caption;
         }
       }
     } catch (err) {
       entry.error = err instanceof Error ? err.message : String(err);
     }
 
-    result.endpoints.push(entry);
+    result.rapidApiEndpoints.push(entry);
   }
 
   return result;
