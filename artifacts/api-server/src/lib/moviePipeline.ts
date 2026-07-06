@@ -1,21 +1,17 @@
 /**
  * moviePipeline.ts
  *
- * Shared Gemini → TMDB → DB pipeline used by:
- *   - /movies/ai-extract         (text → Gemini → TMDB → DB)
- *   - /movies/process-social-link caption path  (text → Gemini → TMDB → DB)
- *   - /movies/process-social-link audio path    (Gemini already ran on audio
- *                                                → TMDB → DB only)
+ * Shared Gemini → TMDB → DB pipeline.
  *
  * Exported functions:
- *   enrichAndSaveMatches(rawMatches, warn?)  — TMDB + DB only (skip Gemini)
+ *   enrichAndSaveMatches(rawMatches, warn?)  — TMDB + DB only (Gemini already ran)
  *   runMoviePipeline(text, warn?)            — Gemini + TMDB + DB
  */
 
 import { eq } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
-import { searchTmdb } from "./tmdb";
+import { searchTmdb, fetchMovieDetails } from "./tmdb";
 
 export type SavedMovie = typeof moviesTable.$inferSelect;
 
@@ -33,23 +29,19 @@ export interface PipelineResult {
 
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
-/** Minimum Gemini confidence score to attempt a TMDB lookup and DB save. */
 const CONFIDENCE_THRESHOLD = 0.45;
 
 /**
  * TMDB enrichment + DB upsert for a pre-extracted list of movie matches.
  *
- * Call this when Gemini has already run (e.g. the audio extraction path)
- * and you just need to resolve TMDB IDs and persist to the locker.
- *
- * @param rawMatches  Matches from extractMoviesWithGemini (or extractMoviesFromAudio)
- * @param warn        Optional structured logger for per-match warnings
+ * Fetches full details (director, cast, genres, language, watch providers)
+ * for each match and upserts into the DB — updating enrichment fields when
+ * the row already exists so previously saved movies also get full metadata.
  */
 export async function enrichAndSaveMatches(
   rawMatches: GeminiMovieMatch[],
   warn?: WarnFn
 ): Promise<PipelineResult> {
-  // Sanitise and sort by confidence descending
   const sanitised = rawMatches
     .map((m) => ({
       ...m,
@@ -64,7 +56,6 @@ export async function enrichAndSaveMatches(
   const enrichedMatches: EnrichedMatch[] = [];
 
   for (const match of sanitised) {
-    // Skip low-confidence matches — include in response but without tmdb_id
     if (!(match.confidence_score >= CONFIDENCE_THRESHOLD)) {
       enrichedMatches.push({ ...match, tmdb_id: null });
       continue;
@@ -84,29 +75,57 @@ export async function enrichAndSaveMatches(
       if (seenTmdb.has(hit.tmdbId)) continue;
       seenTmdb.add(hit.tmdbId);
 
-      // Idempotent insert — unique index on tmdb_id
-      const [movie] = await db
-        .insert(moviesTable)
-        .values({
-          tmdbId: hit.tmdbId,
-          title: hit.title,
-          releaseYear: hit.releaseYear,
-          posterUrl: hit.posterUrl,
-          overview: hit.overview,
-        })
-        .onConflictDoNothing()
-        .returning();
+      // Fetch full details (director, cast, genres, language, watch providers)
+      const details = await fetchMovieDetails(hit.tmdbId).catch((err) => {
+        warn?.({ err, tmdbId: hit.tmdbId }, "pipeline: fetchMovieDetails failed — using basic data");
+        return null;
+      });
 
-      if (movie) {
-        saved.push(movie);
+      const values = {
+        tmdbId: hit.tmdbId,
+        title: details?.title ?? hit.title,
+        releaseYear: details?.releaseYear ?? hit.releaseYear,
+        posterUrl: details?.posterUrl ?? hit.posterUrl,
+        overview: details?.overview ?? hit.overview,
+        director: details?.director ?? "",
+        cast: details?.cast ?? [],
+        genres: details?.genres ?? [],
+        language: details?.language ?? "",
+        watchProviders: details?.watchProviders ?? [],
+      };
+
+      // Upsert:
+      //   - New row: insert with all enrichment data.
+      //   - Existing row + fresh details: update enrichment fields only
+      //     (never touch rating / isWatched / watchedAt).
+      //   - Existing row + details fetch failed: do nothing so we don't
+      //     regress existing metadata to empty strings/arrays.
+      let movie: typeof moviesTable.$inferSelect | undefined;
+
+      if (details) {
+        ([movie] = await db
+          .insert(moviesTable)
+          .values(values)
+          .onConflictDoUpdate({
+            target: moviesTable.tmdbId,
+            set: {
+              director: values.director,
+              cast: values.cast,
+              genres: values.genres,
+              language: values.language,
+              watchProviders: values.watchProviders,
+            },
+          })
+          .returning());
       } else {
-        // Already in locker — fetch the existing row so the UI can display it
-        const [existing] = await db
-          .select()
-          .from(moviesTable)
-          .where(eq(moviesTable.tmdbId, hit.tmdbId));
-        if (existing) saved.push(existing);
+        ([movie] = await db
+          .insert(moviesTable)
+          .values(values)
+          .onConflictDoNothing()
+          .returning());
       }
+
+      if (movie) saved.push(movie);
     } catch (err) {
       warn?.({ match, err }, "pipeline: TMDB/DB step failed for match");
       enrichedMatches.push({ ...match, tmdb_id: null });
@@ -118,12 +137,6 @@ export async function enrichAndSaveMatches(
 
 /**
  * Full text → Gemini → TMDB → DB pipeline.
- *
- * Use this when starting from raw text (caption, transcript, freeform prose).
- * Calls Gemini for structured extraction, then delegates to enrichAndSaveMatches.
- *
- * @param text  Raw text to analyse
- * @param warn  Optional structured logger
  */
 export async function runMoviePipeline(
   text: string,

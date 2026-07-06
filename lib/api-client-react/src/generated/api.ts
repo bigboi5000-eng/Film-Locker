@@ -26,10 +26,15 @@ import type {
   HealthStatus,
   ListMoviesResponse,
   Movie,
+  NewReleasesResponse,
   ParseCaptionBody,
   ParseCaptionResponse,
+  PatchRatingBody,
+  PatchWatchedBody,
   ProcessSocialLinkBody,
-  ProcessSocialLinkResponse
+  ProcessSocialLinkResponse,
+  TmdbMovieDetailsResponse,
+  TrendingResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -125,6 +130,453 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getHealthCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTrendingUrl = () => {
+
+
+
+
+  return `/api/movies/trending`
+}
+
+/**
+ * @summary Fetch trending movies this week from TMDB
+ */
+export const getTrending = async ( options?: RequestInit): Promise<TrendingResponse> => {
+
+  return customFetch<TrendingResponse>(getGetTrendingUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTrendingQueryKey = () => {
+    return [
+    `/api/movies/trending`
+    ] as const;
+    }
+
+
+export const getGetTrendingQueryOptions = <TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTrendingQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrending>>> = ({ signal }) => getTrending({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTrendingQueryResult = NonNullable<Awaited<ReturnType<typeof getTrending>>>
+export type GetTrendingQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Fetch trending movies this week from TMDB
+ */
+
+export function useGetTrending<TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTrendingQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetNewReleasesUrl = () => {
+
+
+
+
+  return `/api/movies/new-releases`
+}
+
+/**
+ * @summary Fetch movies currently in theatres from TMDB
+ */
+export const getNewReleases = async ( options?: RequestInit): Promise<NewReleasesResponse> => {
+
+  return customFetch<NewReleasesResponse>(getGetNewReleasesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNewReleasesQueryKey = () => {
+    return [
+    `/api/movies/new-releases`
+    ] as const;
+    }
+
+
+export const getGetNewReleasesQueryOptions = <TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNewReleasesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNewReleases>>> = ({ signal }) => getNewReleases({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNewReleasesQueryResult = NonNullable<Awaited<ReturnType<typeof getNewReleases>>>
+export type GetNewReleasesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Fetch movies currently in theatres from TMDB
+ */
+
+export function useGetNewReleases<TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNewReleasesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getParseCaptionUrl = () => {
+
+
+
+
+  return `/api/movies/parse-caption`
+}
+
+/**
+ * @summary Parse a social media caption and find matching movies via TMDB
+ */
+export const parseCaption = async (parseCaptionBody: ParseCaptionBody, options?: RequestInit): Promise<ParseCaptionResponse> => {
+
+  return customFetch<ParseCaptionResponse>(getParseCaptionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(parseCaptionBody)
+  }
+);}
+
+
+
+
+export const getParseCaptionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext> => {
+
+const mutationKey = ['parseCaption'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof parseCaption>>, {data: BodyType<ParseCaptionBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  parseCaption(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ParseCaptionMutationResult = NonNullable<Awaited<ReturnType<typeof parseCaption>>>
+    export type ParseCaptionMutationBody = BodyType<ParseCaptionBody>
+    export type ParseCaptionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Parse a social media caption and find matching movies via TMDB
+ */
+export const useParseCaption = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof parseCaption>>,
+        TError,
+        {data: BodyType<ParseCaptionBody>},
+        TContext
+      > => {
+      return useMutation(getParseCaptionMutationOptions(options));
+    }
+
+export const getAiExtractUrl = () => {
+
+
+
+
+  return `/api/movies/ai-extract`
+}
+
+/**
+ * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB data, and automatically save them to the locker.
+
+ */
+export const aiExtract = async (aiExtractBody: AiExtractBody, options?: RequestInit): Promise<AiExtractResponse> => {
+
+  return customFetch<AiExtractResponse>(getAiExtractUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiExtractBody)
+  }
+);}
+
+
+
+
+export const getAiExtractMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext> => {
+
+const mutationKey = ['aiExtract'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof aiExtract>>, {data: BodyType<AiExtractBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  aiExtract(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AiExtractMutationResult = NonNullable<Awaited<ReturnType<typeof aiExtract>>>
+    export type AiExtractMutationBody = BodyType<AiExtractBody>
+    export type AiExtractMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB data, and automatically save them to the locker.
+
+ */
+export const useAiExtract = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof aiExtract>>,
+        TError,
+        {data: BodyType<AiExtractBody>},
+        TContext
+      > => {
+      return useMutation(getAiExtractMutationOptions(options));
+    }
+
+export const getProcessSocialLinkUrl = () => {
+
+
+
+
+  return `/api/movies/process-social-link`
+}
+
+/**
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
+
+ */
+export const processSocialLink = async (processSocialLinkBody: ProcessSocialLinkBody, options?: RequestInit): Promise<ProcessSocialLinkResponse> => {
+
+  return customFetch<ProcessSocialLinkResponse>(getProcessSocialLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(processSocialLinkBody)
+  }
+);}
+
+
+
+
+export const getProcessSocialLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext> => {
+
+const mutationKey = ['processSocialLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof processSocialLink>>, {data: BodyType<ProcessSocialLinkBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  processSocialLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProcessSocialLinkMutationResult = NonNullable<Awaited<ReturnType<typeof processSocialLink>>>
+    export type ProcessSocialLinkMutationBody = BodyType<ProcessSocialLinkBody>
+    export type ProcessSocialLinkMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
+
+ */
+export const useProcessSocialLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof processSocialLink>>,
+        TError,
+        {data: BodyType<ProcessSocialLinkBody>},
+        TContext
+      > => {
+      return useMutation(getProcessSocialLinkMutationOptions(options));
+    }
+
+export const getGetMovieDetailsUrl = (tmdbId: number,) => {
+
+
+
+
+  return `/api/movies/tmdb/${tmdbId}`
+}
+
+/**
+ * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
+
+ */
+export const getMovieDetails = async (tmdbId: number, options?: RequestInit): Promise<TmdbMovieDetailsResponse> => {
+
+  return customFetch<TmdbMovieDetailsResponse>(getGetMovieDetailsUrl(tmdbId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMovieDetailsQueryKey = (tmdbId: number,) => {
+    return [
+    `/api/movies/tmdb/${tmdbId}`
+    ] as const;
+    }
+
+
+export const getGetMovieDetailsQueryOptions = <TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMovieDetailsQueryKey(tmdbId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMovieDetails>>> = ({ signal }) => getMovieDetails(tmdbId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tmdbId !== null && tmdbId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMovieDetailsQueryResult = NonNullable<Awaited<ReturnType<typeof getMovieDetails>>>
+export type GetMovieDetailsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
+
+ */
+
+export function useGetMovieDetails<TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(
+ tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMovieDetailsQueryOptions(tmdbId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -284,36 +736,37 @@ export const useAddMovie = <TError = ErrorType<unknown>,
       return useMutation(getAddMovieMutationOptions(options));
     }
 
-export const getParseCaptionUrl = () => {
+export const getPatchWatchedUrl = (id: number,) => {
 
 
 
 
-  return `/api/movies/parse-caption`
+  return `/api/movies/${id}/watched`
 }
 
 /**
- * @summary Parse a social media caption and find matching movies via TMDB
+ * @summary Mark a movie as watched or unwatched
  */
-export const parseCaption = async (parseCaptionBody: ParseCaptionBody, options?: RequestInit): Promise<ParseCaptionResponse> => {
+export const patchWatched = async (id: number,
+    patchWatchedBody: PatchWatchedBody, options?: RequestInit): Promise<Movie> => {
 
-  return customFetch<ParseCaptionResponse>(getParseCaptionUrl(),
+  return customFetch<Movie>(getPatchWatchedUrl(id),
   {
     ...options,
-    method: 'POST',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(parseCaptionBody)
+    body: JSON.stringify(patchWatchedBody)
   }
 );}
 
 
 
 
-export const getParseCaptionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext> => {
+export const getPatchWatchedMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchWatched>>, TError,{id: number;data: BodyType<PatchWatchedBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchWatched>>, TError,{id: number;data: BodyType<PatchWatchedBody>}, TContext> => {
 
-const mutationKey = ['parseCaption'];
+const mutationKey = ['patchWatched'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -323,10 +776,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof parseCaption>>, {data: BodyType<ParseCaptionBody>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchWatched>>, {id: number;data: BodyType<PatchWatchedBody>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  parseCaption(data,requestOptions)
+          return  patchWatched(id,data,requestOptions)
         }
 
 
@@ -336,55 +789,55 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ParseCaptionMutationResult = NonNullable<Awaited<ReturnType<typeof parseCaption>>>
-    export type ParseCaptionMutationBody = BodyType<ParseCaptionBody>
-    export type ParseCaptionMutationError = ErrorType<unknown>
+    export type PatchWatchedMutationResult = NonNullable<Awaited<ReturnType<typeof patchWatched>>>
+    export type PatchWatchedMutationBody = BodyType<PatchWatchedBody>
+    export type PatchWatchedMutationError = ErrorType<unknown>
 
     /**
- * @summary Parse a social media caption and find matching movies via TMDB
+ * @summary Mark a movie as watched or unwatched
  */
-export const useParseCaption = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const usePatchWatched = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchWatched>>, TError,{id: number;data: BodyType<PatchWatchedBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof parseCaption>>,
+        Awaited<ReturnType<typeof patchWatched>>,
         TError,
-        {data: BodyType<ParseCaptionBody>},
+        {id: number;data: BodyType<PatchWatchedBody>},
         TContext
       > => {
-      return useMutation(getParseCaptionMutationOptions(options));
+      return useMutation(getPatchWatchedMutationOptions(options));
     }
 
-export const getAiExtractUrl = () => {
+export const getPatchRatingUrl = (id: number,) => {
 
 
 
 
-  return `/api/movies/ai-extract`
+  return `/api/movies/${id}/rating`
 }
 
 /**
- * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB poster data, and automatically save them to the locker.
-
+ * @summary Set or clear the star rating (1–5) for a movie
  */
-export const aiExtract = async (aiExtractBody: AiExtractBody, options?: RequestInit): Promise<AiExtractResponse> => {
+export const patchRating = async (id: number,
+    patchRatingBody: PatchRatingBody, options?: RequestInit): Promise<Movie> => {
 
-  return customFetch<AiExtractResponse>(getAiExtractUrl(),
+  return customFetch<Movie>(getPatchRatingUrl(id),
   {
     ...options,
-    method: 'POST',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(aiExtractBody)
+    body: JSON.stringify(patchRatingBody)
   }
 );}
 
 
 
 
-export const getAiExtractMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext> => {
+export const getPatchRatingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchRating>>, TError,{id: number;data: BodyType<PatchRatingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchRating>>, TError,{id: number;data: BodyType<PatchRatingBody>}, TContext> => {
 
-const mutationKey = ['aiExtract'];
+const mutationKey = ['patchRating'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -394,10 +847,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof aiExtract>>, {data: BodyType<AiExtractBody>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchRating>>, {id: number;data: BodyType<PatchRatingBody>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  aiExtract(data,requestOptions)
+          return  patchRating(id,data,requestOptions)
         }
 
 
@@ -407,95 +860,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type AiExtractMutationResult = NonNullable<Awaited<ReturnType<typeof aiExtract>>>
-    export type AiExtractMutationBody = BodyType<AiExtractBody>
-    export type AiExtractMutationError = ErrorType<unknown>
+    export type PatchRatingMutationResult = NonNullable<Awaited<ReturnType<typeof patchRating>>>
+    export type PatchRatingMutationBody = BodyType<PatchRatingBody>
+    export type PatchRatingMutationError = ErrorType<unknown>
 
     /**
- * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB poster data, and automatically save them to the locker.
-
+ * @summary Set or clear the star rating (1–5) for a movie
  */
-export const useAiExtract = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiExtract>>, TError,{data: BodyType<AiExtractBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const usePatchRating = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchRating>>, TError,{id: number;data: BodyType<PatchRatingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof aiExtract>>,
+        Awaited<ReturnType<typeof patchRating>>,
         TError,
-        {data: BodyType<AiExtractBody>},
+        {id: number;data: BodyType<PatchRatingBody>},
         TContext
       > => {
-      return useMutation(getAiExtractMutationOptions(options));
-    }
-
-export const getProcessSocialLinkUrl = () => {
-
-
-
-
-  return `/api/movies/process-social-link`
-}
-
-/**
- * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
-
- */
-export const processSocialLink = async (processSocialLinkBody: ProcessSocialLinkBody, options?: RequestInit): Promise<ProcessSocialLinkResponse> => {
-
-  return customFetch<ProcessSocialLinkResponse>(getProcessSocialLinkUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(processSocialLinkBody)
-  }
-);}
-
-
-
-
-export const getProcessSocialLinkMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext> => {
-
-const mutationKey = ['processSocialLink'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof processSocialLink>>, {data: BodyType<ProcessSocialLinkBody>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  processSocialLink(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ProcessSocialLinkMutationResult = NonNullable<Awaited<ReturnType<typeof processSocialLink>>>
-    export type ProcessSocialLinkMutationBody = BodyType<ProcessSocialLinkBody>
-    export type ProcessSocialLinkMutationError = ErrorType<unknown>
-
-    /**
- * @summary Extract movies from a social media URL. Fetches the post caption via RapidAPI (source="caption"); falls back to yt-dlp audio download processed natively by Gemini 2.5 Flash via the Files API (source="audio") when no caption is present. Matched movies are saved to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
-
- */
-export const useProcessSocialLink = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSocialLink>>, TError,{data: BodyType<ProcessSocialLinkBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof processSocialLink>>,
-        TError,
-        {data: BodyType<ProcessSocialLinkBody>},
-        TContext
-      > => {
-      return useMutation(getProcessSocialLinkMutationOptions(options));
+      return useMutation(getPatchRatingMutationOptions(options));
     }
 
 export const getDeleteMovieUrl = (id: number,) => {

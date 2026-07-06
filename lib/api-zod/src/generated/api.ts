@@ -18,40 +18,30 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary List all movies in the locker
+ * @summary Fetch trending movies this week from TMDB
  */
-export const ListMoviesResponse = zod.object({
+export const GetTrendingResponse = zod.object({
   "movies": zod.array(zod.object({
-  "id": zod.number(),
-  "tmdbId": zod.number(),
-  "title": zod.string(),
-  "releaseYear": zod.string(),
-  "posterUrl": zod.string(),
-  "overview": zod.string(),
-  "addedAt": zod.coerce.date()
-}))
-})
-
-
-/**
- * @summary Add a movie to the locker
- */
-export const AddMovieBody = zod.object({
   "tmdbId": zod.number(),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string()
+}))
 })
 
-export const AddMovieResponse = zod.object({
-  "id": zod.number(),
+
+/**
+ * @summary Fetch movies currently in theatres from TMDB
+ */
+export const GetNewReleasesResponse = zod.object({
+  "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
-  "overview": zod.string(),
-  "addedAt": zod.coerce.date()
+  "overview": zod.string()
+}))
 })
 
 
@@ -74,20 +64,24 @@ export const ParseCaptionResponse = zod.object({
 
 
 /**
- * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB poster data, and automatically save them to the locker.
+ * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB data, and automatically save them to the locker.
 
  */
 export const AiExtractBody = zod.object({
-  "text": zod.string().describe('Raw text to analyse — caption, freeform description, list, etc.')
+  "text": zod.string()
 })
+
+export const aiExtractResponseSavedItemRatingMax = 5;
+
+
 
 export const AiExtractResponse = zod.object({
   "matches": zod.array(zod.object({
-  "movie_title": zod.string().describe('Canonical movie title as returned by Gemini'),
-  "release_year": zod.string().describe('Four-digit release year, or empty string if unknown'),
-  "confidence_score": zod.number().describe('Gemini confidence 0.0–1.0 that this is a genuine movie reference'),
-  "tmdb_id": zod.number().nullish().describe('TMDB movie ID resolved after lookup. Null when TMDB returned no match or confidence was below threshold.\n')
-}).describe('Single movie reference extracted by Gemini, with confidence score')).describe('Every movie Gemini identified, ordered by confidence_score descending'),
+  "movie_title": zod.string(),
+  "release_year": zod.string(),
+  "confidence_score": zod.number(),
+  "tmdb_id": zod.number().nullish()
+}).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
@@ -95,8 +89,20 @@ export const AiExtractResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+})),
+  "rating": zod.number().min(1).max(aiExtractResponseSavedItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
-})).describe('Movie records that were successfully found on TMDB and saved to the locker')
+}))
 })
 
 
@@ -105,18 +111,22 @@ export const AiExtractResponse = zod.object({
 
  */
 export const ProcessSocialLinkBody = zod.object({
-  "url": zod.string().url().describe('Public social media post URL (Instagram, TikTok, YouTube, etc.)')
+  "url": zod.string().url()
 })
 
+export const processSocialLinkResponseSavedItemRatingMax = 5;
+
+
+
 export const ProcessSocialLinkResponse = zod.object({
-  "source": zod.enum(['caption', 'audio', 'none']).describe('How the text was obtained: \"caption\" = RapidAPI scraper returned post text fed into Gemini; \"audio\" = yt-dlp downloaded the audio and Gemini 2.5 Flash processed it natively via the Files API; \"none\" = no data could be extracted.\n'),
-  "text": zod.string().nullish().describe('The raw text that was sent to Gemini; null when source is \"none\".'),
+  "source": zod.enum(['caption', 'audio', 'none']),
+  "text": zod.string().nullish(),
   "matches": zod.array(zod.object({
-  "movie_title": zod.string().describe('Canonical movie title as returned by Gemini'),
-  "release_year": zod.string().describe('Four-digit release year, or empty string if unknown'),
-  "confidence_score": zod.number().describe('Gemini confidence 0.0–1.0 that this is a genuine movie reference'),
-  "tmdb_id": zod.number().nullish().describe('TMDB movie ID resolved after lookup. Null when TMDB returned no match or confidence was below threshold.\n')
-}).describe('Single movie reference extracted by Gemini, with confidence score')).describe('Every movie Gemini identified, ordered by confidence_score descending'),
+  "movie_title": zod.string(),
+  "release_year": zod.string(),
+  "confidence_score": zod.number(),
+  "tmdb_id": zod.number().nullish()
+}).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
@@ -124,8 +134,196 @@ export const ProcessSocialLinkResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+})),
+  "rating": zod.number().min(1).max(processSocialLinkResponseSavedItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
-})).describe('Movie records successfully found on TMDB and saved to the locker')
+}))
+})
+
+
+/**
+ * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
+
+ */
+export const GetMovieDetailsParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const GetMovieDetailsResponse = zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+}))
+})
+
+
+/**
+ * @summary List all movies in the locker
+ */
+export const listMoviesResponseMoviesItemRatingMax = 5;
+
+
+
+export const ListMoviesResponse = zod.object({
+  "movies": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+})),
+  "rating": zod.number().min(1).max(listMoviesResponseMoviesItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Add a movie to the locker
+ */
+export const AddMovieBody = zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string()
+})
+
+export const addMovieResponseRatingMax = 5;
+
+
+
+export const AddMovieResponse = zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+})),
+  "rating": zod.number().min(1).max(addMovieResponseRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Mark a movie as watched or unwatched
+ */
+export const PatchWatchedParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PatchWatchedBody = zod.object({
+  "isWatched": zod.boolean()
+})
+
+export const patchWatchedResponseRatingMax = 5;
+
+
+
+export const PatchWatchedResponse = zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+})),
+  "rating": zod.number().min(1).max(patchWatchedResponseRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Set or clear the star rating (1–5) for a movie
+ */
+export const PatchRatingParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const patchRatingBodyRatingMax = 5;
+
+
+
+export const PatchRatingBody = zod.object({
+  "rating": zod.number().min(1).max(patchRatingBodyRatingMax).nullable()
+})
+
+export const patchRatingResponseRatingMax = 5;
+
+
+
+export const PatchRatingResponse = zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string()
+})),
+  "rating": zod.number().min(1).max(patchRatingResponseRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
 })
 
 

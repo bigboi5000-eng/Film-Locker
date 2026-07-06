@@ -26,6 +26,120 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /movies/trending:
+    get:
+      operationId: getTrending
+      tags: [movies]
+      summary: Fetch trending movies this week from TMDB
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendingResponse"
+
+  /movies/new-releases:
+    get:
+      operationId: getNewReleases
+      tags: [movies]
+      summary: Fetch movies currently in theatres from TMDB
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewReleasesResponse"
+
+  /movies/parse-caption:
+    post:
+      operationId: parseCaption
+      tags: [movies]
+      summary: Parse a social media caption and find matching movies via TMDB
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseCaptionBody"
+      responses:
+        "200":
+          description: Candidate movies found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParseCaptionResponse"
+
+  /movies/ai-extract:
+    post:
+      operationId: aiExtract
+      tags: [movies]
+      summary: >
+        Use Gemini AI to extract movie references from text, enrich each with
+        TMDB data, and automatically save them to the locker.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiExtractBody"
+      responses:
+        "200":
+          description: Extraction complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiExtractResponse"
+
+  /movies/process-social-link:
+    post:
+      operationId: processSocialLink
+      tags: [movies]
+      summary: >
+        Extract movies from a social media URL. Fetches the post caption via
+        RapidAPI (source="caption"); falls back to yt-dlp audio download
+        processed natively by Gemini 2.5 Flash via the Files API
+        (source="audio") when no caption is present. Matched movies are saved
+        to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessSocialLinkBody"
+      responses:
+        "200":
+          description: Processing complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessSocialLinkResponse"
+
+  /movies/tmdb/{tmdbId}:
+    get:
+      operationId: getMovieDetails
+      tags: [movies]
+      summary: >
+        Fetch full TMDB details (director, cast, genres, watch providers) for
+        any movie by TMDB ID without saving it to the locker.
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Movie details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TmdbMovieDetailsResponse"
+        "404":
+          description: Movie not found on TMDB
+
   /movies:
     get:
       operationId: listMovies
@@ -55,67 +169,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Movie"
-  /movies/parse-caption:
-    post:
-      operationId: parseCaption
+
+  /movies/{id}/watched:
+    patch:
+      operationId: patchWatched
       tags: [movies]
-      summary: Parse a social media caption and find matching movies via TMDB
+      summary: Mark a movie as watched or unwatched
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ParseCaptionBody"
+              $ref: "#/components/schemas/PatchWatchedBody"
       responses:
         "200":
-          description: Candidate movies found
+          description: Updated movie
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ParseCaptionResponse"
-  /movies/ai-extract:
-    post:
-      operationId: aiExtract
+                $ref: "#/components/schemas/Movie"
+
+  /movies/{id}/rating:
+    patch:
+      operationId: patchRating
       tags: [movies]
-      summary: >
-        Use Gemini AI to extract movie references from text, enrich each with
-        TMDB poster data, and automatically save them to the locker.
+      summary: Set or clear the star rating (1–5) for a movie
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AiExtractBody"
+              $ref: "#/components/schemas/PatchRatingBody"
       responses:
         "200":
-          description: Extraction complete — returns Gemini matches and saved Movie records
+          description: Updated movie
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AiExtractResponse"
-  /movies/process-social-link:
-    post:
-      operationId: processSocialLink
-      tags: [movies]
-      summary: >
-        Extract movies from a social media URL. Fetches the post caption via
-        RapidAPI (source="caption"); falls back to yt-dlp audio download
-        processed natively by Gemini 2.5 Flash via the Files API
-        (source="audio") when no caption is present. Matched movies are saved
-        to the locker. Only GEMINI_API_KEY and RAPIDAPI_KEY are required.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProcessSocialLinkBody"
-      responses:
-        "200":
-          description: Processing complete
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProcessSocialLinkResponse"
+                $ref: "#/components/schemas/Movie"
+
   /movies/{id}:
     delete:
       operationId: deleteMovie
@@ -130,6 +234,7 @@ paths:
       responses:
         "204":
           description: Movie removed
+
 components:
   schemas:
     HealthStatus:
@@ -139,6 +244,21 @@ components:
           type: string
       required:
         - status
+
+    WatchProvider:
+      type: object
+      properties:
+        provider_id:
+          type: integer
+        provider_name:
+          type: string
+        logo_url:
+          type: string
+      required:
+        - provider_id
+        - provider_name
+        - logo_url
+
     Movie:
       type: object
       properties:
@@ -154,6 +274,33 @@ components:
           type: string
         overview:
           type: string
+        director:
+          type: string
+        cast:
+          type: array
+          items:
+            type: string
+        genres:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+        watchProviders:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
+        rating:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        isWatched:
+          type: boolean
+        watchedAt:
+          type: string
+          format: date-time
+          nullable: true
         addedAt:
           type: string
           format: date-time
@@ -164,7 +311,75 @@ components:
         - releaseYear
         - posterUrl
         - overview
+        - director
+        - cast
+        - genres
+        - language
+        - watchProviders
+        - isWatched
         - addedAt
+
+    TmdbMovieCard:
+      type: object
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        releaseYear:
+          type: string
+        posterUrl:
+          type: string
+        overview:
+          type: string
+      required:
+        - tmdbId
+        - title
+        - releaseYear
+        - posterUrl
+        - overview
+
+    TmdbMovieDetailsResponse:
+      type: object
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+        releaseYear:
+          type: string
+        posterUrl:
+          type: string
+        overview:
+          type: string
+        director:
+          type: string
+        cast:
+          type: array
+          items:
+            type: string
+        genres:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+        watchProviders:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
+      required:
+        - tmdbId
+        - title
+        - releaseYear
+        - posterUrl
+        - overview
+        - director
+        - cast
+        - genres
+        - language
+        - watchProviders
+
     MovieCandidate:
       type: object
       properties:
@@ -184,30 +399,46 @@ components:
         - releaseYear
         - posterUrl
         - overview
+
     GeminiMovieMatch:
       type: object
       description: Single movie reference extracted by Gemini, with confidence score
       properties:
         movie_title:
           type: string
-          description: Canonical movie title as returned by Gemini
         release_year:
           type: string
-          description: Four-digit release year, or empty string if unknown
         confidence_score:
           type: number
           format: float
-          description: Gemini confidence 0.0–1.0 that this is a genuine movie reference
         tmdb_id:
           type: integer
           nullable: true
-          description: >
-            TMDB movie ID resolved after lookup. Null when TMDB returned no
-            match or confidence was below threshold.
       required:
         - movie_title
         - release_year
         - confidence_score
+
+    TrendingResponse:
+      type: object
+      properties:
+        movies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TmdbMovieCard"
+      required:
+        - movies
+
+    NewReleasesResponse:
+      type: object
+      properties:
+        movies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TmdbMovieCard"
+      required:
+        - movies
+
     ListMoviesResponse:
       type: object
       properties:
@@ -217,6 +448,7 @@ components:
             $ref: "#/components/schemas/Movie"
       required:
         - movies
+
     AddMovieBody:
       type: object
       properties:
@@ -236,6 +468,7 @@ components:
         - releaseYear
         - posterUrl
         - overview
+
     ParseCaptionBody:
       type: object
       properties:
@@ -243,6 +476,7 @@ components:
           type: string
       required:
         - caption
+
     ParseCaptionResponse:
       type: object
       properties:
@@ -252,65 +486,77 @@ components:
             $ref: "#/components/schemas/MovieCandidate"
       required:
         - candidates
+
     AiExtractBody:
       type: object
       properties:
         text:
           type: string
-          description: Raw text to analyse — caption, freeform description, list, etc.
       required:
         - text
+
     AiExtractResponse:
       type: object
       properties:
         matches:
           type: array
-          description: Every movie Gemini identified, ordered by confidence_score descending
           items:
             $ref: "#/components/schemas/GeminiMovieMatch"
         saved:
           type: array
-          description: Movie records that were successfully found on TMDB and saved to the locker
           items:
             $ref: "#/components/schemas/Movie"
       required:
         - matches
         - saved
+
     ProcessSocialLinkBody:
       type: object
       properties:
         url:
           type: string
           format: uri
-          description: Public social media post URL (Instagram, TikTok, YouTube, etc.)
       required:
         - url
+
     ProcessSocialLinkResponse:
       type: object
       properties:
         source:
           type: string
           enum: [caption, audio, none]
-          description: >
-            How the text was obtained: "caption" = RapidAPI scraper returned
-            post text fed into Gemini; "audio" = yt-dlp downloaded the audio
-            and Gemini 2.5 Flash processed it natively via the Files API;
-            "none" = no data could be extracted.
         text:
           type: string
           nullable: true
-          description: The raw text that was sent to Gemini; null when source is "none".
         matches:
           type: array
-          description: Every movie Gemini identified, ordered by confidence_score descending
           items:
             $ref: "#/components/schemas/GeminiMovieMatch"
         saved:
           type: array
-          description: Movie records successfully found on TMDB and saved to the locker
           items:
             $ref: "#/components/schemas/Movie"
       required:
         - source
         - matches
         - saved
+
+    PatchWatchedBody:
+      type: object
+      properties:
+        isWatched:
+          type: boolean
+      required:
+        - isWatched
+
+    PatchRatingBody:
+      type: object
+      properties:
+        rating:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+      required:
+        - rating
+

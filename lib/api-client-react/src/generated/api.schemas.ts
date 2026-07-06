@@ -9,6 +9,12 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface WatchProvider {
+  provider_id: number;
+  provider_name: string;
+  logo_url: string;
+}
+
 export interface Movie {
   id: number;
   tmdbId: number;
@@ -16,7 +22,40 @@ export interface Movie {
   releaseYear: string;
   posterUrl: string;
   overview: string;
+  director: string;
+  cast: string[];
+  genres: string[];
+  language: string;
+  watchProviders: WatchProvider[];
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating?: number | null;
+  isWatched: boolean;
+  watchedAt?: string | null;
   addedAt: string;
+}
+
+export interface TmdbMovieCard {
+  tmdbId: number;
+  title: string;
+  releaseYear: string;
+  posterUrl: string;
+  overview: string;
+}
+
+export interface TmdbMovieDetailsResponse {
+  tmdbId: number;
+  title: string;
+  releaseYear: string;
+  posterUrl: string;
+  overview: string;
+  director: string;
+  cast: string[];
+  genres: string[];
+  language: string;
+  watchProviders: WatchProvider[];
 }
 
 export interface MovieCandidate {
@@ -31,14 +70,18 @@ export interface MovieCandidate {
  * Single movie reference extracted by Gemini, with confidence score
  */
 export interface GeminiMovieMatch {
-  /** Canonical movie title as returned by Gemini */
   movie_title: string;
-  /** Four-digit release year, or empty string if unknown */
   release_year: string;
-  /** Gemini confidence 0.0–1.0 that this is a genuine movie reference */
   confidence_score: number;
-  /** TMDB movie ID resolved after lookup. Null when TMDB returned no match or confidence was below threshold. */
   tmdb_id?: number | null;
+}
+
+export interface TrendingResponse {
+  movies: TmdbMovieCard[];
+}
+
+export interface NewReleasesResponse {
+  movies: TmdbMovieCard[];
 }
 
 export interface ListMoviesResponse {
@@ -62,25 +105,18 @@ export interface ParseCaptionResponse {
 }
 
 export interface AiExtractBody {
-  /** Raw text to analyse — caption, freeform description, list, etc. */
   text: string;
 }
 
 export interface AiExtractResponse {
-  /** Every movie Gemini identified, ordered by confidence_score descending */
   matches: GeminiMovieMatch[];
-  /** Movie records that were successfully found on TMDB and saved to the locker */
   saved: Movie[];
 }
 
 export interface ProcessSocialLinkBody {
-  /** Public social media post URL (Instagram, TikTok, YouTube, etc.) */
   url: string;
 }
 
-/**
- * How the text was obtained: "caption" = RapidAPI scraper returned post text fed into Gemini; "audio" = yt-dlp downloaded the audio and Gemini 2.5 Flash processed it natively via the Files API; "none" = no data could be extracted.
- */
 export type ProcessSocialLinkResponseSource = typeof ProcessSocialLinkResponseSource[keyof typeof ProcessSocialLinkResponseSource];
 
 
@@ -91,13 +127,21 @@ export const ProcessSocialLinkResponseSource = {
 } as const;
 
 export interface ProcessSocialLinkResponse {
-  /** How the text was obtained: "caption" = RapidAPI scraper returned post text fed into Gemini; "audio" = yt-dlp downloaded the audio and Gemini 2.5 Flash processed it natively via the Files API; "none" = no data could be extracted. */
   source: ProcessSocialLinkResponseSource;
-  /** The raw text that was sent to Gemini; null when source is "none". */
   text?: string | null;
-  /** Every movie Gemini identified, ordered by confidence_score descending */
   matches: GeminiMovieMatch[];
-  /** Movie records successfully found on TMDB and saved to the locker */
   saved: Movie[];
+}
+
+export interface PatchWatchedBody {
+  isWatched: boolean;
+}
+
+export interface PatchRatingBody {
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number | null;
 }
 

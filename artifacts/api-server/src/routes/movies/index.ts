@@ -12,26 +12,49 @@ import {
   AiExtractResponse,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
+  GetMovieDetailsParams,
+  GetMovieDetailsResponse,
+  PatchWatchedParams,
+  PatchWatchedBody,
+  PatchRatingBody,
+  PatchRatingParams,
+  GetTrendingResponse,
+  GetNewReleasesResponse,
 } from "@workspace/api-zod";
-import { searchTmdb } from "../../lib/tmdb";
+import { searchTmdb, fetchMovieDetails, fetchTrending, fetchNowPlaying } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
-// Note: audioTranscriber.ts removed — audio path now uses audioExtractor.ts (Gemini Files API)
 
 const router: IRouter = Router();
 
-// GET /movies — list all saved movies
-router.get("/movies", async (_req, res): Promise<void> => {
-  const movies = await db
-    .select()
-    .from(moviesTable)
-    .orderBy(moviesTable.addedAt);
-  res.json(ListMoviesResponse.parse({ movies }));
+// ── Discovery (Home screen) ───────────────────────────────────────────────────
+
+// GET /movies/trending
+router.get("/movies/trending", async (req, res): Promise<void> => {
+  try {
+    const movies = await fetchTrending();
+    res.json(GetTrendingResponse.parse({ movies }));
+  } catch (err) {
+    req.log.error({ err }, "trending: TMDB fetch failed");
+    res.status(502).json({ error: "Could not fetch trending movies from TMDB" });
+  }
 });
 
-// POST /movies/parse-caption — extract movie candidates from a social caption
-// IMPORTANT: must be declared before /movies/:id to avoid param collision
+// GET /movies/new-releases
+router.get("/movies/new-releases", async (req, res): Promise<void> => {
+  try {
+    const movies = await fetchNowPlaying();
+    res.json(GetNewReleasesResponse.parse({ movies }));
+  } catch (err) {
+    req.log.error({ err }, "new-releases: TMDB fetch failed");
+    res.status(502).json({ error: "Could not fetch new releases from TMDB" });
+  }
+});
+
+// ── Caption parsing ───────────────────────────────────────────────────────────
+
+// POST /movies/parse-caption
 router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   const parsed = ParseCaptionBody.safeParse(req.body);
   if (!parsed.success) {
@@ -71,8 +94,9 @@ router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   res.json(ParseCaptionResponse.parse({ candidates: results.slice(0, 24) }));
 });
 
-// POST /movies/ai-extract — Gemini structured extraction → TMDB enrichment → auto-save
-// IMPORTANT: must be declared before /movies/:id to avoid param collision
+// ── AI extraction ─────────────────────────────────────────────────────────────
+
+// POST /movies/ai-extract
 router.post("/movies/ai-extract", async (req, res): Promise<void> => {
   const parsed = AiExtractBody.safeParse(req.body);
   if (!parsed.success) {
@@ -90,8 +114,9 @@ router.post("/movies/ai-extract", async (req, res): Promise<void> => {
   res.json(AiExtractResponse.parse({ matches, saved }));
 });
 
-// POST /movies/process-social-link — fetch caption or transcribe audio → Gemini → save
-// IMPORTANT: must be declared before /movies/:id to avoid param collision
+// ── Social link processing ────────────────────────────────────────────────────
+
+// POST /movies/process-social-link
 router.post("/movies/process-social-link", async (req, res): Promise<void> => {
   const parsed = ProcessSocialLinkBody.safeParse(req.body);
   if (!parsed.success) {
@@ -112,6 +137,40 @@ router.post("/movies/process-social-link", async (req, res): Promise<void> => {
   );
 
   res.json(ProcessSocialLinkResponse.parse(result));
+});
+
+// ── TMDB detail fetch (for home screen / unsaved movies) ──────────────────────
+
+// GET /movies/tmdb/:tmdbId — fetch full TMDB details without saving
+router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
+  const params = GetMovieDetailsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  try {
+    const details = await fetchMovieDetails(params.data.tmdbId);
+    if (!details) {
+      res.status(404).json({ error: "Movie not found on TMDB" });
+      return;
+    }
+    res.json(GetMovieDetailsResponse.parse(details));
+  } catch (err) {
+    req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB detail fetch failed");
+    res.status(502).json({ error: "Could not fetch movie details from TMDB" });
+  }
+});
+
+// ── Locker CRUD ───────────────────────────────────────────────────────────────
+
+// GET /movies — list all saved movies
+router.get("/movies", async (_req, res): Promise<void> => {
+  const movies = await db
+    .select()
+    .from(moviesTable)
+    .orderBy(moviesTable.addedAt);
+  res.json(ListMoviesResponse.parse({ movies }));
 });
 
 // POST /movies — add a movie to the locker (idempotent by tmdbId)
@@ -138,6 +197,65 @@ router.post("/movies", async (req, res): Promise<void> => {
   }
 
   res.status(201).json(AddMovieResponse.parse(movie));
+});
+
+// PATCH /movies/:id/watched — toggle watched status
+router.patch("/movies/:id/watched", async (req, res): Promise<void> => {
+  const params = PatchWatchedParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = PatchWatchedBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [updated] = await db
+    .update(moviesTable)
+    .set({
+      isWatched: body.data.isWatched,
+      watchedAt: body.data.isWatched ? new Date() : null,
+    })
+    .where(eq(moviesTable.id, params.data.id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Movie not found" });
+    return;
+  }
+
+  res.json(AddMovieResponse.parse(updated));
+});
+
+// PATCH /movies/:id/rating — set star rating (1–5, or null to clear)
+router.patch("/movies/:id/rating", async (req, res): Promise<void> => {
+  const params = PatchRatingParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = PatchRatingBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [updated] = await db
+    .update(moviesTable)
+    .set({ rating: body.data.rating })
+    .where(eq(moviesTable.id, params.data.id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Movie not found" });
+    return;
+  }
+
+  res.json(AddMovieResponse.parse(updated));
 });
 
 // DELETE /movies/:id — remove a movie from the locker
