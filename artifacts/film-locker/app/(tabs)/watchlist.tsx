@@ -366,6 +366,7 @@ export default function WatchlistScreen() {
       {isSearchActive ? (
         /* SEARCH RESULTS */
         <FlatList<TmdbMovieCard>
+          key="search-results"
           data={searchResults}
           keyExtractor={(item) => String(item.tmdbId)}
           renderItem={renderSearchResult}
@@ -398,6 +399,7 @@ export default function WatchlistScreen() {
       ) : (
         /* WATCHLIST GRID */
         <FlatList<Movie>
+          key="watchlist-grid"
           data={filteredMovies}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderWatchlistMovie}
