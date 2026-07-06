@@ -9,7 +9,6 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
-  KeyboardAvoidingView,
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -262,10 +261,7 @@ export default function WatchlistScreen() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.root}>
       {/*
        * STABLE HEADER — lives outside any FlatList so these TextInputs never
        * remount on keystroke. Putting inputs inside ListHeaderComponent causes
@@ -452,7 +448,7 @@ export default function WatchlistScreen() {
           savedMovie={modalTarget.savedMovie}
         />
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

@@ -29,6 +29,10 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
+    // Always log so it appears in Metro / browser console
+    console.error('[ErrorBoundary] caught error:', error.message);
+    console.error('[ErrorBoundary] stack:', error.stack);
+    console.error('[ErrorBoundary] component stack:', info.componentStack);
     if (typeof this.props.onError === 'function') {
       this.props.onError(error, info.componentStack);
     }
