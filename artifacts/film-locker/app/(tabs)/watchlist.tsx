@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -145,6 +145,8 @@ export default function WatchlistScreen() {
     [watchlistMovies, filters]
   );
 
+  const searchResults = searchData?.movies ?? [];
+
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleProcessLink = useCallback(async () => {
@@ -257,46 +259,52 @@ export default function WatchlistScreen() {
     [handleDelete, openSavedMovieModal]
   );
 
-  const searchResults = searchData?.movies ?? [];
+  // ── Render ────────────────────────────────────────────────────────────────────
 
-  // ── Header (always shown above the list) ─────────────────────────────────────
-
-  const ListHeader = useMemo(
-    () => (
-      <View>
-        {/* Screen header */}
-        <View
-          style={[
-            styles.screenHeader,
-            { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) },
-          ]}
-        >
-          <Text style={styles.screenTitle}>My Watchlist</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{watchlistMovies.length}</Text>
-          </View>
+  return (
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/*
+       * STABLE HEADER — lives outside any FlatList so these TextInputs never
+       * remount on keystroke. Putting inputs inside ListHeaderComponent causes
+       * React Native to unmount/remount the header element whenever its deps
+       * change, killing focus and crashing the layout cycle.
+       */}
+      <View
+        style={[
+          styles.screenHeader,
+          { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) },
+        ]}
+      >
+        <Text style={styles.screenTitle}>My Watchlist</Text>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{watchlistMovies.length}</Text>
         </View>
+      </View>
 
-        {/* Search bar — searches all of TMDB */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search any film…"
-            placeholderTextColor="#9CA3AF"
-            style={styles.searchInput}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-        </View>
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search any film…"
+          placeholderTextColor="#9CA3AF"
+          style={styles.searchInput}
+          returnKeyType="search"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
 
-        {/* Paste social link */}
+      {/* Paste social link — hidden while searching */}
+      {!isSearchActive && (
         <View style={styles.linkSection}>
           <Text style={styles.linkLabel}>PASTE A SOCIAL LINK</Text>
           <View style={styles.linkRow}>
@@ -330,66 +338,47 @@ export default function WatchlistScreen() {
             <Text style={styles.processingHint}>Extracting films via Gemini…</Text>
           )}
         </View>
+      )}
 
-        {/* Only show FilterBar when not in search mode */}
-        {!isSearchActive && (
-          <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
-        )}
+      {/* Filter bar — only when not searching */}
+      {!isSearchActive && (
+        <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
+      )}
 
-        {/* Context label */}
-        {isSearchActive ? (
-          <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionLabel}>
-              {isSearchFetching
-                ? 'SEARCHING TMDB…'
-                : `${searchResults.length} RESULT${searchResults.length === 1 ? '' : 'S'}`}
-            </Text>
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-              <Text style={styles.clearSearchText}>Clear Search</Text>
-            </TouchableOpacity>
-          </View>
-        ) : filteredMovies.length > 0 ? (
-          <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionLabel}>
-              {filteredMovies.length} FILM{filteredMovies.length === 1 ? '' : 'S'}
-            </Text>
-            <Text style={styles.sectionHint}>Hold to remove</Text>
-          </View>
-        ) : null}
-      </View>
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      insets.top,
-      watchlistMovies,
-      searchQuery,
-      linkUrl,
-      isProcessing,
-      isSearchActive,
-      isSearchFetching,
-      searchResults.length,
-      filteredMovies.length,
-      filters,
-      handleProcessLink,
-    ]
-  );
-
-  // ── Render ────────────────────────────────────────────────────────────────────
-
-  return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {/* SEARCH RESULTS MODE */}
+      {/* Context label row */}
       {isSearchActive ? (
+        <View style={styles.sectionLabelRow}>
+          <Text style={styles.sectionLabel}>
+            {isSearchFetching
+              ? 'SEARCHING TMDB…'
+              : `${searchResults.length} RESULT${searchResults.length === 1 ? '' : 'S'}`}
+          </Text>
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+            <Text style={styles.clearSearchText}>Clear Search</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredMovies.length > 0 ? (
+        <View style={styles.sectionLabelRow}>
+          <Text style={styles.sectionLabel}>
+            {filteredMovies.length} FILM{filteredMovies.length === 1 ? '' : 'S'}
+          </Text>
+          <Text style={styles.sectionHint}>Hold to remove</Text>
+        </View>
+      ) : null}
+
+      {/* ── LIST AREA ── */}
+      {isSearchActive ? (
+        /* SEARCH RESULTS */
         <FlatList<TmdbMovieCard>
           data={searchResults}
           keyExtractor={(item) => String(item.tmdbId)}
           renderItem={renderSearchResult}
-          ListHeaderComponent={ListHeader}
           ListEmptyComponent={
-            !isSearchFetching ? (
+            isSearchFetching ? (
+              <View style={styles.searchingState}>
+                <ActivityIndicator color="#0066FF" />
+              </View>
+            ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="film-outline" size={48} color="#D1D5DB" />
                 <Text style={styles.emptyTitle}>No films found</Text>
@@ -397,27 +386,21 @@ export default function WatchlistScreen() {
                   Try a different title or check your spelling
                 </Text>
               </View>
-            ) : (
-              <View style={styles.searchingState}>
-                <ActivityIndicator color="#0066FF" />
-              </View>
             )
           }
           contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         />
       ) : isLoading ? (
         /* SKELETON */
-        <>
-          {ListHeader}
-          <View style={styles.skeletonGrid}>
-            {[...Array(6)].map((_, i) => (
-              <MovieCardSkeleton key={i} />
-            ))}
-          </View>
-        </>
+        <View style={styles.skeletonGrid}>
+          {[...Array(6)].map((_, i) => (
+            <MovieCardSkeleton key={i} />
+          ))}
+        </View>
       ) : (
-        /* WATCHLIST GRID MODE */
+        /* WATCHLIST GRID */
         <FlatList<Movie>
           data={filteredMovies}
           keyExtractor={(item) => String(item.id)}
@@ -428,7 +411,6 @@ export default function WatchlistScreen() {
             styles.contentContainer,
             { paddingBottom: insets.bottom + 16 },
           ]}
-          ListHeaderComponent={ListHeader}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="bookmark-outline" size={48} color="#D1D5DB" />
@@ -445,6 +427,7 @@ export default function WatchlistScreen() {
             </View>
           }
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
