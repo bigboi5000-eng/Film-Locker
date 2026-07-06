@@ -1,18 +1,19 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   Modal,
-  FlatList,
   StyleSheet,
-  TextInput,
-  Platform,
+  Pressable,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Movie } from '@workspace/api-client-react';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const DROPDOWN_W = SCREEN_W - 32;
 
 export interface FilterState {
   genre?: string;
@@ -37,6 +38,8 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   language: 'Language',
   streaming: 'Streaming',
 };
+
+const FILTER_KEYS: FilterKey[] = ['genre', 'director', 'actor', 'language', 'streaming'];
 
 /** Apply all active filters to a movie list. */
 export function applyFilters(movies: Movie[], filters: FilterState): Movie[] {
@@ -68,12 +71,10 @@ function getOptions(movies: Movie[], key: FilterKey): string[] {
   return Array.from(values).sort();
 }
 
-const FILTER_KEYS: FilterKey[] = ['genre', 'director', 'actor', 'language', 'streaming'];
-
 export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
+  const wrapperRef = useRef<View>(null);
   const [pickerKey, setPickerKey] = useState<FilterKey | null>(null);
-  const [search, setSearch] = useState('');
-  const insets = useSafeAreaInsets();
+  const [dropdownTop, setDropdownTop] = useState(200);
 
   const activeCount = Object.values(filters).filter(Boolean).length;
 
@@ -82,23 +83,30 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
     [movies, pickerKey]
   );
 
-  const filteredOptions = useMemo(
-    () =>
-      search.trim()
-        ? options.filter((o) => o.toLowerCase().includes(search.toLowerCase()))
-        : options,
-    [options, search]
-  );
-
   const openPicker = useCallback((key: FilterKey) => {
-    setSearch('');
-    setPickerKey(key);
+    // Measure the chip row's bottom edge, then open the dropdown.
+    // setPickerKey is only called inside the callback so the modal never
+    // renders at a stale position.
+    if (wrapperRef.current) {
+      wrapperRef.current.measureInWindow((_x, y, _w, h) => {
+        setDropdownTop(y + h + 4);
+        setPickerKey(key);
+      });
+    } else {
+      // Fallback for environments where the ref isn't ready
+      setDropdownTop(200);
+      setPickerKey(key);
+    }
   }, []);
 
   const selectOption = useCallback(
     (value: string) => {
       if (!pickerKey) return;
-      onChange({ ...filters, [pickerKey]: value });
+      // Toggle: selecting the same value clears it
+      const next = filters[pickerKey] === value
+        ? (() => { const f = { ...filters }; delete f[pickerKey]; return f; })()
+        : { ...filters, [pickerKey]: value };
+      onChange(next);
       setPickerKey(null);
     },
     [pickerKey, filters, onChange]
@@ -114,111 +122,112 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
   );
 
   const clearAll = useCallback(() => onChange({}), [onChange]);
+  const closeDropdown = useCallback(() => setPickerKey(null), []);
 
   return (
     <>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-        style={styles.scroll}
-      >
-        {/* All chip */}
-        <TouchableOpacity
-          onPress={clearAll}
-          style={[styles.chip, activeCount === 0 && styles.chipActive]}
+      <View ref={wrapperRef} collapsable={false}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+          style={styles.scroll}
         >
-          <Text style={[styles.chipText, activeCount === 0 && styles.chipTextActive]}>All</Text>
-        </TouchableOpacity>
+          {/* All chip */}
+          <TouchableOpacity
+            onPress={clearAll}
+            style={[styles.chip, activeCount === 0 && styles.chipActive]}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.chipText, activeCount === 0 && styles.chipTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
 
-        {FILTER_KEYS.map((key) => {
-          const value = filters[key];
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => (value ? clearFilter(key) : openPicker(key))}
-              style={[styles.chip, value && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, value && styles.chipTextActive]}>
-                {value ? `${FILTER_LABELS[key]}: ${value}` : FILTER_LABELS[key]}
-              </Text>
-              {value && (
+          {FILTER_KEYS.map((key) => {
+            const value = filters[key];
+            const isActive = Boolean(value);
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => (isActive ? clearFilter(key) : openPicker(key))}
+                style={[styles.chip, isActive && styles.chipActive]}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                  {isActive ? `${FILTER_LABELS[key]}: ${value}` : FILTER_LABELS[key]}
+                </Text>
                 <Ionicons
-                  name="close"
+                  name={isActive ? 'close' : 'chevron-down'}
                   size={12}
-                  color="#FFFFFF"
+                  color={isActive ? '#FFFFFF' : '#6B7280'}
                   style={{ marginLeft: 4 }}
                 />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {/* Option picker modal */}
+      {/* Inline dropdown — transparent modal anchored to the chip row's bottom */}
       <Modal
         visible={pickerKey !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setPickerKey(null)}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDropdown}
       >
-        <View style={[styles.modal, { paddingTop: Platform.OS === 'ios' ? 16 : insets.top + 8 }]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {pickerKey ? FILTER_LABELS[pickerKey] : ''}
-            </Text>
-            <TouchableOpacity onPress={() => setPickerKey(null)}>
-              <Ionicons name="close" size={24} color="#111827" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.searchRow}>
-            <Ionicons name="search" size={16} color="#6B7280" style={{ marginRight: 8 }} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search…"
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              autoFocus
-            />
-          </View>
-
-          {filteredOptions.length === 0 ? (
-            <View style={styles.emptyPicker}>
-              <Text style={styles.emptyPickerText}>
-                {options.length === 0 ? 'No data available yet' : 'No matches'}
+        <Pressable style={styles.backdrop} onPress={closeDropdown}>
+          {/* Stop propagation so tapping inside the card doesn't close it */}
+          <Pressable
+            style={[styles.dropdownCard, { top: dropdownTop, width: DROPDOWN_W }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Card header */}
+            <View style={styles.dropdownHeader}>
+              <Text style={styles.dropdownTitle}>
+                {pickerKey ? FILTER_LABELS[pickerKey] : ''}
               </Text>
+              <TouchableOpacity onPress={closeDropdown} hitSlop={8}>
+                <Ionicons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <FlatList
-              data={filteredOptions}
-              keyExtractor={(item) => item}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  onPress={() => selectOption(item)}
-                  style={[
-                    styles.optionRow,
-                    pickerKey && filters[pickerKey] === item && styles.optionRowActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      pickerKey && filters[pickerKey] === item && styles.optionTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                  {pickerKey && filters[pickerKey] === item && (
-                    <Ionicons name="checkmark" size={18} color="#0066FF" />
-                  )}
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-            />
-          )}
-        </View>
+
+            {options.length === 0 ? (
+              <View style={styles.emptyDropdown}>
+                <Text style={styles.emptyDropdownText}>No data yet</Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.optionScroll}
+                bounces={false}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+              >
+                {options.map((item) => {
+                  const isSelected = pickerKey ? filters[pickerKey] === item : false;
+                  return (
+                    <TouchableOpacity
+                      key={item}
+                      onPress={() => selectOption(item)}
+                      style={[styles.optionRow, isSelected && styles.optionRowActive]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[styles.optionText, isSelected && styles.optionTextActive]}
+                        numberOfLines={1}
+                      >
+                        {item}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={16} color="#0066FF" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
       </Modal>
     </>
   );
@@ -230,7 +239,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
@@ -240,40 +249,57 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#0066FF', borderColor: '#0066FF' },
   chipText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#374151' },
   chipTextActive: { color: '#FFFFFF' },
-  // Modal
-  modal: { flex: 1, backgroundColor: '#FFFFFF' },
-  modalHeader: {
+  // Dropdown
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  dropdownCard: {
+    position: 'absolute',
+    left: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+    maxHeight: 280,
+  },
+  dropdownHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
   },
-  modalTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    margin: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
+  dropdownTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#111827',
   },
-  searchInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827' },
+  optionScroll: { maxHeight: 220 },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   optionRowActive: { backgroundColor: '#EFF6FF' },
-  optionText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827' },
+  optionText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: '#111827',
+    flex: 1,
+    marginRight: 8,
+  },
   optionTextActive: { fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
-  emptyPicker: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyPickerText: { fontSize: 15, color: '#9CA3AF', fontFamily: 'Inter_400Regular' },
+  emptyDropdown: { padding: 20, alignItems: 'center' },
+  emptyDropdownText: { fontSize: 13, color: '#9CA3AF', fontFamily: 'Inter_400Regular' },
 });

@@ -53,6 +53,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/NewReleasesResponse"
 
+  /movies/search:
+    get:
+      operationId: searchMovies
+      tags: [movies]
+      summary: Search TMDB for movies by title
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Search results from TMDB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchMoviesResponse"
+
   /movies/parse-caption:
     post:
       operationId: parseCaption
@@ -418,6 +438,15 @@ components:
         - movie_title
         - release_year
         - confidence_score
+
+    SearchMoviesResponse:
+      type: object
+      required: [movies]
+      properties:
+        movies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TmdbMovieCard"
 
     TrendingResponse:
       type: object

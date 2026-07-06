@@ -76,6 +76,10 @@ export interface GeminiMovieMatch {
   tmdb_id?: number | null;
 }
 
+export interface SearchMoviesResponse {
+  movies: TmdbMovieCard[];
+}
+
 export interface TrendingResponse {
   movies: TmdbMovieCard[];
 }
@@ -144,4 +148,11 @@ export interface PatchRatingBody {
      */
   rating: number | null;
 }
+
+export type SearchMoviesParams = {
+/**
+ * @minLength 1
+ */
+q: string;
+};
 

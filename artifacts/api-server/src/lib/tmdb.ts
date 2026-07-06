@@ -207,6 +207,24 @@ export async function fetchMovieDetails(
   };
 }
 
+/**
+ * Search TMDB by title for the UI — returns up to 20 poster-bearing results
+ * sorted by popularity. Distinct from `searchTmdb` which caps at 3 for the
+ * AI pipeline.
+ */
+export async function searchMoviesUI(query: string): Promise<TmdbCandidate[]> {
+  const apiKey = getApiKey();
+  const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US&page=1`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
+  const data = (await res.json()) as TmdbSearchResponse;
+  return data.results
+    .filter((m) => m.poster_path)
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, 20)
+    .map(movieToCandidate);
+}
+
 // ── Discovery (home screen) ───────────────────────────────────────────────────
 
 export async function fetchTrending(): Promise<TmdbCandidate[]> {

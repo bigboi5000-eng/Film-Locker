@@ -20,8 +20,9 @@ import {
   PatchRatingParams,
   GetTrendingResponse,
   GetNewReleasesResponse,
+  SearchMoviesResponse,
 } from "@workspace/api-zod";
-import { searchTmdb, fetchMovieDetails, fetchTrending, fetchNowPlaying } from "../../lib/tmdb";
+import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
@@ -49,6 +50,22 @@ router.get("/movies/new-releases", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "new-releases: TMDB fetch failed");
     res.status(502).json({ error: "Could not fetch new releases from TMDB" });
+  }
+});
+
+// GET /movies/search?q=
+router.get("/movies/search", async (req, res): Promise<void> => {
+  const q = String(req.query.q ?? "").trim();
+  if (!q) {
+    res.status(400).json({ error: "q is required" });
+    return;
+  }
+  try {
+    const movies = await searchMoviesUI(q);
+    res.json(SearchMoviesResponse.parse({ movies }));
+  } catch (err) {
+    req.log.error({ err }, "search: TMDB fetch failed");
+    res.status(502).json({ error: "Could not search TMDB" });
   }
 });
 

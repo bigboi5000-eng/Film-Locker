@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import {
   useListMovies,
   useDeleteMovie,
   useProcessSocialLink,
+  useSearchMovies,
   getListMoviesQueryKey,
+  getSearchMoviesQueryKey,
   type Movie,
+  type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
@@ -29,6 +33,71 @@ import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
+const SEARCH_DEBOUNCE_MS = 400;
+
+// ── Simple debounce hook ──────────────────────────────────────────────────────
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ── Search result row ─────────────────────────────────────────────────────────
+
+interface SearchResultRowProps {
+  movie: TmdbMovieCard;
+  isSaved: boolean;
+  savedMovie?: Movie;
+  onPress: (movie: TmdbMovieCard, savedMovie?: Movie) => void;
+}
+
+function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRowProps) {
+  return (
+    <TouchableOpacity
+      style={styles.resultRow}
+      onPress={() => onPress(movie, savedMovie)}
+      activeOpacity={0.75}
+    >
+      <Image
+        source={{ uri: movie.posterUrl }}
+        style={styles.resultPoster}
+        contentFit="cover"
+        transition={200}
+        placeholder={require('@/assets/images/icon.png')}
+      />
+      <View style={styles.resultInfo}>
+        <Text style={styles.resultTitle} numberOfLines={2}>
+          {movie.title}
+        </Text>
+        {movie.releaseYear ? (
+          <Text style={styles.resultYear}>{movie.releaseYear}</Text>
+        ) : null}
+      </View>
+      {isSaved && (
+        <View style={styles.savedBadge}>
+          <Ionicons name="bookmark" size={14} color="#FFFFFF" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ── Modal selection state ─────────────────────────────────────────────────────
+
+interface ModalTarget {
+  tmdbId: number;
+  title: string;
+  posterUrl: string;
+  releaseYear: string;
+  overview: string;
+  savedMovie?: Movie;
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function WatchlistScreen() {
   const insets = useSafeAreaInsets();
@@ -37,38 +106,58 @@ export default function WatchlistScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [filters, setFilters] = useState<FilterState>({});
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
+
+  const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
+  const isSearchActive = debouncedQuery.length >= 2;
 
   const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies();
   const { mutateAsync: deleteMovie } = useDeleteMovie();
   const { mutateAsync: processLink, isPending: isProcessing } = useProcessSocialLink();
 
+  // TMDB search — only fires when query has ≥ 2 chars.
+  // params.q and queryKey both derive from debouncedQuery so they stay aligned;
+  // when disabled the fetch never runs so the empty-string param is harmless.
+  const {
+    data: searchData,
+    isFetching: isSearchFetching,
+  } = useSearchMovies(
+    { q: debouncedQuery || '' },
+    {
+      query: {
+        enabled: isSearchActive,
+        queryKey: getSearchMoviesQueryKey({ q: debouncedQuery }),
+      },
+    }
+  );
+
   const allMovies = moviesData?.movies ?? [];
   const watchlistMovies = allMovies.filter((m) => !m.isWatched);
 
-  const filteredMovies = useMemo(() => {
-    let result = applyFilters(watchlistMovies, filters);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((m) => m.title.toLowerCase().includes(q));
-    }
-    return result;
-  }, [watchlistMovies, filters, searchQuery]);
+  // Map tmdbId → saved Movie for quick look-up in search results
+  const savedByTmdbId = useMemo(
+    () => new Map(allMovies.map((m) => [m.tmdbId, m])),
+    [allMovies]
+  );
+
+  const filteredMovies = useMemo(
+    () => applyFilters(watchlistMovies, filters),
+    [watchlistMovies, filters]
+  );
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleProcessLink = useCallback(async () => {
     const trimmed = linkUrl.trim();
     if (!trimmed) return;
-
     try {
       const result = await processLink({ data: { url: trimmed } });
       setLinkUrl('');
       await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-
       const saved = result.saved ?? [];
       if (Platform.OS !== 'web' && saved.length > 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-
       if (saved.length === 0) {
         Alert.alert(
           'No Films Found',
@@ -111,7 +200,49 @@ export default function WatchlistScreen() {
     [deleteMovie, queryClient]
   );
 
-  const renderMovie = useCallback(
+  const openMovieModal = useCallback(
+    (movie: TmdbMovieCard, savedMovie?: Movie) => {
+      setModalTarget({
+        tmdbId: movie.tmdbId,
+        title: movie.title,
+        posterUrl: movie.posterUrl,
+        releaseYear: movie.releaseYear,
+        overview: movie.overview,
+        savedMovie,
+      });
+    },
+    []
+  );
+
+  const openSavedMovieModal = useCallback((movie: Movie) => {
+    setModalTarget({
+      tmdbId: movie.tmdbId,
+      title: movie.title,
+      posterUrl: movie.posterUrl,
+      releaseYear: movie.releaseYear,
+      overview: movie.overview,
+      savedMovie: movie,
+    });
+  }, []);
+
+  // ── Renderers ────────────────────────────────────────────────────────────────
+
+  const renderSearchResult = useCallback(
+    ({ item }: { item: TmdbMovieCard }) => {
+      const saved = savedByTmdbId.get(item.tmdbId);
+      return (
+        <SearchResultRow
+          movie={item}
+          isSaved={Boolean(saved)}
+          savedMovie={saved}
+          onPress={openMovieModal}
+        />
+      );
+    },
+    [savedByTmdbId, openMovieModal]
+  );
+
+  const renderWatchlistMovie = useCallback(
     ({ item }: { item: Movie }) => (
       <MovieCard
         id={item.id}
@@ -119,105 +250,178 @@ export default function WatchlistScreen() {
         releaseYear={item.releaseYear}
         posterUrl={item.posterUrl}
         rating={item.rating}
-        onPress={() => setSelectedMovie(item)}
+        onPress={() => openSavedMovieModal(item)}
         onLongPress={handleDelete}
       />
     ),
-    [handleDelete]
+    [handleDelete, openSavedMovieModal]
   );
 
-  const ListHeader = (
-    <View>
-      {/* Screen header */}
-      <View style={[styles.screenHeader, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
-        <Text style={styles.screenTitle}>My Watchlist</Text>
-        <View style={[styles.countBadge]}>
-          <Text style={styles.countText}>{watchlistMovies.length}</Text>
+  const searchResults = searchData?.movies ?? [];
+
+  // ── Header (always shown above the list) ─────────────────────────────────────
+
+  const ListHeader = useMemo(
+    () => (
+      <View>
+        {/* Screen header */}
+        <View
+          style={[
+            styles.screenHeader,
+            { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) },
+          ]}
+        >
+          <Text style={styles.screenTitle}>My Watchlist</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{watchlistMovies.length}</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Search bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search films…"
-          placeholderTextColor="#9CA3AF"
-          style={styles.searchInput}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Paste social link */}
-      <View style={styles.linkSection}>
-        <Text style={styles.linkLabel}>PASTE A SOCIAL LINK</Text>
-        <View style={styles.linkRow}>
+        {/* Search bar — searches all of TMDB */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
-            value={linkUrl}
-            onChangeText={setLinkUrl}
-            placeholder="instagram.com/reel/… or tiktok.com/…"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search any film…"
             placeholderTextColor="#9CA3AF"
-            style={styles.linkInput}
-            autoCapitalize="none"
+            style={styles.searchInput}
+            returnKeyType="search"
             autoCorrect={false}
-            keyboardType="url"
           />
-          <TouchableOpacity
-            style={[styles.linkButton, (!linkUrl.trim() || isProcessing) && styles.linkButtonDisabled]}
-            onPress={handleProcessLink}
-            disabled={!linkUrl.trim() || isProcessing}
-            activeOpacity={0.8}
-          >
-            {isProcessing ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
         </View>
-        {isProcessing && (
-          <Text style={styles.processingHint}>Extracting films via Gemini…</Text>
+
+        {/* Paste social link */}
+        <View style={styles.linkSection}>
+          <Text style={styles.linkLabel}>PASTE A SOCIAL LINK</Text>
+          <View style={styles.linkRow}>
+            <TextInput
+              value={linkUrl}
+              onChangeText={setLinkUrl}
+              placeholder="instagram.com/reel/… or tiktok.com/…"
+              placeholderTextColor="#9CA3AF"
+              style={styles.linkInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={[
+                styles.linkButton,
+                (!linkUrl.trim() || isProcessing) && styles.linkButtonDisabled,
+              ]}
+              onPress={handleProcessLink}
+              disabled={!linkUrl.trim() || isProcessing}
+              activeOpacity={0.8}
+            >
+              {isProcessing ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          </View>
+          {isProcessing && (
+            <Text style={styles.processingHint}>Extracting films via Gemini…</Text>
+          )}
+        </View>
+
+        {/* Only show FilterBar when not in search mode */}
+        {!isSearchActive && (
+          <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
         )}
+
+        {/* Context label */}
+        {isSearchActive ? (
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionLabel}>
+              {isSearchFetching
+                ? 'SEARCHING TMDB…'
+                : `${searchResults.length} RESULT${searchResults.length === 1 ? '' : 'S'}`}
+            </Text>
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Text style={styles.clearSearchText}>Clear Search</Text>
+            </TouchableOpacity>
+          </View>
+        ) : filteredMovies.length > 0 ? (
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionLabel}>
+              {filteredMovies.length} FILM{filteredMovies.length === 1 ? '' : 'S'}
+            </Text>
+            <Text style={styles.sectionHint}>Hold to remove</Text>
+          </View>
+        ) : null}
       </View>
-
-      {/* Filter bar */}
-      <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
-
-      {/* Section label */}
-      {filteredMovies.length > 0 && (
-        <View style={styles.sectionLabelRow}>
-          <Text style={styles.sectionLabel}>
-            {filteredMovies.length} FILM{filteredMovies.length === 1 ? '' : 'S'}
-          </Text>
-          <Text style={styles.sectionHint}>Hold to remove</Text>
-        </View>
-      )}
-    </View>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      insets.top,
+      watchlistMovies,
+      searchQuery,
+      linkUrl,
+      isProcessing,
+      isSearchActive,
+      isSearchFetching,
+      searchResults.length,
+      filteredMovies.length,
+      filters,
+      handleProcessLink,
+    ]
   );
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {isLoading ? (
+      {/* SEARCH RESULTS MODE */}
+      {isSearchActive ? (
+        <FlatList<TmdbMovieCard>
+          data={searchResults}
+          keyExtractor={(item) => String(item.tmdbId)}
+          renderItem={renderSearchResult}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={
+            !isSearchFetching ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="film-outline" size={48} color="#D1D5DB" />
+                <Text style={styles.emptyTitle}>No films found</Text>
+                <Text style={styles.emptySubtitle}>
+                  Try a different title or check your spelling
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.searchingState}>
+                <ActivityIndicator color="#0066FF" />
+              </View>
+            )
+          }
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : isLoading ? (
+        /* SKELETON */
         <>
           {ListHeader}
           <View style={styles.skeletonGrid}>
-            {[...Array(6)].map((_, i) => <MovieCardSkeleton key={i} />)}
+            {[...Array(6)].map((_, i) => (
+              <MovieCardSkeleton key={i} />
+            ))}
           </View>
         </>
       ) : (
+        /* WATCHLIST GRID MODE */
         <FlatList<Movie>
           data={filteredMovies}
           keyExtractor={(item) => String(item.id)}
-          renderItem={renderMovie}
+          renderItem={renderWatchlistMovie}
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={[
@@ -229,14 +433,14 @@ export default function WatchlistScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="bookmark-outline" size={48} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>
-                {searchQuery || Object.keys(filters).length > 0
+                {Object.keys(filters).length > 0
                   ? 'No films match your filters'
                   : 'Your Watchlist is empty'}
               </Text>
               <Text style={styles.emptySubtitle}>
-                {searchQuery || Object.keys(filters).length > 0
-                  ? 'Try clearing your search or filters'
-                  : 'Paste a social link above or use the Home tab to discover films'}
+                {Object.keys(filters).length > 0
+                  ? 'Try clearing your filters'
+                  : 'Search above to find films, or paste a social link'}
               </Text>
             </View>
           }
@@ -252,25 +456,29 @@ export default function WatchlistScreen() {
         />
       )}
 
-      {selectedMovie && (
+      {/* Film detail modal */}
+      {modalTarget && (
         <FilmDetailModal
-          visible={selectedMovie !== null}
-          onClose={() => setSelectedMovie(null)}
-          tmdbId={selectedMovie.tmdbId}
-          title={selectedMovie.title}
-          posterUrl={selectedMovie.posterUrl}
-          releaseYear={selectedMovie.releaseYear}
-          overview={selectedMovie.overview}
-          savedMovie={selectedMovie}
+          visible
+          onClose={() => setModalTarget(null)}
+          tmdbId={modalTarget.tmdbId}
+          title={modalTarget.title}
+          posterUrl={modalTarget.posterUrl}
+          releaseYear={modalTarget.releaseYear}
+          overview={modalTarget.overview}
+          savedMovie={modalTarget.savedMovie}
         />
       )}
     </KeyboardAvoidingView>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
   contentContainer: { paddingHorizontal: HORIZONTAL_PADDING },
+
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -280,7 +488,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
   },
-  screenTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', color: '#111827', letterSpacing: 0.5 },
+  screenTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter_700Bold',
+    color: '#111827',
+    letterSpacing: 0.5,
+  },
   countBadge: {
     minWidth: 26,
     height: 26,
@@ -291,6 +504,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
   },
   countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFFFFF' },
+
+  // Search
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -309,10 +524,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
   },
-  linkSection: {
-    marginHorizontal: HORIZONTAL_PADDING,
-    marginBottom: 4,
-  },
+
+  // Social link
+  linkSection: { marginHorizontal: HORIZONTAL_PADDING, marginBottom: 4 },
   linkLabel: {
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
@@ -348,6 +562,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 6,
   },
+
+  // Section label
   sectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -356,8 +572,59 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 10,
   },
-  sectionLabel: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF', letterSpacing: 1.5 },
+  sectionLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#9CA3AF',
+    letterSpacing: 1.5,
+  },
   sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  clearSearchText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#0066FF',
+  },
+
+  // Search result rows
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F3F4F6',
+  },
+  resultPoster: {
+    width: 42,
+    height: 63,
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
+    marginRight: 12,
+  },
+  resultInfo: { flex: 1 },
+  resultTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#111827',
+    lineHeight: 19,
+  },
+  resultYear: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#FF8C00',
+    marginTop: 3,
+  },
+  savedBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0066FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+
+  // Grid
   columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
   skeletonGrid: {
     flexDirection: 'row',
@@ -365,7 +632,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING,
     gap: COLUMN_GAP,
   },
-  emptyState: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: '#374151', marginTop: 16, textAlign: 'center' },
-  emptySubtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 8, textAlign: 'center', lineHeight: 20 },
+
+  // Empty / loading states
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#374151',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  searchingState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
 });

@@ -46,6 +46,27 @@ export const GetNewReleasesResponse = zod.object({
 
 
 /**
+ * @summary Search TMDB for movies by title
+ */
+
+
+
+export const SearchMoviesQueryParams = zod.object({
+  "q": zod.coerce.string().min(1)
+})
+
+export const SearchMoviesResponse = zod.object({
+  "movies": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string()
+}))
+})
+
+
+/**
  * @summary Parse a social media caption and find matching movies via TMDB
  */
 export const ParseCaptionBody = zod.object({
