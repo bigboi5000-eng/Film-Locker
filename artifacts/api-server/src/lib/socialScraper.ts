@@ -7,14 +7,23 @@
  *
  * Platform routing:
  *   instagram.com  →  instagram-scraper-stable-api.p.rapidapi.com
- *                     • primary:  GET /get_media_data.php
- *                     • fallback: GET /get_reel_title.php
+ *                     Endpoint waterfall (first success wins):
+ *                       1. GET /get_media_data_v2.php  (recommended by API)
+ *                       2. GET /get_media_data.php     (legacy)
+ *                       3. GET /get_reel_title.php     (lighter fallback)
  *   tiktok.com     →  tiktok-scraper7.p.rapidapi.com
  *   anything else  →  null (let the audio fallback handle it)
  */
 
 const RAPIDAPI_KEY = process.env["RAPIDAPI_KEY"];
 const IG_HOST = "instagram-scraper-stable-api.p.rapidapi.com";
+
+// All Instagram endpoints to try, in priority order.
+const IG_ENDPOINTS = [
+  "get_media_data_v2.php",
+  "get_media_data.php",
+  "get_reel_title.php",
+] as const;
 
 type Platform = "instagram" | "tiktok" | "unknown";
 
@@ -46,6 +55,10 @@ function igType(url: string): "post" | "reel" {
   return url.includes("/reel/") ? "reel" : "post";
 }
 
+// Known generic page-title strings returned by the scraper that are NOT
+// actual post captions and must be ignored.
+const IG_JUNK_TITLES = new Set(["instagram", "instagram - photos and videos"]);
+
 /**
  * Walk the response JSON looking for a non-empty caption/title string.
  * Instagram's API can return data under several different shapes depending
@@ -53,20 +66,30 @@ function igType(url: string): "post" | "reel" {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractIgCaption(data: any): string | null {
+  // post_caption is the explicit caption field from get_reel_title.php —
+  // check it first before falling back to the generic title/description.
   const candidates: unknown[] = [
+    data?.post_caption,
     data?.caption,
-    data?.title,
-    data?.description,
-    data?.text,
     data?.data?.caption,
-    data?.data?.title,
-    data?.data?.description,
+    data?.media?.caption?.text,
     data?.node?.edge_media_to_caption?.edges?.[0]?.node?.text,
     data?.edge_media_to_caption?.edges?.[0]?.node?.text,
     data?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text,
+    data?.data?.description,
+    data?.description,
+    data?.text,
+    data?.data?.title,
+    // title is last — it's often just "Instagram" (browser page title)
+    data?.title,
   ];
   for (const c of candidates) {
-    if (typeof c === "string" && c.trim().length > 0) return c.trim();
+    if (typeof c !== "string") continue;
+    const trimmed = c.trim();
+    // Skip empty strings and known junk titles
+    if (trimmed.length === 0) continue;
+    if (IG_JUNK_TITLES.has(trimmed.toLowerCase())) continue;
+    return trimmed;
   }
   return null;
 }
@@ -105,25 +128,24 @@ async function igRequest(
   return data;
 }
 
-/** Fetch caption for an Instagram post/reel URL. */
+/** Fetch caption for an Instagram post/reel URL, trying each endpoint in turn. */
 async function fetchInstagramCaption(url: string): Promise<string | null> {
   const key = requireApiKey();
 
-  // Primary: get_media_data.php (most complete data)
-  try {
-    const data = await igRequest(key, "get_media_data.php", url);
-    if (data) {
+  for (const path of IG_ENDPOINTS) {
+    try {
+      const data = await igRequest(key, path, url);
+      if (!data) continue; // API-level error on this endpoint — try next
       const caption = extractIgCaption(data);
       if (caption) return caption;
+      // Data returned but no caption found — still try the next endpoint
+      // in case it carries different fields.
+    } catch {
+      // Network / HTTP error on this endpoint — fall through to next
     }
-  } catch {
-    // Primary failed — fall through to the title endpoint
   }
 
-  // Fallback: get_reel_title.php (lighter, but returns title/caption text)
-  const data = await igRequest(key, "get_reel_title.php", url);
-  if (!data) return null; // post not accessible to the scraper
-  return extractIgCaption(data);
+  return null;
 }
 
 /** Fetch caption/description for a TikTok video URL. */
@@ -203,7 +225,7 @@ export async function debugInstagramScrape(url: string): Promise<InstagramDebugR
 
   const key = requireApiKey();
 
-  for (const path of ["get_media_data.php", "get_reel_title.php"]) {
+  for (const path of IG_ENDPOINTS) {
     const endpointUrl = `https://${IG_HOST}/${path}?reel_post_code_or_url=${encodeURIComponent(url)}&type=${type}`;
     const entry: InstagramDebugResult["endpoints"][number] = {
       name: path,
