@@ -1,4 +1,6 @@
 - [Orval zod barrel dupe fix](orval-zod-barrel.md) — codegen script must patch lib/api-zod/src/index.ts after orval to prevent TS2308 duplicate export errors.
+- [FlatList numColumns switching](flatlist-numcolumns.md) — two FlatLists with different numColumns in same conditional slot must have distinct key props or React throws Invariant Violation.
+- [Android share intent setup](android-share-intent.md) — package choice, Metro web stub pattern, New Architecture risk, intent filter config.
 - [expo-image placeholder](expo-image-placeholder.md) — placeholder prop on expo-image Image does not accept `{ color }` — use require() or URI string.
 - [Social link pipeline](social-link-pipeline.md) — shell-safe yt-dlp (execFile args array), non-throwing orchestrator, dual temp-file cleanup, RapidAPI endpoint map.
 - [Film Locker schema & redesign](film-locker-redesign.md) — DB gained 8 new columns; pipeline upsert logic for enrichment vs user-state fields.

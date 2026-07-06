@@ -17,9 +17,16 @@
       "supportsTablet": false
     },
     "android": {
-      "backgroundColor": "#0A0A0A",
+      "backgroundColor": "#FFFFFF",
       "package": "com.filmlocker.app",
-      "versionCode": 1
+      "versionCode": 1,
+      "intentFilters": [
+        {
+          "action": "android.intent.action.SEND",
+          "data": [{ "mimeType": "text/plain" }],
+          "category": ["android.intent.category.DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"

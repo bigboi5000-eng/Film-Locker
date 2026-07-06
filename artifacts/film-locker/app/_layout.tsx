@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ShareIntentHandler } from '@/components/ShareIntentHandler';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -56,6 +57,7 @@ export default function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <RootLayoutNav />
+              <ShareIntentHandler />
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
