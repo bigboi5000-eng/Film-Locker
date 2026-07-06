@@ -17,7 +17,9 @@
       "supportsTablet": false
     },
     "android": {
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#0A0A0A",
+      "package": "com.filmlocker.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/images/icon.png"

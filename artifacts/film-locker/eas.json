@@ -1,0 +1,26 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
