@@ -190,6 +190,41 @@ router.get("/movies", async (_req, res): Promise<void> => {
   res.json(ListMoviesResponse.parse({ movies }));
 });
 
+// POST /movies/enrich-all — backfill enrichment for movies missing genres/director
+router.post("/movies/enrich-all", async (req, res): Promise<void> => {
+  const { sql: drizzleSql } = await import("drizzle-orm");
+  const unenriched = await db
+    .select()
+    .from(moviesTable)
+    .where(drizzleSql`array_length(${moviesTable.genres}, 1) IS NULL`);
+
+  req.log.info({ count: unenriched.length }, "enrich-all: starting");
+  res.json({ started: unenriched.length, message: "Enrichment running in background" });
+
+  for (const movie of unenriched) {
+    try {
+      const details = await fetchMovieDetails(movie.tmdbId);
+      if (!details) continue;
+      await db
+        .update(moviesTable)
+        .set({
+          director: details.director,
+          cast: details.cast,
+          genres: details.genres,
+          language: details.language,
+          watchProviders: details.watchProviders,
+        })
+        .where(eq(moviesTable.id, movie.id));
+      req.log.info({ tmdbId: movie.tmdbId, title: movie.title }, "enrich-all: enriched");
+    } catch (err) {
+      req.log.warn({ err, tmdbId: movie.tmdbId }, "enrich-all: failed");
+    }
+    // Polite TMDB rate limiting
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  req.log.info("enrich-all: complete");
+});
+
 // POST /movies — add a movie to the locker (idempotent by tmdbId)
 router.post("/movies", async (req, res): Promise<void> => {
   const parsed = AddMovieBody.safeParse(req.body);
@@ -213,7 +248,26 @@ router.post("/movies", async (req, res): Promise<void> => {
     return;
   }
 
+  // Respond immediately — enrich with full TMDB metadata in the background
   res.status(201).json(AddMovieResponse.parse(movie));
+
+  fetchMovieDetails(movie.tmdbId)
+    .then(async (details) => {
+      if (!details) return;
+      await db
+        .update(moviesTable)
+        .set({
+          director: details.director,
+          cast: details.cast,
+          genres: details.genres,
+          language: details.language,
+          watchProviders: details.watchProviders,
+        })
+        .where(eq(moviesTable.id, movie.id));
+    })
+    .catch((err) => {
+      req.log.warn({ err, tmdbId: movie.tmdbId }, "Background enrichment failed");
+    });
 });
 
 // PATCH /movies/:id/watched — toggle watched status

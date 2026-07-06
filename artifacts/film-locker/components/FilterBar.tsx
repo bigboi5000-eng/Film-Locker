@@ -44,14 +44,14 @@ const FILTER_KEYS: FilterKey[] = ['genre', 'director', 'actor', 'language', 'str
 /** Apply all active filters to a movie list. */
 export function applyFilters(movies: Movie[], filters: FilterState): Movie[] {
   return movies.filter((m) => {
-    if (filters.genre && !m.genres.includes(filters.genre)) return false;
+    const genres = m.genres ?? [];
+    const cast = m.cast ?? [];
+    const providers = m.watchProviders ?? [];
+    if (filters.genre && !genres.includes(filters.genre)) return false;
     if (filters.director && m.director !== filters.director) return false;
-    if (filters.actor && !m.cast.includes(filters.actor)) return false;
+    if (filters.actor && !cast.includes(filters.actor)) return false;
     if (filters.language && m.language !== filters.language) return false;
-    if (
-      filters.streaming &&
-      !m.watchProviders.some((p) => p.provider_name === filters.streaming)
-    )
+    if (filters.streaming && !providers.some((p) => p.provider_name === filters.streaming))
       return false;
     return true;
   });
@@ -61,12 +61,15 @@ export function applyFilters(movies: Movie[], filters: FilterState): Movie[] {
 function getOptions(movies: Movie[], key: FilterKey): string[] {
   const values = new Set<string>();
   for (const m of movies) {
-    if (key === 'genre') m.genres.forEach((g) => g && values.add(g));
+    const genres = m.genres ?? [];
+    const cast = m.cast ?? [];
+    const providers = m.watchProviders ?? [];
+    if (key === 'genre') genres.forEach((g) => g && values.add(g));
     else if (key === 'director') m.director && values.add(m.director);
-    else if (key === 'actor') m.cast.forEach((a) => a && values.add(a));
+    else if (key === 'actor') cast.forEach((a) => a && values.add(a));
     else if (key === 'language') m.language && values.add(m.language);
     else if (key === 'streaming')
-      m.watchProviders.forEach((p) => p.provider_name && values.add(p.provider_name));
+      providers.forEach((p) => p.provider_name && values.add(p.provider_name));
   }
   return Array.from(values).sort();
 }
