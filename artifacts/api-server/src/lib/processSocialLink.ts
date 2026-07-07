@@ -50,7 +50,8 @@ type WarnFn = (data: Record<string, unknown>, msg: string) => void;
  */
 export async function processSocialLink(
   url: string,
-  warn?: WarnFn
+  warn?: WarnFn,
+  dryRun = false
 ): Promise<ProcessSocialLinkResult> {
   // ── Step 1: caption via RapidAPI ──────────────────────────────────────────
   try {
@@ -60,7 +61,7 @@ export async function processSocialLink(
       warn?.({ url, captionLength: caption.length, captionPreview: caption.slice(0, 300) }, "processSocialLink: caption fetched — sending to Gemini");
       // Caption found — run through the full text pipeline
       try {
-        const { matches, saved } = await runMoviePipeline(caption, warn);
+        const { matches, saved } = await runMoviePipeline(caption, warn, dryRun);
         warn?.({ url, matchCount: matches.length, savedCount: saved.length, matches }, "processSocialLink: Gemini pipeline complete");
         return { source: "caption", text: caption, matches, saved };
       } catch (err) {
@@ -79,7 +80,7 @@ export async function processSocialLink(
     const audioMatches = await extractMoviesFromAudio(url);
 
     try {
-      const { matches, saved } = await enrichAndSaveMatches(audioMatches, warn);
+      const { matches, saved } = await enrichAndSaveMatches(audioMatches, warn, dryRun);
       return { source: "audio", text: null, matches, saved };
     } catch (err) {
       warn?.({ url, err }, "processSocialLink: TMDB/DB enrichment failed after audio extraction");

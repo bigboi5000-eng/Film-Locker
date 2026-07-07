@@ -90,6 +90,9 @@ export interface GeminiMovieMatch {
   release_year: string;
   confidence_score: number;
   tmdb_id?: number | null;
+  poster_url?: string | null;
+  title?: string | null;
+  overview?: string | null;
 }
 
 export interface SearchMoviesResponse {
@@ -135,6 +138,8 @@ export interface AiExtractResponse {
 
 export interface ProcessSocialLinkBody {
   url: string;
+  /** When true, identify films from the URL but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film. */
+  dryRun?: boolean;
 }
 
 export type ProcessSocialLinkResponseSource = typeof ProcessSocialLinkResponseSource[keyof typeof ProcessSocialLinkResponseSource];

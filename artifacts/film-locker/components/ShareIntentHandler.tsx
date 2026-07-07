@@ -11,23 +11,17 @@ import ReceiveSharingIntent from 'react-native-receive-sharing-intent';
 import {
   useProcessSocialLink,
   type GeminiMovieMatch,
-  type Movie,
 } from '@workspace/api-client-react';
-import { AiResultSheet } from '@/components/AiResultSheet';
-import { useToast } from '@/components/ToastProvider';
+import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 import { useColors } from '@/hooks/useColors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type ShareResult = { matches: GeminiMovieMatch[]; saved: Movie[] };
-
 export function ShareIntentHandler() {
-  // All hooks must come before any conditional returns.
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { showToast } = useToast();
   const { mutateAsync: processLink, isPending } = useProcessSocialLink();
-  const [result, setResult] = useState<ShareResult | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
+  const [showSheet, setShowSheet] = useState(false);
   // Track the last handled URL so we don't re-process on AppState resume.
   const handledRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
@@ -50,43 +44,21 @@ export function ShareIntentHandler() {
         if (handledRef.current === url) return; // already handling this share
         handledRef.current = url;
 
-        processLink({ data: { url } })
+        // Dry-run: identify films without saving so the user confirms first.
+        processLink({ data: { url, dryRun: true } })
           .then((data) => {
             if (!mountedRef.current) return;
-            const saved = data.saved ?? [];
-
-            // Show toast for each film (or a combined one for multiple).
-            if (saved.length === 1) {
-              showToast({
-                title: `"${saved[0]!.title}" added to your Watchlist!`,
-                variant: 'success',
-              });
-            } else if (saved.length > 1) {
-              const titleList = saved
-                .slice(0, 3)
-                .map((m) => m.title)
-                .join(' · ');
-              const extra = saved.length > 3 ? ` +${saved.length - 3} more` : '';
-              showToast({
-                title: `${saved.length} films added to your Watchlist!`,
-                subtitle: `${titleList}${extra}`,
-                variant: 'success',
-              });
-            }
-
-            // Show full result sheet for review.
-            setResult({ matches: data.matches, saved });
-            setShowResult(true);
+            setMatches(data.matches ?? []);
+            setShowSheet(true);
           })
           .catch(() => {
-            // Reset so the user can retry this URL by sharing again.
+            // Reset so the user can retry by sharing again.
             handledRef.current = null;
           });
       },
       () => {
         // Error reading intent — ignore silently.
       },
-      // Protocol string used for iOS deep link scheme (unused on Android).
       'film-locker',
     );
 
@@ -94,14 +66,14 @@ export function ShareIntentHandler() {
       mountedRef.current = false;
       ReceiveSharingIntent.clearReceivedFiles();
     };
-  }, [processLink, showToast]);
+  }, [processLink]);
 
   // Nothing to render on non-Android platforms.
   if (Platform.OS !== 'android') return null;
 
   const handleClose = () => {
-    setShowResult(false);
-    setResult(null);
+    setShowSheet(false);
+    setMatches([]);
     handledRef.current = null;
     ReceiveSharingIntent.clearReceivedFiles();
   };
@@ -122,24 +94,21 @@ export function ShareIntentHandler() {
           >
             <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
             <Text style={[styles.processingTitle, { color: colors.foreground }]}>
-              Extracting Films…
+              Identifying Film…
             </Text>
             <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
-              Gemini is analysing the shared link
+              Gemini is reading the shared link
             </Text>
           </View>
         </View>
       </Modal>
 
-      {/* Results bottom sheet */}
-      {result !== null && (
-        <AiResultSheet
-          visible={showResult}
-          matches={result.matches}
-          saved={result.saved}
-          onClose={handleClose}
-        />
-      )}
+      {/* Film confirmation sheet */}
+      <ShareFilmSheet
+        visible={showSheet}
+        matches={matches}
+        onClose={handleClose}
+      />
     </>
   );
 }

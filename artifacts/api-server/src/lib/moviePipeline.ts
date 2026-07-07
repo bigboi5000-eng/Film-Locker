@@ -20,6 +20,10 @@ export interface EnrichedMatch {
   release_year: string;
   confidence_score: number;
   tmdb_id: number | null;
+  /** Populated in dry-run mode — TMDB card fields for UI display. */
+  poster_url?: string | null;
+  title?: string | null;
+  overview?: string | null;
 }
 
 export interface PipelineResult {
@@ -37,10 +41,14 @@ const CONFIDENCE_THRESHOLD = 0.45;
  * Fetches full details (director, cast, genres, language, watch providers)
  * for each match and upserts into the DB — updating enrichment fields when
  * the row already exists so previously saved movies also get full metadata.
+ *
+ * @param dryRun  When true, look up TMDB data but skip all DB writes.
+ *                Matches will include poster_url/title/overview for UI display.
  */
 export async function enrichAndSaveMatches(
   rawMatches: GeminiMovieMatch[],
-  warn?: WarnFn
+  warn?: WarnFn,
+  dryRun = false
 ): Promise<PipelineResult> {
   const sanitised = rawMatches
     .map((m) => ({
@@ -70,10 +78,21 @@ export async function enrichAndSaveMatches(
         continue;
       }
 
-      enrichedMatches.push({ ...match, tmdb_id: hit.tmdbId });
+      // In dry-run mode include TMDB card data so the UI can show a film card
+      // without a separate fetch.
+      enrichedMatches.push({
+        ...match,
+        tmdb_id: hit.tmdbId,
+        poster_url: hit.posterUrl,
+        title: hit.title,
+        overview: hit.overview,
+      });
 
       if (seenTmdb.has(hit.tmdbId)) continue;
       seenTmdb.add(hit.tmdbId);
+
+      // ── Skip all DB writes in dry-run mode ───────────────────────────────
+      if (dryRun) continue;
 
       // Fetch full details (director, cast, genres, language, watch providers)
       const details = await fetchMovieDetails(hit.tmdbId).catch((err) => {
@@ -152,8 +171,9 @@ export async function enrichAndSaveMatches(
  */
 export async function runMoviePipeline(
   text: string,
-  warn?: WarnFn
+  warn?: WarnFn,
+  dryRun = false
 ): Promise<PipelineResult> {
   const rawMatches = await extractMoviesWithGemini(text);
-  return enrichAndSaveMatches(rawMatches, warn);
+  return enrichAndSaveMatches(rawMatches, warn, dryRun);
 }

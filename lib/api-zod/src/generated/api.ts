@@ -101,7 +101,10 @@ export const AiExtractResponse = zod.object({
   "movie_title": zod.string(),
   "release_year": zod.string(),
   "confidence_score": zod.number(),
-  "tmdb_id": zod.number().nullish()
+  "tmdb_id": zod.number().nullish(),
+  "poster_url": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "overview": zod.string().nullish()
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -134,7 +137,8 @@ export const AiExtractResponse = zod.object({
 
  */
 export const ProcessSocialLinkBody = zod.object({
-  "url": zod.string().url()
+  "url": zod.string().url(),
+  "dryRun": zod.boolean().optional().describe('When true, identify films from the URL but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film.\n')
 })
 
 export const processSocialLinkResponseSavedItemRatingMax = 5;
@@ -148,7 +152,10 @@ export const ProcessSocialLinkResponse = zod.object({
   "movie_title": zod.string(),
   "release_year": zod.string(),
   "confidence_score": zod.number(),
-  "tmdb_id": zod.number().nullish()
+  "tmdb_id": zod.number().nullish(),
+  "poster_url": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "overview": zod.string().nullish()
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),

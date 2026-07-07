@@ -443,6 +443,17 @@ components:
         tmdb_id:
           type: integer
           nullable: true
+        # TMDB card fields — populated in dry-run mode so the UI can show a
+        # film card without a separate API call.
+        poster_url:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        overview:
+          type: string
+          nullable: true
       required:
         - movie_title
         - release_year
@@ -554,6 +565,13 @@ components:
         url:
           type: string
           format: uri
+        dryRun:
+          type: boolean
+          description: >
+            When true, identify films from the URL but do NOT save them to the
+            locker. The response `matches` will include TMDB card data
+            (poster_url, title, overview) so the UI can show a confirmation
+            card before the user explicitly adds the film.
       required:
         - url
 

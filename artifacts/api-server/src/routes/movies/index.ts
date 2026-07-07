@@ -192,11 +192,13 @@ router.post("/movies/process-social-link", async (req, res): Promise<void> => {
     return;
   }
 
-  req.log.info({ url: parsed.data.url }, "process-social-link: start");
+  const dryRun = Boolean(parsed.data.dryRun);
+  req.log.info({ url: parsed.data.url, dryRun }, "process-social-link: start");
 
   const result = await processSocialLink(
     parsed.data.url,
-    (data, msg) => req.log.warn(data, msg)
+    (data, msg) => req.log.warn(data, msg),
+    dryRun
   );
 
   req.log.info(
