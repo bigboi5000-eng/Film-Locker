@@ -78,14 +78,14 @@ const starStyles = StyleSheet.create({
 
 const PROVIDER_TYPE_LABEL: Record<string, string> = {
   flatrate: 'Included',
-  rent: 'Rent',
-  buy: 'Buy',
+  rent: 'Rent / Buy',
+  buy: 'Rent / Buy',
 };
 
 const PROVIDER_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   flatrate: { bg: '#D1FAE5', text: '#065F46' }, // green — subscription
-  rent:     { bg: '#FEF3C7', text: '#92400E' }, // amber — rent
-  buy:      { bg: '#EDE9FE', text: '#5B21B6' }, // purple — buy
+  rent:     { bg: '#FFF0DC', text: '#FF8C00' }, // orange — rent/buy
+  buy:      { bg: '#FFF0DC', text: '#FF8C00' }, // orange — rent/buy
 };
 
 async function openProviderLink(provider: WatchProvider, movieTitle: string) {
