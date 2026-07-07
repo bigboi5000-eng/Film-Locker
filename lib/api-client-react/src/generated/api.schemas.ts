@@ -9,10 +9,26 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Whether the title is included in a subscription (flatrate), or available to rent or buy individually.
+ */
+export type WatchProviderType = typeof WatchProviderType[keyof typeof WatchProviderType];
+
+
+export const WatchProviderType = {
+  flatrate: 'flatrate',
+  rent: 'rent',
+  buy: 'buy',
+} as const;
+
 export interface WatchProvider {
   provider_id: number;
   provider_name: string;
   logo_url: string;
+  /** Whether the title is included in a subscription (flatrate), or available to rent or buy individually. */
+  type?: WatchProviderType;
+  /** JustWatch deep-link for this film (opens the film's page on JustWatch) */
+  link?: string;
 }
 
 export interface Movie {

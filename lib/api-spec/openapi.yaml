@@ -274,6 +274,15 @@ components:
           type: string
         logo_url:
           type: string
+        type:
+          type: string
+          enum: [flatrate, rent, buy]
+          description: >
+            Whether the title is included in a subscription (flatrate),
+            or available to rent or buy individually.
+        link:
+          type: string
+          description: JustWatch deep-link for this film (opens the film's page on JustWatch)
       required:
         - provider_id
         - provider_name

@@ -117,7 +117,9 @@ export const AiExtractResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(aiExtractResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
@@ -162,7 +164,9 @@ export const ProcessSocialLinkResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(processSocialLinkResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
@@ -193,7 +197,9 @@ export const GetMovieDetailsResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 }))
 })
 
@@ -220,7 +226,9 @@ export const ListMoviesResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(listMoviesResponseMoviesItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
@@ -259,7 +267,9 @@ export const AddMovieResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(addMovieResponseRatingMax).nullish(),
   "isWatched": zod.boolean(),
@@ -297,7 +307,9 @@ export const PatchWatchedResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(patchWatchedResponseRatingMax).nullish(),
   "isWatched": zod.boolean(),
@@ -339,7 +351,9 @@ export const PatchRatingResponse = zod.object({
   "watchProviders": zod.array(zod.object({
   "provider_id": zod.number(),
   "provider_name": zod.string(),
-  "logo_url": zod.string()
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(patchRatingResponseRatingMax).nullish(),
   "isWatched": zod.boolean(),

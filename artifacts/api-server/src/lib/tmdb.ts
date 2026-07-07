@@ -31,12 +31,19 @@ interface TmdbCredits {
   crew: Array<{ name: string; job: string; department: string }>;
 }
 
+interface TmdbProviderEntry {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string;
+}
+
 interface TmdbProvidersResponse {
   results: {
     US?: {
-      flatrate?: Array<{ provider_id: number; provider_name: string; logo_path: string }>;
-      rent?: Array<{ provider_id: number; provider_name: string; logo_path: string }>;
-      buy?: Array<{ provider_id: number; provider_name: string; logo_path: string }>;
+      link?: string;
+      flatrate?: TmdbProviderEntry[];
+      rent?: TmdbProviderEntry[];
+      buy?: TmdbProviderEntry[];
     };
   };
 }
@@ -171,14 +178,19 @@ export async function fetchMovieDetails(
     /* Intl not available in this runtime — use raw code */
   }
 
-  // US watch providers: flatrate (streaming) then rent as fallback
+  // US watch providers: flatrate (subscription) → rent → buy, preserving type
   let watchProviders: WatchProvider[] = [];
   if (providersResult.status === "fulfilled") {
     const us = providersResult.value.results?.US;
-    const raw = [
-      ...(us?.flatrate ?? []),
-      ...(us?.rent ?? []),
+    const juswatchLink = us?.link;
+
+    type TypedEntry = TmdbProviderEntry & { _type: WatchProvider['type'] };
+    const raw: TypedEntry[] = [
+      ...(us?.flatrate ?? []).map((p) => ({ ...p, _type: 'flatrate' as const })),
+      ...(us?.rent ?? []).map((p) => ({ ...p, _type: 'rent' as const })),
+      ...(us?.buy ?? []).map((p) => ({ ...p, _type: 'buy' as const })),
     ];
+
     const seen = new Set<number>();
     watchProviders = raw
       .filter((p) => {
@@ -190,6 +202,8 @@ export async function fetchMovieDetails(
         provider_id: p.provider_id,
         provider_name: p.provider_name,
         logo_url: getPosterUrl(p.logo_path),
+        type: p._type,
+        ...(juswatchLink ? { link: juswatchLink } : {}),
       }));
   }
 

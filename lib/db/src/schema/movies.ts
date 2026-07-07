@@ -16,6 +16,10 @@ export interface WatchProvider {
   provider_id: number;
   provider_name: string;
   logo_url: string;
+  /** Whether the title is included in a subscription, or available to rent/buy */
+  type: 'flatrate' | 'rent' | 'buy';
+  /** JustWatch deep-link for this film (same URL for all providers of the same title) */
+  link?: string;
 }
 
 export const moviesTable = pgTable(

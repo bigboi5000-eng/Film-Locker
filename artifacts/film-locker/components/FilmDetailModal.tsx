@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,9 +76,56 @@ const starStyles = StyleSheet.create({
 
 // ── Watch Provider pill ────────────────────────────────────────────────────────
 
-function ProviderPill({ provider }: { provider: WatchProvider }) {
+const PROVIDER_TYPE_LABEL: Record<string, string> = {
+  flatrate: 'Included',
+  rent: 'Rent',
+  buy: 'Buy',
+};
+
+const PROVIDER_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
+  flatrate: { bg: '#D1FAE5', text: '#065F46' }, // green — subscription
+  rent:     { bg: '#FEF3C7', text: '#92400E' }, // amber — rent
+  buy:      { bg: '#EDE9FE', text: '#5B21B6' }, // purple — buy
+};
+
+async function openProviderLink(provider: WatchProvider, movieTitle: string) {
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(
+    `watch ${movieTitle} on ${provider.provider_name}`
+  )}`;
+
+  if (provider.link) {
+    try {
+      await Linking.openURL(provider.link);
+      return;
+    } catch {
+      // JustWatch link failed — fall through to Google search
+    }
+  }
+
+  Linking.openURL(googleUrl).catch(() => {
+    Alert.alert('Unable to open link', 'Could not open the streaming service.');
+  });
+}
+
+function ProviderPill({
+  provider,
+  movieTitle,
+}: {
+  provider: WatchProvider;
+  movieTitle: string;
+}) {
+  const typeKey = provider.type ?? 'flatrate';
+  const label = PROVIDER_TYPE_LABEL[typeKey] ?? typeKey;
+  const colors = PROVIDER_TYPE_COLORS[typeKey] ?? PROVIDER_TYPE_COLORS.flatrate;
+
   return (
-    <View style={providerStyles.pill}>
+    <TouchableOpacity
+      style={providerStyles.pill}
+      onPress={() => openProviderLink(provider, movieTitle)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Watch on ${provider.provider_name} — ${label}`}
+    >
       {provider.logo_url ? (
         <Image
           source={{ uri: provider.logo_url }}
@@ -91,19 +139,26 @@ function ProviderPill({ provider }: { provider: WatchProvider }) {
           </Text>
         </View>
       )}
-      <Text style={providerStyles.name} numberOfLines={2}>
+      <Text style={providerStyles.name} numberOfLines={1}>
         {provider.provider_name}
       </Text>
-    </View>
+      <View style={[providerStyles.badge, { backgroundColor: colors.bg }]}>
+        <Text style={[providerStyles.badgeText, { color: colors.text }]}>
+          {label}
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
 const providerStyles = StyleSheet.create({
-  pill: { alignItems: 'center', marginRight: 16, width: 60 },
+  pill: { alignItems: 'center', marginRight: 14, width: 64 },
   logo: { width: 48, height: 48, borderRadius: 10, marginBottom: 4 },
   logoFallback: { backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
   logoFallbackText: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#6B7280' },
-  name: { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center' },
+  name: { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center', marginBottom: 3 },
+  badge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  badgeText: { fontSize: 9, fontFamily: 'Inter_700Bold', letterSpacing: 0.2 },
 });
 
 // ── Genre tag ──────────────────────────────────────────────────────────────────
@@ -311,16 +366,21 @@ export function FilmDetailModal({
               </View>
             )}
 
-            {/* Where to Stream */}
+            {/* Where to Watch */}
             {displayProviders.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Where to Stream</Text>
+                <Text style={styles.sectionTitle}>Where to Watch</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 4 }}
                 >
                   {displayProviders.map((p) => (
-                    <ProviderPill key={p.provider_id} provider={p} />
+                    <ProviderPill
+                      key={p.provider_id}
+                      provider={p}
+                      movieTitle={details?.title ?? title}
+                    />
                   ))}
                 </ScrollView>
               </View>
