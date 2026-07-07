@@ -4,3 +4,4 @@
 - [expo-image placeholder](expo-image-placeholder.md) — placeholder prop on expo-image Image does not accept `{ color }` — use require() or URI string.
 - [Social link pipeline](social-link-pipeline.md) — shell-safe yt-dlp (execFile args array), non-throwing orchestrator, dual temp-file cleanup, RapidAPI endpoint map.
 - [Film Locker schema & redesign](film-locker-redesign.md) — DB gained 8 new columns; pipeline upsert logic for enrichment vs user-state fields.
+- [EAS build pitfalls](eas-prebuild-pitfalls.md) — intent filter short-form names only; expo prebuild mutates package.json, must clean up dupes after.
