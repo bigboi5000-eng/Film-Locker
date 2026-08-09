@@ -1091,8 +1091,8 @@ export function FilmDetailModal({
                 </TouchableOpacity>
               )}
 
-              {/* Recommend to a friend — only shown when the user follows at least one person */}
-              {isLoggedIn && followingCount > 0 && (
+              {/* Recommend to a friend — shown whenever the user is signed in */}
+              {isLoggedIn && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.actionButtonRecommend]}
                   onPress={() => setRecommendVisible(true)}

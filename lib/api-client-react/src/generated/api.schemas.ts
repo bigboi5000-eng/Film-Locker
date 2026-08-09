@@ -330,6 +330,64 @@ export interface UpdatePushTokenBody {
   expoPushToken: string;
 }
 
+export interface PlaylistItem {
+  id: number;
+  playlistId: number;
+  tmdbId: number;
+  filmTitle: string;
+  posterUrl: string;
+  addedAt: string;
+}
+
+export interface Playlist {
+  id: number;
+  userId: string;
+  name: string;
+  description?: string | null;
+  isPublic: boolean;
+  itemCount: number;
+  /** Up to 4 poster URLs for the cover collage */
+  coverPosters: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PlaylistWithItems = Playlist & {
+  items: PlaylistItem[];
+};
+
+export interface PlaylistsResponse {
+  playlists: Playlist[];
+}
+
+export interface CreatePlaylistBody {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /** @maxLength 300 */
+  description?: string;
+  isPublic?: boolean;
+}
+
+export interface UpdatePlaylistBody {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name?: string;
+  /** @maxLength 300 */
+  description?: string | null;
+  isPublic?: boolean;
+}
+
+export interface AddPlaylistItemBody {
+  tmdbId: number;
+  filmTitle: string;
+  posterUrl: string;
+}
+
 export type SearchMoviesParams = {
 /**
  * @minLength 1
@@ -349,5 +407,9 @@ export type SearchUsersParams = {
  * @minLength 2
  */
 q: string;
+};
+
+export type SearchPublicPlaylistsParams = {
+q?: string;
 };
 

@@ -768,3 +768,169 @@ export const UnfollowUserParams = zod.object({
 export const UnfollowUserResponse = zod.void()
 
 
+/**
+ * @summary Get the authenticated user's playlists
+ */
+export const GetMyPlaylistsResponse = zod.object({
+  "playlists": zod.array(zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Create a new playlist
+ */
+export const createPlaylistBodyNameMax = 100;
+
+export const createPlaylistBodyDescriptionMax = 300;
+
+export const createPlaylistBodyIsPublicDefault = false;
+
+export const CreatePlaylistBody = zod.object({
+  "name": zod.string().min(1).max(createPlaylistBodyNameMax),
+  "description": zod.string().max(createPlaylistBodyDescriptionMax).optional(),
+  "isPublic": zod.boolean().default(createPlaylistBodyIsPublicDefault)
+})
+
+export const CreatePlaylistResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Search public playlists
+ */
+export const SearchPublicPlaylistsQueryParams = zod.object({
+  "q": zod.coerce.string().optional()
+})
+
+export const SearchPublicPlaylistsResponse = zod.object({
+  "playlists": zod.array(zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get a playlist with its items
+ */
+export const GetPlaylistParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPlaylistResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "playlistId": zod.number(),
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string(),
+  "addedAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary Update playlist name, description, or privacy
+ */
+export const UpdatePlaylistParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updatePlaylistBodyNameMax = 100;
+
+export const updatePlaylistBodyDescriptionMax = 300;
+
+
+
+export const UpdatePlaylistBody = zod.object({
+  "name": zod.string().min(1).max(updatePlaylistBodyNameMax).optional(),
+  "description": zod.string().max(updatePlaylistBodyDescriptionMax).nullish(),
+  "isPublic": zod.boolean().optional()
+})
+
+export const UpdatePlaylistResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a playlist
+ */
+export const DeletePlaylistParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePlaylistResponse = zod.void()
+
+
+/**
+ * @summary Add a film to a playlist
+ */
+export const AddPlaylistItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AddPlaylistItemBody = zod.object({
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string()
+})
+
+export const AddPlaylistItemResponse = zod.void()
+
+
+/**
+ * @summary Remove a film from a playlist
+ */
+export const RemovePlaylistItemParams = zod.object({
+  "id": zod.coerce.number(),
+  "tmdbId": zod.coerce.number()
+})
+
+export const RemovePlaylistItemResponse = zod.void()
+
+

@@ -5,6 +5,10 @@
  *
  * Pipeline (in order, first success wins):
  *
+ *  -1. Mixed-text extraction (e.g. Google's share format):
+ *        Some share intents deliver "Film Title https://share.google/abc"
+ *        We extract the URL and use the title text as a fast-path search query.
+ *
  *   0. Google / Bing search URL:
  *        Extract the `q=` search query → Gemini text pipeline → TMDB → DB
  *        (Fast path — no search grounding needed, we already have the text.)
@@ -46,6 +50,28 @@ export interface ProcessSocialLinkResult extends PipelineResult {
 
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
+// ── Mixed-text helpers ────────────────────────────────────────────────────────
+
+/**
+ * Google's Android share feature sends text like:
+ *   "The Long Goodbye https://share.google/DrzfONL1wXppCXRwT"
+ *
+ * This helper extracts the URL and the leading title text so we can:
+ *   1. Use the title as a fast-path text pipeline search (most reliable)
+ *   2. Fall back to analysing the URL directly if the title yields nothing
+ *
+ * Returns null if the input already starts with "http" (plain URL, no-op).
+ */
+function extractUrlFromMixedText(input: string): { url: string; titleHint: string | null } | null {
+  const trimmed = input.trim();
+  if (trimmed.startsWith("http")) return null; // already a URL
+  const match = trimmed.match(/(https?:\/\/[^\s]+)/);
+  if (!match) return null;
+  const url = match[1].replace(/[.,!?;:]+$/, ""); // strip trailing punctuation
+  const titleHint = trimmed.slice(0, match.index).trim() || null;
+  return { url, titleHint };
+}
+
 // ── Search URL helpers ────────────────────────────────────────────────────────
 
 /**
@@ -77,11 +103,32 @@ function extractSearchQuery(url: string): string | null {
  * Never throws — all errors are caught and result in a graceful empty response.
  */
 export async function processSocialLink(
-  url: string,
+  urlOrText: string,
   warn?: WarnFn,
   dryRun = false,
   clerkUserId = ""
 ): Promise<ProcessSocialLinkResult> {
+
+  // ── Pre-step: extract URL from mixed text (e.g. Google share format) ──────
+  // Handles "Film Title https://share.google/..." sent by Google's share intent.
+  let url = urlOrText.trim();
+  const mixed = extractUrlFromMixedText(url);
+  if (mixed) {
+    url = mixed.url;
+    if (mixed.titleHint) {
+      warn?.({ url, titleHint: mixed.titleHint }, "processSocialLink: mixed-text share detected — trying title as search query first");
+      try {
+        const { matches, saved } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId);
+        if (matches.length > 0) {
+          warn?.({ matchCount: matches.length }, "processSocialLink: title text pipeline succeeded");
+          return { source: "caption", text: mixed.titleHint, matches, saved };
+        }
+        warn?.({ titleHint: mixed.titleHint }, "processSocialLink: title text pipeline returned no matches — continuing with URL");
+      } catch (err) {
+        warn?.({ titleHint: mixed.titleHint, err }, "processSocialLink: title text pipeline failed — continuing with URL");
+      }
+    }
+  }
 
   // ── Step 0: Google / Bing search URL (fast path) ──────────────────────────
   const searchQuery = extractSearchQuery(url);

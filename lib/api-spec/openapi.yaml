@@ -672,6 +672,180 @@ paths:
         "401":
           description: Unauthorized
 
+  /playlists:
+    get:
+      operationId: getMyPlaylists
+      tags: [playlists]
+      summary: Get the authenticated user's playlists
+      responses:
+        "200":
+          description: User's playlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistsResponse"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createPlaylist
+      tags: [playlists]
+      summary: Create a new playlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlaylistBody"
+      responses:
+        "201":
+          description: Created playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /playlists/public:
+    get:
+      operationId: searchPublicPlaylists
+      tags: [playlists]
+      summary: Search public playlists
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public playlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistsResponse"
+
+  /playlists/{id}:
+    get:
+      operationId: getPlaylist
+      tags: [playlists]
+      summary: Get a playlist with its items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Playlist with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistWithItems"
+        "403":
+          description: Private playlist
+        "404":
+          description: Not found
+    put:
+      operationId: updatePlaylist
+      tags: [playlists]
+      summary: Update playlist name, description, or privacy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlaylistBody"
+      responses:
+        "200":
+          description: Updated playlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deletePlaylist
+      tags: [playlists]
+      summary: Delete a playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+
+  /playlists/{id}/items:
+    post:
+      operationId: addPlaylistItem
+      tags: [playlists]
+      summary: Add a film to a playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPlaylistItemBody"
+      responses:
+        "201":
+          description: Item added
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Not your playlist
+        "404":
+          description: Playlist not found
+
+  /playlists/{id}/items/{tmdbId}:
+    delete:
+      operationId: removePlaylistItem
+      tags: [playlists]
+      summary: Remove a film from a playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Unauthorized
+        "403":
+          description: Not your playlist
+
 components:
   schemas:
     HealthStatus:
@@ -1370,4 +1544,131 @@ components:
           description: Expo push token for the device
       required:
         - expoPushToken
+
+    PlaylistItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        playlistId:
+          type: integer
+        tmdbId:
+          type: integer
+        filmTitle:
+          type: string
+        posterUrl:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - playlistId
+        - tmdbId
+        - filmTitle
+        - posterUrl
+        - addedAt
+
+    Playlist:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        itemCount:
+          type: integer
+        coverPosters:
+          type: array
+          items:
+            type: string
+          description: Up to 4 poster URLs for the cover collage
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - name
+        - isPublic
+        - itemCount
+        - coverPosters
+        - createdAt
+        - updatedAt
+
+    PlaylistWithItems:
+      allOf:
+        - $ref: "#/components/schemas/Playlist"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/PlaylistItem"
+          required:
+            - items
+
+    PlaylistsResponse:
+      type: object
+      properties:
+        playlists:
+          type: array
+          items:
+            $ref: "#/components/schemas/Playlist"
+      required:
+        - playlists
+
+    CreatePlaylistBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 300
+        isPublic:
+          type: boolean
+          default: false
+      required:
+        - name
+
+    UpdatePlaylistBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+          maxLength: 300
+        isPublic:
+          type: boolean
+
+    AddPlaylistItemBody:
+      type: object
+      properties:
+        tmdbId:
+          type: integer
+        filmTitle:
+          type: string
+        posterUrl:
+          type: string
+      required:
+        - tmdbId
+        - filmTitle
+        - posterUrl
 

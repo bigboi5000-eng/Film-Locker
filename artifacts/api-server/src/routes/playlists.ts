@@ -1,0 +1,267 @@
+import { Router, type IRouter } from "express";
+import { and, eq, ilike, desc, count, sql } from "drizzle-orm";
+import { db, playlistsTable, playlistItemsTable } from "@workspace/db";
+import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { z } from "zod";
+
+const router: IRouter = Router();
+
+const CreatePlaylistBody = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(300).optional(),
+  isPublic: z.boolean().optional().default(false),
+});
+
+const UpdatePlaylistBody = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(300).nullable().optional(),
+  isPublic: z.boolean().optional(),
+});
+
+const AddItemBody = z.object({
+  tmdbId: z.number().int(),
+  filmTitle: z.string().min(1),
+  posterUrl: z.string().min(1),
+});
+
+// ── GET /playlists ─────────────────────────────────────────────────────────
+// Returns the authenticated user's own playlists (with item count).
+
+router.get("/playlists", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+
+  const rows = await db
+    .select({
+      id: playlistsTable.id,
+      name: playlistsTable.name,
+      description: playlistsTable.description,
+      isPublic: playlistsTable.isPublic,
+      createdAt: playlistsTable.createdAt,
+      updatedAt: playlistsTable.updatedAt,
+      itemCount: count(playlistItemsTable.id),
+      coverPosters: sql<string[]>`
+        array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
+        FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
+      `.as("cover_posters"),
+    })
+    .from(playlistsTable)
+    .leftJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
+    .where(eq(playlistsTable.userId, clerkUserId))
+    .groupBy(playlistsTable.id)
+    .orderBy(desc(playlistsTable.updatedAt));
+
+  res.json({
+    playlists: rows.map((r) => ({
+      ...r,
+      coverPosters: (r.coverPosters ?? []).slice(0, 4),
+    })),
+  });
+});
+
+// ── POST /playlists ────────────────────────────────────────────────────────
+
+router.post("/playlists", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = CreatePlaylistBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [row] = await db
+    .insert(playlistsTable)
+    .values({
+      userId: clerkUserId,
+      name: parsed.data.name,
+      description: parsed.data.description ?? null,
+      isPublic: parsed.data.isPublic ?? false,
+    })
+    .returning();
+
+  res.status(201).json({ ...row, itemCount: 0, coverPosters: [] });
+});
+
+// ── GET /playlists/public ─────────────────────────────────────────────────
+// Search public playlists. Must be defined BEFORE /:id to avoid Express
+// treating "public" as a playlist id.
+
+router.get("/playlists/public", async (req, res): Promise<void> => {
+  const q = String(req.query.q ?? "").trim();
+
+  const rows = await db
+    .select({
+      id: playlistsTable.id,
+      userId: playlistsTable.userId,
+      name: playlistsTable.name,
+      description: playlistsTable.description,
+      isPublic: playlistsTable.isPublic,
+      createdAt: playlistsTable.createdAt,
+      updatedAt: playlistsTable.updatedAt,
+      itemCount: count(playlistItemsTable.id),
+      coverPosters: sql<string[]>`
+        array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
+        FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
+      `.as("cover_posters"),
+    })
+    .from(playlistsTable)
+    .leftJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
+    .where(
+      and(
+        eq(playlistsTable.isPublic, true),
+        q.length >= 2 ? ilike(playlistsTable.name, `%${q}%`) : undefined
+      )
+    )
+    .groupBy(playlistsTable.id)
+    .orderBy(desc(playlistsTable.updatedAt))
+    .limit(30);
+
+  res.json({
+    playlists: rows.map((r) => ({
+      ...r,
+      coverPosters: (r.coverPosters ?? []).slice(0, 4),
+    })),
+  });
+});
+
+// ── GET /playlists/:id ────────────────────────────────────────────────────
+// Returns playlist metadata + all items.
+// Public playlists are accessible to anyone; private ones require ownership.
+
+router.get("/playlists/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [playlist] = await db
+    .select()
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+
+  // Auth check for private playlists
+  if (!playlist.isPublic) {
+    // Pull Clerk userId from header if present
+    const authHeader = req.headers.authorization;
+    if (!authHeader) { res.status(403).json({ error: "Private playlist" }); return; }
+    // requireAuth middleware not used here — read userId from the request after Clerk middleware
+    const clerkUserId = (req as any).auth?.userId;
+    if (!clerkUserId || clerkUserId !== playlist.userId) {
+      res.status(403).json({ error: "Private playlist" });
+      return;
+    }
+  }
+
+  const items = await db
+    .select()
+    .from(playlistItemsTable)
+    .where(eq(playlistItemsTable.playlistId, id))
+    .orderBy(desc(playlistItemsTable.addedAt));
+
+  res.json({ ...playlist, items });
+});
+
+// ── PUT /playlists/:id ────────────────────────────────────────────────────
+
+router.put("/playlists/:id", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const parsed = UpdatePlaylistBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [updated] = await db
+    .update(playlistsTable)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(and(eq(playlistsTable.id, id), eq(playlistsTable.userId, clerkUserId)))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Playlist not found or not yours" }); return; }
+
+  res.json(updated);
+});
+
+// ── DELETE /playlists/:id ─────────────────────────────────────────────────
+
+router.delete("/playlists/:id", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  await db
+    .delete(playlistsTable)
+    .where(and(eq(playlistsTable.id, id), eq(playlistsTable.userId, clerkUserId)));
+
+  res.status(204).send();
+});
+
+// ── POST /playlists/:id/items ─────────────────────────────────────────────
+
+router.post("/playlists/:id/items", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const parsed = AddItemBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  // Ownership check
+  const [playlist] = await db
+    .select({ userId: playlistsTable.userId })
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+  if (playlist.userId !== clerkUserId) { res.status(403).json({ error: "Not your playlist" }); return; }
+
+  const [item] = await db
+    .insert(playlistItemsTable)
+    .values({ playlistId: id, ...parsed.data })
+    .onConflictDoNothing()
+    .returning();
+
+  // Bump updatedAt on the playlist
+  await db
+    .update(playlistsTable)
+    .set({ updatedAt: new Date() })
+    .where(eq(playlistsTable.id, id));
+
+  res.status(201).json(item ?? { message: "Already in playlist" });
+});
+
+// ── DELETE /playlists/:id/items/:tmdbId ──────────────────────────────────
+
+router.delete("/playlists/:id/items/:tmdbId", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  const tmdbId = Number(req.params.tmdbId);
+
+  if (!Number.isInteger(id) || !Number.isInteger(tmdbId)) {
+    res.status(400).json({ error: "Invalid id or tmdbId" });
+    return;
+  }
+
+  // Ownership check via join
+  const [playlist] = await db
+    .select({ userId: playlistsTable.userId })
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist || playlist.userId !== clerkUserId) {
+    res.status(403).json({ error: "Not your playlist" });
+    return;
+  }
+
+  await db
+    .delete(playlistItemsTable)
+    .where(
+      and(
+        eq(playlistItemsTable.playlistId, id),
+        eq(playlistItemsTable.tmdbId, tmdbId)
+      )
+    );
+
+  res.status(204).send();
+});
+
+export default router;
