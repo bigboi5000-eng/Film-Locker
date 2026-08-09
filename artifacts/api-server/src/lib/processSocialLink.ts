@@ -79,7 +79,8 @@ function extractSearchQuery(url: string): string | null {
 export async function processSocialLink(
   url: string,
   warn?: WarnFn,
-  dryRun = false
+  dryRun = false,
+  clerkUserId = ""
 ): Promise<ProcessSocialLinkResult> {
 
   // ── Step 0: Google / Bing search URL (fast path) ──────────────────────────
@@ -87,7 +88,7 @@ export async function processSocialLink(
   if (searchQuery) {
     warn?.({ url, searchQuery }, "processSocialLink: search URL detected — running text pipeline on query");
     try {
-      const { matches, saved } = await runMoviePipeline(searchQuery, warn, dryRun);
+      const { matches, saved } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId);
       warn?.({ matchCount: matches.length }, "processSocialLink: search query pipeline complete");
       return { source: "caption", text: searchQuery, matches, saved };
     } catch (err) {
@@ -104,7 +105,7 @@ export async function processSocialLink(
     warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
 
     if (matches.length > 0) {
-      const { matches: enriched, saved } = await enrichAndSaveMatches(matches, warn, dryRun);
+      const { matches: enriched, saved } = await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId);
       return { source: "caption", text: null, matches: enriched, saved };
     }
 
@@ -120,7 +121,7 @@ export async function processSocialLink(
     const audioMatches = await extractMoviesFromAudio(url);
     warn?.({ url, matchCount: audioMatches.length }, "processSocialLink: audio extraction complete");
 
-    const { matches, saved } = await enrichAndSaveMatches(audioMatches, warn, dryRun);
+    const { matches, saved } = await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId);
     return { source: "audio", text: null, matches, saved };
   } catch (err) {
     warn?.({ url, err }, "processSocialLink: audio extraction failed — no data available");

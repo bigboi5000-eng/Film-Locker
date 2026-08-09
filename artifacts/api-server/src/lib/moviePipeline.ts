@@ -8,7 +8,7 @@
  *   runMoviePipeline(text, warn?)            — Gemini + TMDB + DB
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
 import { searchTmdb, fetchMovieDetails } from "./tmdb";
@@ -48,7 +48,8 @@ const CONFIDENCE_THRESHOLD = 0.45;
 export async function enrichAndSaveMatches(
   rawMatches: GeminiMovieMatch[],
   warn?: WarnFn,
-  dryRun = false
+  dryRun = false,
+  clerkUserId = ""
 ): Promise<PipelineResult> {
   const sanitised = rawMatches
     .map((m) => ({
@@ -102,6 +103,7 @@ export async function enrichAndSaveMatches(
 
       const values = {
         tmdbId: hit.tmdbId,
+        clerkUserId,
         title: details?.title ?? hit.title,
         releaseYear: details?.releaseYear ?? hit.releaseYear,
         posterUrl: details?.posterUrl ?? hit.posterUrl,
@@ -126,7 +128,7 @@ export async function enrichAndSaveMatches(
           .insert(moviesTable)
           .values(values)
           .onConflictDoUpdate({
-            target: moviesTable.tmdbId,
+            target: [moviesTable.tmdbId, moviesTable.clerkUserId],
             set: {
               director: values.director,
               cast: values.cast,
@@ -151,7 +153,12 @@ export async function enrichAndSaveMatches(
           ([movie] = await db
             .select()
             .from(moviesTable)
-            .where(eq(moviesTable.tmdbId, hit.tmdbId))
+            .where(
+              and(
+                eq(moviesTable.tmdbId, hit.tmdbId),
+                eq(moviesTable.clerkUserId, clerkUserId),
+              )
+            )
             .limit(1));
         }
       }
@@ -172,8 +179,9 @@ export async function enrichAndSaveMatches(
 export async function runMoviePipeline(
   text: string,
   warn?: WarnFn,
-  dryRun = false
+  dryRun = false,
+  clerkUserId = ""
 ): Promise<PipelineResult> {
   const rawMatches = await extractMoviesWithGemini(text);
-  return enrichAndSaveMatches(rawMatches, warn, dryRun);
+  return enrichAndSaveMatches(rawMatches, warn, dryRun, clerkUserId);
 }

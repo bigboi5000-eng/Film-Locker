@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import {
   ListMoviesResponse,
@@ -29,10 +29,11 @@ import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
 import { debugInstagramScrape } from "../../lib/socialScraper";
 import { extractMoviesWithGemini } from "../../lib/geminiParser";
+import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-// ── Discovery (Home screen) ───────────────────────────────────────────────────
+// ── Discovery — public endpoints ─────────────────────────────────────────────
 
 // GET /movies/trending
 router.get("/movies/trending", async (req, res): Promise<void> => {
@@ -56,66 +57,6 @@ router.get("/movies/new-releases", async (req, res): Promise<void> => {
   }
 });
 
-// GET /movies/recommendations
-router.get("/movies/recommendations", async (req, res): Promise<void> => {
-  try {
-    // Fetch the user's watchlist — prioritise recently-added and highest-rated
-    const watchlist = await db
-      .select()
-      .from(moviesTable)
-      .orderBy(desc(moviesTable.addedAt));
-
-    if (watchlist.length === 0) {
-      res.json(GetRecommendationsResponse.parse({ movies: [] }));
-      return;
-    }
-
-    const savedTmdbIds = new Set(watchlist.map((m) => m.tmdbId));
-
-    // Score each saved film: base = 1, +1 per star of rating, +2 if watched
-    // Take the top 5 as seeds so we don't hammer the TMDB API
-    const scored = watchlist
-      .map((m) => ({
-        tmdbId: m.tmdbId,
-        score: 1 + (m.rating ?? 0) + (m.isWatched ? 2 : 0),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-
-    // Fetch recommendations for each seed in parallel; tolerate individual failures
-    const results = await Promise.allSettled(
-      scored.map((s) => fetchTmdbRecommendations(s.tmdbId))
-    );
-
-    const seen = new Set<number>();
-    const recommendations: Array<{
-      tmdbId: number;
-      title: string;
-      releaseYear: string;
-      posterUrl: string;
-      overview: string;
-    }> = [];
-
-    for (const result of results) {
-      if (result.status === "rejected") continue;
-      for (const movie of result.value) {
-        // Skip films already in the locker or already in our deduped list
-        if (savedTmdbIds.has(movie.tmdbId)) continue;
-        if (seen.has(movie.tmdbId)) continue;
-        seen.add(movie.tmdbId);
-        recommendations.push(movie);
-      }
-    }
-
-    // Sort by TMDB popularity (already sorted per-seed; interleaving may lose order — re-sort isn't
-    // possible without storing popularity separately, so first-seen order is fine)
-    res.json(GetRecommendationsResponse.parse({ movies: recommendations.slice(0, 20) }));
-  } catch (err) {
-    req.log.error({ err }, "recommendations: failed");
-    res.status(502).json({ error: "Could not fetch recommendations" });
-  }
-});
-
 // GET /movies/search?q=
 router.get("/movies/search", async (req, res): Promise<void> => {
   const q = String(req.query.q ?? "").trim();
@@ -132,9 +73,27 @@ router.get("/movies/search", async (req, res): Promise<void> => {
   }
 });
 
-// ── Caption parsing ───────────────────────────────────────────────────────────
+// GET /movies/tmdb/:tmdbId — fetch full TMDB details without saving
+router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
+  const params = GetMovieDetailsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  try {
+    const details = await fetchMovieDetails(params.data.tmdbId);
+    if (!details) {
+      res.status(404).json({ error: "Movie not found on TMDB" });
+      return;
+    }
+    res.json(GetMovieDetailsResponse.parse(details));
+  } catch (err) {
+    req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB detail fetch failed");
+    res.status(502).json({ error: "Could not fetch movie details from TMDB" });
+  }
+});
 
-// POST /movies/parse-caption
+// POST /movies/parse-caption — public (no saves, just TMDB search)
 router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   const parsed = ParseCaptionBody.safeParse(req.body);
   if (!parsed.success) {
@@ -174,31 +133,7 @@ router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   res.json(ParseCaptionResponse.parse({ candidates: results.slice(0, 24) }));
 });
 
-// ── AI extraction ─────────────────────────────────────────────────────────────
-
-// POST /movies/ai-extract
-router.post("/movies/ai-extract", async (req, res): Promise<void> => {
-  const parsed = AiExtractBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  req.log.info("ai-extract: running Gemini pipeline");
-  const { matches, saved } = await runMoviePipeline(
-    parsed.data.text,
-    (data, msg) => req.log.warn(data, msg)
-  );
-
-  req.log.info({ matchCount: matches.length, saved: saved.length }, "ai-extract: complete");
-  res.json(AiExtractResponse.parse({ matches, saved }));
-});
-
-// ── Social link debug ─────────────────────────────────────────────────────────
-
-// POST /movies/debug-social-link
-// Returns every intermediate value: raw scraper JSON, extracted caption,
-// Gemini input/output. Never saves anything to the DB.
+// POST /movies/debug-social-link — dev debug, no saves, no auth required
 router.post("/movies/debug-social-link", async (req, res): Promise<void> => {
   const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
   if (!url) {
@@ -208,7 +143,6 @@ router.post("/movies/debug-social-link", async (req, res): Promise<void> => {
 
   req.log.info({ url }, "debug-social-link: start");
 
-  // Step 1 — Instagram scraper (raw + extracted caption)
   let scraperResult: Awaited<ReturnType<typeof debugInstagramScrape>> | null = null;
   let scraperError: string | null = null;
   try {
@@ -219,7 +153,6 @@ router.post("/movies/debug-social-link", async (req, res): Promise<void> => {
 
   const caption = scraperResult?.extractedCaption ?? null;
 
-  // Step 2 — Gemini (only if caption was found)
   let geminiInput: string | null = null;
   let geminiRaw: unknown = null;
   let geminiError: string | null = null;
@@ -235,82 +168,91 @@ router.post("/movies/debug-social-link", async (req, res): Promise<void> => {
   res.json({
     url,
     scraper: scraperError ? { error: scraperError } : scraperResult,
-    gemini: {
-      input: geminiInput,
-      output: geminiRaw,
-      error: geminiError,
-    },
+    gemini: { input: geminiInput, output: geminiRaw, error: geminiError },
   });
 });
 
-// ── Social link processing ────────────────────────────────────────────────────
+// ── Protected locker routes (require Clerk auth) ──────────────────────────────
 
-// POST /movies/process-social-link
-router.post("/movies/process-social-link", async (req, res): Promise<void> => {
-  const parsed = ProcessSocialLinkBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const dryRun = Boolean(parsed.data.dryRun);
-  req.log.info({ url: parsed.data.url, dryRun }, "process-social-link: start");
-
-  const result = await processSocialLink(
-    parsed.data.url,
-    (data, msg) => req.log.warn(data, msg),
-    dryRun
-  );
-
-  req.log.info(
-    { source: result.source, matches: result.matches.length, saved: result.saved.length },
-    "process-social-link: complete"
-  );
-
-  res.json(ProcessSocialLinkResponse.parse(result));
-});
-
-// ── TMDB detail fetch (for home screen / unsaved movies) ──────────────────────
-
-// GET /movies/tmdb/:tmdbId — fetch full TMDB details without saving
-router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
-  const params = GetMovieDetailsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
+// GET /movies/recommendations — personalised from user's watchlist
+router.get("/movies/recommendations", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   try {
-    const details = await fetchMovieDetails(params.data.tmdbId);
-    if (!details) {
-      res.status(404).json({ error: "Movie not found on TMDB" });
+    const watchlist = await db
+      .select()
+      .from(moviesTable)
+      .where(eq(moviesTable.clerkUserId, clerkUserId))
+      .orderBy(desc(moviesTable.addedAt));
+
+    if (watchlist.length === 0) {
+      res.json(GetRecommendationsResponse.parse({ movies: [] }));
       return;
     }
-    res.json(GetMovieDetailsResponse.parse(details));
+
+    const savedTmdbIds = new Set(watchlist.map((m) => m.tmdbId));
+
+    const scored = watchlist
+      .map((m) => ({
+        tmdbId: m.tmdbId,
+        score: 1 + (m.rating ?? 0) + (m.isWatched ? 2 : 0),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    const results = await Promise.allSettled(
+      scored.map((s) => fetchTmdbRecommendations(s.tmdbId))
+    );
+
+    const seen = new Set<number>();
+    const recommendations: Array<{
+      tmdbId: number;
+      title: string;
+      releaseYear: string;
+      posterUrl: string;
+      overview: string;
+    }> = [];
+
+    for (const result of results) {
+      if (result.status === "rejected") continue;
+      for (const movie of result.value) {
+        if (savedTmdbIds.has(movie.tmdbId)) continue;
+        if (seen.has(movie.tmdbId)) continue;
+        seen.add(movie.tmdbId);
+        recommendations.push(movie);
+      }
+    }
+
+    res.json(GetRecommendationsResponse.parse({ movies: recommendations.slice(0, 20) }));
   } catch (err) {
-    req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB detail fetch failed");
-    res.status(502).json({ error: "Could not fetch movie details from TMDB" });
+    req.log.error({ err }, "recommendations: failed");
+    res.status(502).json({ error: "Could not fetch recommendations" });
   }
 });
 
-// ── Locker CRUD ───────────────────────────────────────────────────────────────
-
-// GET /movies — list all saved movies
-router.get("/movies", async (_req, res): Promise<void> => {
+// GET /movies — list authenticated user's watchlist
+router.get("/movies", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   const movies = await db
     .select()
     .from(moviesTable)
+    .where(eq(moviesTable.clerkUserId, clerkUserId))
     .orderBy(desc(moviesTable.addedAt));
   res.json(ListMoviesResponse.parse({ movies }));
 });
 
-// POST /movies/enrich-all — backfill enrichment for movies missing genres/director
-router.post("/movies/enrich-all", async (req, res): Promise<void> => {
+// POST /movies/enrich-all — backfill enrichment for user's movies missing metadata
+router.post("/movies/enrich-all", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   const { sql: drizzleSql } = await import("drizzle-orm");
   const unenriched = await db
     .select()
     .from(moviesTable)
-    .where(drizzleSql`array_length(${moviesTable.genres}, 1) IS NULL`);
+    .where(
+      and(
+        eq(moviesTable.clerkUserId, clerkUserId),
+        drizzleSql`array_length(${moviesTable.genres}, 1) IS NULL`
+      )
+    );
 
   req.log.info({ count: unenriched.length }, "enrich-all: starting");
   res.json({ started: unenriched.length, message: "Enrichment running in background" });
@@ -328,19 +270,19 @@ router.post("/movies/enrich-all", async (req, res): Promise<void> => {
           language: details.language,
           watchProviders: details.watchProviders,
         })
-        .where(eq(moviesTable.id, movie.id));
+        .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
       req.log.info({ tmdbId: movie.tmdbId, title: movie.title }, "enrich-all: enriched");
     } catch (err) {
       req.log.warn({ err, tmdbId: movie.tmdbId }, "enrich-all: failed");
     }
-    // Polite TMDB rate limiting
     await new Promise((r) => setTimeout(r, 250));
   }
   req.log.info("enrich-all: complete");
 });
 
-// POST /movies — add a movie to the locker (idempotent by tmdbId)
-router.post("/movies", async (req, res): Promise<void> => {
+// POST /movies — add a movie to the authenticated user's locker
+router.post("/movies", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   const parsed = AddMovieBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -349,7 +291,7 @@ router.post("/movies", async (req, res): Promise<void> => {
 
   const [movie] = await db
     .insert(moviesTable)
-    .values(parsed.data)
+    .values({ ...parsed.data, clerkUserId })
     .onConflictDoNothing()
     .returning();
 
@@ -357,12 +299,16 @@ router.post("/movies", async (req, res): Promise<void> => {
     const [existing] = await db
       .select()
       .from(moviesTable)
-      .where(eq(moviesTable.tmdbId, parsed.data.tmdbId));
+      .where(
+        and(
+          eq(moviesTable.tmdbId, parsed.data.tmdbId),
+          eq(moviesTable.clerkUserId, clerkUserId)
+        )
+      );
     res.status(200).json(AddMovieResponse.parse(existing));
     return;
   }
 
-  // Respond immediately — enrich with full TMDB metadata in the background
   res.status(201).json(AddMovieResponse.parse(movie));
 
   fetchMovieDetails(movie.tmdbId)
@@ -377,15 +323,64 @@ router.post("/movies", async (req, res): Promise<void> => {
           language: details.language,
           watchProviders: details.watchProviders,
         })
-        .where(eq(moviesTable.id, movie.id));
+        .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
     })
     .catch((err) => {
       req.log.warn({ err, tmdbId: movie.tmdbId }, "Background enrichment failed");
     });
 });
 
-// PATCH /movies/:id/watched — toggle watched status
-router.patch("/movies/:id/watched", async (req, res): Promise<void> => {
+// POST /movies/ai-extract — extract & save films from text
+router.post("/movies/ai-extract", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = AiExtractBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  req.log.info("ai-extract: running Gemini pipeline");
+  const { matches, saved } = await runMoviePipeline(
+    parsed.data.text,
+    (data, msg) => req.log.warn(data, msg),
+    false,
+    clerkUserId
+  );
+
+  req.log.info({ matchCount: matches.length, saved: saved.length }, "ai-extract: complete");
+  res.json(AiExtractResponse.parse({ matches, saved }));
+});
+
+// POST /movies/process-social-link — process social URL (dry-run or save)
+router.post("/movies/process-social-link", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = ProcessSocialLinkBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dryRun = Boolean(parsed.data.dryRun);
+  req.log.info({ url: parsed.data.url, dryRun }, "process-social-link: start");
+
+  const result = await processSocialLink(
+    parsed.data.url,
+    (data, msg) => req.log.warn(data, msg),
+    dryRun,
+    clerkUserId
+  );
+
+  req.log.info(
+    { source: result.source, matches: result.matches.length, saved: result.saved.length },
+    "process-social-link: complete"
+  );
+
+  res.json(ProcessSocialLinkResponse.parse(result));
+});
+
+// PATCH /movies/:id/watched — toggle watched status (ownership verified)
+router.patch("/movies/:id/watched", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   const params = PatchWatchedParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -404,7 +399,7 @@ router.patch("/movies/:id/watched", async (req, res): Promise<void> => {
       isWatched: body.data.isWatched,
       watchedAt: body.data.isWatched ? new Date() : null,
     })
-    .where(eq(moviesTable.id, params.data.id))
+    .where(and(eq(moviesTable.id, params.data.id), eq(moviesTable.clerkUserId, clerkUserId)))
     .returning();
 
   if (!updated) {
@@ -415,8 +410,9 @@ router.patch("/movies/:id/watched", async (req, res): Promise<void> => {
   res.json(AddMovieResponse.parse(updated));
 });
 
-// PATCH /movies/:id/rating — set star rating (1–5, or null to clear)
-router.patch("/movies/:id/rating", async (req, res): Promise<void> => {
+// PATCH /movies/:id/rating — set star rating (ownership verified)
+router.patch("/movies/:id/rating", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   const params = PatchRatingParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -432,7 +428,7 @@ router.patch("/movies/:id/rating", async (req, res): Promise<void> => {
   const [updated] = await db
     .update(moviesTable)
     .set({ rating: body.data.rating })
-    .where(eq(moviesTable.id, params.data.id))
+    .where(and(eq(moviesTable.id, params.data.id), eq(moviesTable.clerkUserId, clerkUserId)))
     .returning();
 
   if (!updated) {
@@ -443,8 +439,9 @@ router.patch("/movies/:id/rating", async (req, res): Promise<void> => {
   res.json(AddMovieResponse.parse(updated));
 });
 
-// DELETE /movies/:id — remove a movie from the locker
-router.delete("/movies/:id", async (req, res): Promise<void> => {
+// DELETE /movies/:id — remove from locker (ownership verified)
+router.delete("/movies/:id", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
   const params = DeleteMovieParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -453,7 +450,7 @@ router.delete("/movies/:id", async (req, res): Promise<void> => {
 
   const [deleted] = await db
     .delete(moviesTable)
-    .where(eq(moviesTable.id, params.data.id))
+    .where(and(eq(moviesTable.id, params.data.id), eq(moviesTable.clerkUserId, clerkUserId)))
     .returning();
 
   if (!deleted) {

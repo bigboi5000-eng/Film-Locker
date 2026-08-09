@@ -1,11 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/expo';
+import { setAuthTokenGetter } from '@workspace/api-client-react';
 
 const BLUE = '#0066FF';
 const INACTIVE = '#9CA3AF';
 
 export default function TabLayout() {
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+
+  // Wire Clerk bearer token into the generated API client for every request
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+  }, [getToken]);
+
+  if (!isLoaded) return null;
+
+  // Not signed in → send to auth screens
+  if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
+
   return (
     <Tabs
       screenOptions={{

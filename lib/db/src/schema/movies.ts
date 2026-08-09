@@ -40,6 +40,8 @@ export const moviesTable = pgTable(
       .$type<WatchProvider[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    // Per-user owner (Clerk user ID)
+    clerkUserId: text("clerk_user_id").notNull().default(""),
     // User state
     rating: integer("rating"), // nullable 1–5
     isWatched: boolean("is_watched").notNull().default(false),
@@ -48,7 +50,7 @@ export const moviesTable = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("movies_tmdb_id_unique").on(table.tmdbId)],
+  (table) => [uniqueIndex("movies_tmdb_user_unique").on(table.tmdbId, table.clerkUserId)],
 );
 
 export const insertMovieSchema = createInsertSchema(moviesTable).omit({

@@ -1,3 +1,4 @@
+- [Clerk auth setup](clerk-auth-setup.md) — Expo + Express Clerk wiring; DB multi-user schema change; lib/db MUST be rebuilt with tsc --build after schema edits.
 - [Orval zod barrel dupe fix](orval-zod-barrel.md) — codegen script must patch lib/api-zod/src/index.ts after orval to prevent TS2308 duplicate export errors.
 - [FlatList numColumns switching](flatlist-numcolumns.md) — two FlatLists with different numColumns in same conditional slot must have distinct key props or React throws Invariant Violation.
 - [Android share intent setup](android-share-intent.md) — package choice, Metro web stub pattern, New Architecture risk, intent filter config.
