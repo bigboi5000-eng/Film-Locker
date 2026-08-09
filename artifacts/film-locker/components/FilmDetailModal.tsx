@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
@@ -30,6 +31,9 @@ import {
   useGetFilmComments,
   usePostFilmComment,
   useDeleteFilmComment,
+  useGetNotificationUsers,
+  getGetNotificationUsersQueryKey,
+  useSendNotification,
   getGetFilmCommunityScoreQueryKey,
   getGetFilmCommentsQueryKey,
   getListMoviesQueryKey,
@@ -37,6 +41,7 @@ import {
   type TmdbMovieCard,
   type WatchProvider,
   type FilmComment,
+  type NotificationUser,
 } from '@workspace/api-client-react';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -611,6 +616,185 @@ const communityStyles = StyleSheet.create({
   },
 });
 
+// ── Recommend sheet ───────────────────────────────────────────────────────────
+
+function RecommendSheet({
+  visible,
+  onClose,
+  tmdbId,
+  filmTitle,
+  posterUrl,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  tmdbId: number;
+  filmTitle: string;
+  posterUrl: string;
+}) {
+  const insets = useSafeAreaInsets();
+  const { data, isLoading } = useGetNotificationUsers({ query: { queryKey: getGetNotificationUsersQueryKey(), enabled: visible } });
+  const { mutateAsync: sendNotification, isPending } = useSendNotification();
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+
+  const users = data?.users ?? [];
+
+  const handleSend = useCallback(
+    async (user: NotificationUser) => {
+      if (sentIds.has(user.clerkId)) return;
+      if (Platform.OS !== 'web') Haptics.selectionAsync();
+      try {
+        await sendNotification({
+          data: { toUserId: user.clerkId, tmdbId, filmTitle, posterUrl },
+        });
+        setSentIds((prev) => new Set(prev).add(user.clerkId));
+      } catch {
+        Alert.alert('Error', 'Could not send the recommendation. Please try again.');
+      }
+    },
+    [sentIds, sendNotification, tmdbId, filmTitle, posterUrl]
+  );
+
+  const handleClose = useCallback(() => {
+    setSentIds(new Set());
+    onClose();
+  }, [onClose]);
+
+  const renderUser = useCallback(
+    ({ item }: { item: NotificationUser }) => {
+      const name = item.username ?? item.clerkId.slice(0, 8);
+      const initials = name.slice(0, 2).toUpperCase();
+      const sent = sentIds.has(item.clerkId);
+
+      return (
+        <View style={rsStyles.userRow}>
+          {/* Avatar */}
+          {item.avatarUrl ? (
+            <Image
+              source={{ uri: item.avatarUrl }}
+              style={rsStyles.avatar}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[rsStyles.avatar, rsStyles.avatarFallback]}>
+              <Text style={rsStyles.avatarText}>{initials}</Text>
+            </View>
+          )}
+          <Text style={rsStyles.username} numberOfLines={1}>
+            {name}
+          </Text>
+          <TouchableOpacity
+            style={[rsStyles.sendBtn, sent && rsStyles.sendBtnSent]}
+            onPress={() => handleSend(item)}
+            disabled={sent || isPending}
+            activeOpacity={0.8}
+          >
+            {sent ? (
+              <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+            ) : (
+              <Text style={rsStyles.sendBtnText}>Send</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [sentIds, isPending, handleSend]
+  );
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={handleClose}
+    >
+      <View style={[rsStyles.root, { paddingTop: insets.top + 12 }]}>
+        {/* Header */}
+        <View style={rsStyles.header}>
+          <Text style={rsStyles.title}>Recommend to…</Text>
+          <TouchableOpacity onPress={handleClose} hitSlop={8}>
+            <Ionicons name="close" size={22} color="#111827" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Film pill */}
+        <View style={rsStyles.filmPill}>
+          <Image source={{ uri: posterUrl }} style={rsStyles.pillPoster} contentFit="cover" />
+          <Text style={rsStyles.pillTitle} numberOfLines={2}>{filmTitle}</Text>
+        </View>
+
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#0066FF" style={{ marginTop: 40 }} />
+        ) : users.length === 0 ? (
+          <View style={rsStyles.empty}>
+            <Ionicons name="people-outline" size={48} color="#D1D5DB" />
+            <Text style={rsStyles.emptyText}>No other users to recommend to yet.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={users}
+            keyExtractor={(u) => u.clerkId}
+            renderItem={renderUser}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+            ItemSeparatorComponent={() => <View style={rsStyles.separator} />}
+          />
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+const rsStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  filmPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 12,
+  },
+  pillPoster: { width: 40, height: 60, borderRadius: 6 },
+  pillTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827', flex: 1 },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  avatar: { width: 40, height: 40, borderRadius: 20, flexShrink: 0 },
+  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
+  sendBtn: {
+    backgroundColor: '#0066FF',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendBtnSent: { backgroundColor: '#10B981' },
+  sendBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  separator: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 72 },
+  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
+  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 32 },
+});
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function FilmDetailModal({
@@ -628,6 +812,7 @@ export function FilmDetailModal({
 
   const [optimisticRating, setOptimisticRating] = useState<number | null | undefined>(undefined);
   const [optimisticWatched, setOptimisticWatched] = useState<boolean | undefined>(undefined);
+  const [recommendVisible, setRecommendVisible] = useState(false);
 
   // Fetch full TMDB details — parent only renders this component when a movie
   // is selected, so the hook always runs against a valid tmdbId.
@@ -899,6 +1084,23 @@ export function FilmDetailModal({
                 </TouchableOpacity>
               )}
 
+              {/* Recommend to a friend */}
+              {isLoggedIn && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonRecommend]}
+                  onPress={() => setRecommendVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="paper-plane-outline"
+                    size={20}
+                    color="#0066FF"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.actionButtonRecommendText}>Recommend to…</Text>
+                </TouchableOpacity>
+              )}
+
               {/* ── Community Section ── */}
               <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
 
@@ -906,6 +1108,15 @@ export function FilmDetailModal({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Recommend sheet */}
+      <RecommendSheet
+        visible={recommendVisible}
+        onClose={() => setRecommendVisible(false)}
+        tmdbId={tmdbId}
+        filmTitle={title}
+        posterUrl={posterUrl}
+      />
     </Modal>
   );
 }
@@ -1004,6 +1215,16 @@ const styles = StyleSheet.create({
   actionButtonSecondary: { backgroundColor: '#FF8C00' },
   actionButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  actionButtonRecommend: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+  },
+  actionButtonRecommendText: {
+    color: '#0066FF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },

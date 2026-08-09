@@ -26,11 +26,14 @@ import type {
   FilmComment,
   FilmCommentsResponse,
   FilmCommunityScore,
+  FilmNotification,
   GetFilmCommentsParams,
   HealthStatus,
   ListMoviesResponse,
   Movie,
   NewReleasesResponse,
+  NotificationUsersResponse,
+  NotificationsResponse,
   ParseCaptionBody,
   ParseCaptionResponse,
   PatchRatingBody,
@@ -41,6 +44,7 @@ import type {
   RecommendationsResponse,
   SearchMoviesParams,
   SearchMoviesResponse,
+  SendNotificationBody,
   SetCommunityRatingBody,
   TmdbMovieDetailsResponse,
   TrendingResponse
@@ -1498,5 +1502,299 @@ export const useDeleteFilmComment = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteFilmCommentMutationOptions(options));
+    }
+
+export const getGetNotificationsUrl = () => {
+
+
+
+
+  return `/api/notifications`
+}
+
+/**
+ * @summary Fetch the authenticated user's notification inbox, newest first
+ */
+export const getNotifications = async ( options?: RequestInit): Promise<NotificationsResponse> => {
+
+  return customFetch<NotificationsResponse>(getGetNotificationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNotificationsQueryKey = () => {
+    return [
+    `/api/notifications`
+    ] as const;
+    }
+
+
+export const getGetNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof getNotifications>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNotificationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNotifications>>> = ({ signal }) => getNotifications({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof getNotifications>>>
+export type GetNotificationsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Fetch the authenticated user's notification inbox, newest first
+ */
+
+export function useGetNotifications<TData = Awaited<ReturnType<typeof getNotifications>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNotificationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendNotificationUrl = () => {
+
+
+
+
+  return `/api/notifications`
+}
+
+/**
+ * @summary Send a film recommendation to another user (auth required)
+ */
+export const sendNotification = async (sendNotificationBody: SendNotificationBody, options?: RequestInit): Promise<FilmNotification> => {
+
+  return customFetch<FilmNotification>(getSendNotificationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendNotificationBody)
+  }
+);}
+
+
+
+
+export const getSendNotificationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendNotification>>, TError,{data: BodyType<SendNotificationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendNotification>>, TError,{data: BodyType<SendNotificationBody>}, TContext> => {
+
+const mutationKey = ['sendNotification'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendNotification>>, {data: BodyType<SendNotificationBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendNotification(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendNotificationMutationResult = NonNullable<Awaited<ReturnType<typeof sendNotification>>>
+    export type SendNotificationMutationBody = BodyType<SendNotificationBody>
+    export type SendNotificationMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a film recommendation to another user (auth required)
+ */
+export const useSendNotification = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendNotification>>, TError,{data: BodyType<SendNotificationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendNotification>>,
+        TError,
+        {data: BodyType<SendNotificationBody>},
+        TContext
+      > => {
+      return useMutation(getSendNotificationMutationOptions(options));
+    }
+
+export const getGetNotificationUsersUrl = () => {
+
+
+
+
+  return `/api/notifications/users`
+}
+
+/**
+ * @summary List other registered users to recommend films to
+ */
+export const getNotificationUsers = async ( options?: RequestInit): Promise<NotificationUsersResponse> => {
+
+  return customFetch<NotificationUsersResponse>(getGetNotificationUsersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNotificationUsersQueryKey = () => {
+    return [
+    `/api/notifications/users`
+    ] as const;
+    }
+
+
+export const getGetNotificationUsersQueryOptions = <TData = Awaited<ReturnType<typeof getNotificationUsers>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNotificationUsers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNotificationUsersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNotificationUsers>>> = ({ signal }) => getNotificationUsers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNotificationUsers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNotificationUsersQueryResult = NonNullable<Awaited<ReturnType<typeof getNotificationUsers>>>
+export type GetNotificationUsersQueryError = ErrorType<void>
+
+
+/**
+ * @summary List other registered users to recommend films to
+ */
+
+export function useGetNotificationUsers<TData = Awaited<ReturnType<typeof getNotificationUsers>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNotificationUsers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNotificationUsersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMarkNotificationReadUrl = (id: number,) => {
+
+
+
+
+  return `/api/notifications/${id}/read`
+}
+
+/**
+ * @summary Mark a notification as read
+ */
+export const markNotificationRead = async (id: number, options?: RequestInit): Promise<FilmNotification> => {
+
+  return customFetch<FilmNotification>(getMarkNotificationReadUrl(id),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getMarkNotificationReadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['markNotificationRead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markNotificationRead>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  markNotificationRead(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkNotificationReadMutationResult = NonNullable<Awaited<ReturnType<typeof markNotificationRead>>>
+
+    export type MarkNotificationReadMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark a notification as read
+ */
+export const useMarkNotificationRead = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markNotificationRead>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getMarkNotificationReadMutationOptions(options));
     }
 

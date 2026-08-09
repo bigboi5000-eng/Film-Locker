@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: movies
     description: Film Locker movie operations
+  - name: notifications
+    description: Film recommendation notifications
 paths:
   /healthz:
     get:
@@ -384,6 +386,84 @@ paths:
       responses:
         "204":
           description: Comment deleted
+
+  /notifications:
+    get:
+      operationId: getNotifications
+      tags: [notifications]
+      summary: Fetch the authenticated user's notification inbox, newest first
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationsResponse"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: sendNotification
+      tags: [notifications]
+      summary: Send a film recommendation to another user (auth required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendNotificationBody"
+      responses:
+        "201":
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmNotification"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Cannot send to this user
+        "404":
+          description: Recipient not found
+
+  /notifications/users:
+    get:
+      operationId: getNotificationUsers
+      tags: [notifications]
+      summary: List other registered users to recommend films to
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUsersResponse"
+        "401":
+          description: Unauthorized
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notification updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmNotification"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Notification not found
 
 components:
   schemas:
@@ -858,4 +938,98 @@ components:
           maxLength: 280
       required:
         - body
+
+    FilmNotification:
+      type: object
+      properties:
+        id:
+          type: integer
+        fromUserId:
+          type: string
+          description: Clerk user ID of the sender
+        fromUsername:
+          type: string
+          nullable: true
+          description: Display username of the sender
+        fromAvatarUrl:
+          type: string
+          nullable: true
+        toUserId:
+          type: string
+          description: Clerk user ID of the recipient
+        tmdbId:
+          type: integer
+        filmTitle:
+          type: string
+        posterUrl:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - fromUserId
+        - toUserId
+        - tmdbId
+        - filmTitle
+        - posterUrl
+        - isRead
+        - createdAt
+
+    NotificationsResponse:
+      type: object
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilmNotification"
+        unreadCount:
+          type: integer
+      required:
+        - notifications
+        - unreadCount
+
+    SendNotificationBody:
+      type: object
+      properties:
+        toUserId:
+          type: string
+          description: Clerk user ID of the recipient
+        tmdbId:
+          type: integer
+        filmTitle:
+          type: string
+        posterUrl:
+          type: string
+      required:
+        - toUserId
+        - tmdbId
+        - filmTitle
+        - posterUrl
+
+    NotificationUser:
+      type: object
+      properties:
+        clerkId:
+          type: string
+        username:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+      required:
+        - clerkId
+
+    NotificationUsersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationUser"
+      required:
+        - users
 

@@ -227,6 +227,45 @@ export interface PostCommentBody {
   body: string;
 }
 
+export interface FilmNotification {
+  id: number;
+  /** Clerk user ID of the sender */
+  fromUserId: string;
+  /** Display username of the sender */
+  fromUsername?: string | null;
+  fromAvatarUrl?: string | null;
+  /** Clerk user ID of the recipient */
+  toUserId: string;
+  tmdbId: number;
+  filmTitle: string;
+  posterUrl: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  notifications: FilmNotification[];
+  unreadCount: number;
+}
+
+export interface SendNotificationBody {
+  /** Clerk user ID of the recipient */
+  toUserId: string;
+  tmdbId: number;
+  filmTitle: string;
+  posterUrl: string;
+}
+
+export interface NotificationUser {
+  clerkId: string;
+  username?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface NotificationUsersResponse {
+  users: NotificationUser[];
+}
+
 export type SearchMoviesParams = {
 /**
  * @minLength 1

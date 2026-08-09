@@ -1,12 +1,49 @@
 import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
-import { setAuthTokenGetter } from '@workspace/api-client-react';
+import { setAuthTokenGetter, useGetNotifications, getGetNotificationsQueryKey } from '@workspace/api-client-react';
 
 const BLUE = '#0066FF';
 const INACTIVE = '#9CA3AF';
+
+/** Bell icon with an optional unread count badge */
+function NotificationTabIcon({
+  color,
+  focused,
+  unreadCount,
+}: {
+  color: string;
+  focused: boolean;
+  unreadCount: number;
+}) {
+  return (
+    <View style={{ width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
+      <Ionicons name={focused ? 'notifications' : 'notifications-outline'} size={22} color={color} />
+      {unreadCount > 0 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: -3,
+            right: -6,
+            minWidth: 16,
+            height: 16,
+            borderRadius: 8,
+            backgroundColor: '#EF4444',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 3,
+            borderWidth: 1.5,
+            borderColor: '#FFFFFF',
+          }}
+        >
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
@@ -15,6 +52,12 @@ export default function TabLayout() {
   useEffect(() => {
     setAuthTokenGetter(() => getToken());
   }, [getToken]);
+
+  // Fetch unread notification count for the badge
+  const { data: notifData } = useGetNotifications({
+    query: { queryKey: getGetNotificationsQueryKey(), enabled: Boolean(isSignedIn), refetchInterval: 30_000 },
+  });
+  const unreadCount = notifData?.unreadCount ?? 0;
 
   if (!isLoaded) return null;
 
@@ -70,6 +113,16 @@ export default function TabLayout() {
               color={color}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Inbox',
+          tabBarIcon: ({ color, focused }) => (
+            <NotificationTabIcon color={color} focused={focused} unreadCount={unreadCount} />
+          ),
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
       />
     </Tabs>

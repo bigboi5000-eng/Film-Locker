@@ -515,3 +515,80 @@ export const DeleteFilmCommentParams = zod.object({
 export const DeleteFilmCommentResponse = zod.void()
 
 
+/**
+ * @summary Fetch the authenticated user's notification inbox, newest first
+ */
+export const GetNotificationsResponse = zod.object({
+  "notifications": zod.array(zod.object({
+  "id": zod.number(),
+  "fromUserId": zod.string().describe('Clerk user ID of the sender'),
+  "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromAvatarUrl": zod.string().nullish(),
+  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string(),
+  "isRead": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})),
+  "unreadCount": zod.number()
+})
+
+
+/**
+ * @summary Send a film recommendation to another user (auth required)
+ */
+export const SendNotificationBody = zod.object({
+  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string()
+})
+
+export const SendNotificationResponse = zod.object({
+  "id": zod.number(),
+  "fromUserId": zod.string().describe('Clerk user ID of the sender'),
+  "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromAvatarUrl": zod.string().nullish(),
+  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string(),
+  "isRead": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List other registered users to recommend films to
+ */
+export const GetNotificationUsersResponse = zod.object({
+  "users": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Mark a notification as read
+ */
+export const MarkNotificationReadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const MarkNotificationReadResponse = zod.object({
+  "id": zod.number(),
+  "fromUserId": zod.string().describe('Clerk user ID of the sender'),
+  "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromAvatarUrl": zod.string().nullish(),
+  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string(),
+  "isRead": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
