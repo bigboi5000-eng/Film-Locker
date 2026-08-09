@@ -27,7 +27,8 @@ export const GetRecommendationsResponse = zod.object({
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
-  "overview": zod.string()
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
 }))
 })
 
@@ -41,7 +42,8 @@ export const GetTrendingResponse = zod.object({
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
-  "overview": zod.string()
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
 }))
 })
 
@@ -55,7 +57,8 @@ export const GetNewReleasesResponse = zod.object({
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
-  "overview": zod.string()
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
 }))
 })
 
@@ -76,7 +79,8 @@ export const SearchMoviesResponse = zod.object({
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
-  "overview": zod.string()
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
 }))
 })
 

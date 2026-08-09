@@ -22,6 +22,7 @@ import {
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export default function DiscoverScreen() {
 
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('default');
+  const [filters, setFilters] = useState<FilterState>({});
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
 
   // Fetch data for whichever section we're in
@@ -90,14 +92,17 @@ export default function DiscoverScreen() {
     (section === 'new-releases' && newReleasesLoading) ||
     (section === 'recommendations' && recommendationsLoading);
 
-  // Apply search + sort
+  // Apply search + genre/attr filters + sort
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const searched = q
       ? rawMovies.filter((m) => m.title.toLowerCase().includes(q))
       : rawMovies;
-    return sortMovies(searched, sort);
-  }, [rawMovies, query, sort]);
+    const filterApplied = applyFilters(searched, filters);
+    return sortMovies(filterApplied, sort);
+  }, [rawMovies, query, filters, sort]);
+
+  const hasActiveFilters = Object.values(filters).some(Boolean);
 
   // For the modal: find the saved version if it exists
   const savedVersion = selectedMovie
@@ -175,6 +180,9 @@ export default function DiscoverScreen() {
         ))}
       </View>
 
+      {/* Filter bar — Genre, Director, Actor, Language, Streaming */}
+      <FilterBar movies={rawMovies} filters={filters} onChange={setFilters} />
+
       {/* Content */}
       {isLoading ? (
         <View style={styles.loading}>
@@ -184,7 +192,9 @@ export default function DiscoverScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No films found</Text>
           <Text style={styles.emptySubtitle}>
-            {query ? 'Try a different search term.' : 'Check back soon.'}
+            {query || hasActiveFilters
+              ? 'Try clearing your search or filters.'
+              : 'Check back soon.'}
           </Text>
         </View>
       ) : (

@@ -10,8 +10,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Movie } from '@workspace/api-client-react';
-
 const { width: SCREEN_W } = Dimensions.get('window');
 const DROPDOWN_W = SCREEN_W - 32;
 
@@ -23,8 +21,17 @@ export interface FilterState {
   streaming?: string;
 }
 
+/** Minimal shape that both Movie and TmdbMovieCard satisfy after adding genres. */
+export interface FilterableMovie {
+  genres?: string[];
+  director?: string;
+  cast?: string[];
+  language?: string;
+  watchProviders?: Array<{ provider_name: string }>;
+}
+
 interface FilterBarProps {
-  movies: Movie[];
+  movies: FilterableMovie[];
   filters: FilterState;
   onChange: (filters: FilterState) => void;
 }
@@ -42,7 +49,7 @@ const FILTER_LABELS: Record<FilterKey, string> = {
 const FILTER_KEYS: FilterKey[] = ['genre', 'director', 'actor', 'language', 'streaming'];
 
 /** Apply all active filters to a movie list. */
-export function applyFilters(movies: Movie[], filters: FilterState): Movie[] {
+export function applyFilters<T extends FilterableMovie>(movies: T[], filters: FilterState): T[] {
   return movies.filter((m) => {
     const genres = m.genres ?? [];
     const cast = m.cast ?? [];
@@ -58,7 +65,7 @@ export function applyFilters(movies: Movie[], filters: FilterState): Movie[] {
 }
 
 /** Extract unique, sorted option values for a given filter key. */
-function getOptions(movies: Movie[], key: FilterKey): string[] {
+function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
   const values = new Set<string>();
   for (const m of movies) {
     const genres = m.genres ?? [];

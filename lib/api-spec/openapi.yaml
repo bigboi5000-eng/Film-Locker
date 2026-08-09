@@ -378,12 +378,18 @@ components:
           type: string
         overview:
           type: string
+        genres:
+          type: array
+          items:
+            type: string
+          description: Genre names mapped from TMDB genre_ids
       required:
         - tmdbId
         - title
         - releaseYear
         - posterUrl
         - overview
+        - genres
 
     TmdbMovieDetailsResponse:
       type: object

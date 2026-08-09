@@ -59,6 +59,8 @@ export interface TmdbMovieCard {
   releaseYear: string;
   posterUrl: string;
   overview: string;
+  /** Genre names mapped from TMDB genre_ids */
+  genres: string[];
 }
 
 export interface TmdbMovieDetailsResponse {
