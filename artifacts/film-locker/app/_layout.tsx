@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -74,6 +75,9 @@ function PushNotificationManager() {
   //   - Live taps (app in foreground/background) via the response listener
   //   - Cold-start taps (app launched from killed state) via getLastNotificationResponseAsync
   useEffect(() => {
+    // Push notifications are native-only; skip on web
+    if (Platform.OS === 'web') return;
+
     // Cold-start: check if the app was opened by tapping a notification
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response) return;
@@ -112,6 +116,8 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="discover/[section]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="inbox/[userId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="people" options={{ headerShown: false, animation: 'slide_from_right' }} />
     </Stack>
   );
 }

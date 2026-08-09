@@ -8,3 +8,4 @@
 - [EAS build pitfalls](eas-prebuild-pitfalls.md) — intent filter short-form names only; expo prebuild mutates package.json, must clean up dupes after.
 - [Share intent flow](share-intent-flow.md) — dry-run mode skips DB; ShareFilmSheet confirms before add; BackHandler.exitApp() returns to social app.
 - [expo-notifications v57 API](expo-notifications-v57.md) — NotificationBehavior needs shouldShowBanner/shouldShowList; permission .granted/.status needs `as any` cast.
+- [Orval query hook patterns](orval-hook-patterns.md) — query hooks require queryKey in options; search params are flat objects not wrapped in `{ params }`; zod must be added as direct dep to api-server.

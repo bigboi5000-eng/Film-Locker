@@ -516,6 +516,16 @@ export const DeleteFilmCommentResponse = zod.void()
 
 
 /**
+ * @summary Store or update the authenticated user's Expo push token
+ */
+export const UpdatePushTokenBody = zod.object({
+  "expoPushToken": zod.string().describe('Expo push token for the device')
+})
+
+export const UpdatePushTokenResponse = zod.void()
+
+
+/**
  * @summary Fetch the authenticated user's notification inbox, newest first
  */
 export const GetNotificationsResponse = zod.object({
@@ -529,17 +539,11 @@ export const GetNotificationsResponse = zod.object({
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "isRead": zod.boolean(),
+  "reaction": zod.string().nullish().describe('Emoji or \"Watched it!\" set by the recipient'),
+  "reactedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })),
   "unreadCount": zod.number()
-})
-
-
-/**
- * @summary Store or update the authenticated user's Expo push token
- */
-export const UpdatePushTokenBody = zod.object({
-  "expoPushToken": zod.string()
 })
 
 
@@ -563,6 +567,8 @@ export const SendNotificationResponse = zod.object({
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "isRead": zod.boolean(),
+  "reaction": zod.string().nullish().describe('Emoji or \"Watched it!\" set by the recipient'),
+  "reactedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -596,7 +602,169 @@ export const MarkNotificationReadResponse = zod.object({
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "isRead": zod.boolean(),
+  "reaction": zod.string().nullish().describe('Emoji or \"Watched it!\" set by the recipient'),
+  "reactedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary Set an emoji or text reaction on a received notification
+ */
+export const ReactToNotificationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const reactToNotificationBodyReactionMax = 20;
+
+
+
+export const ReactToNotificationBody = zod.object({
+  "reaction": zod.string().max(reactToNotificationBodyReactionMax).describe('Emoji or predefined text e.g. \"Watched it!\"')
+})
+
+export const ReactToNotificationResponse = zod.object({
+  "id": zod.number(),
+  "reaction": zod.string().nullish(),
+  "reactedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary All recommendations from a specific user to the authenticated user
+ */
+export const GetNotificationThreadParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const GetNotificationThreadResponse = zod.object({
+  "sender": zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+}).nullish(),
+  "notifications": zod.array(zod.object({
+  "id": zod.number(),
+  "fromUserId": zod.string().describe('Clerk user ID of the sender'),
+  "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromAvatarUrl": zod.string().nullish(),
+  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
+  "tmdbId": zod.number(),
+  "filmTitle": zod.string(),
+  "posterUrl": zod.string(),
+  "isRead": zod.boolean(),
+  "reaction": zod.string().nullish().describe('Emoji or \"Watched it!\" set by the recipient'),
+  "reactedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary JIT-provision the authenticated user's row in the users table
+ */
+export const SyncUserBody = zod.object({
+  "email": zod.string().email(),
+  "avatarUrl": zod.string().nullish(),
+  "username": zod.string().nullish()
+})
+
+export const SyncUserResponse = zod.object({
+  "clerkId": zod.string(),
+  "email": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get the authenticated user's own profile
+ */
+export const GetMeResponse = zod.object({
+  "clerkId": zod.string(),
+  "email": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update the authenticated user's profile (e.g. username)
+ */
+export const updateMeBodyUsernameMin = 2;
+export const updateMeBodyUsernameMax = 30;
+
+
+
+export const UpdateMeBody = zod.object({
+  "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional()
+})
+
+export const UpdateMeResponse = zod.object({
+  "clerkId": zod.string(),
+  "email": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+})
+
+
+/**
+ * @summary Search users by username or email
+ */
+export const searchUsersQueryQMin = 2;
+
+
+
+export const SearchUsersQueryParams = zod.object({
+  "q": zod.coerce.string().min(searchUsersQueryQMin)
+})
+
+export const SearchUsersResponse = zod.object({
+  "users": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "email": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Get the authenticated user's following and follower lists
+ */
+export const GetFollowsResponse = zod.object({
+  "following": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "email": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+})).describe('Users that the authenticated user follows'),
+  "followers": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "email": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+})).describe('Users that follow the authenticated user')
+})
+
+
+/**
+ * @summary Follow another user
+ */
+export const FollowUserBody = zod.object({
+  "followeeId": zod.string().describe('Clerk user ID of the user to follow')
+})
+
+export const FollowUserResponse = zod.void()
+
+
+/**
+ * @summary Unfollow a user
+ */
+export const UnfollowUserParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const UnfollowUserResponse = zod.void()
 
 

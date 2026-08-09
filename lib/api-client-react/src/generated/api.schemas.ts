@@ -240,6 +240,9 @@ export interface FilmNotification {
   filmTitle: string;
   posterUrl: string;
   isRead: boolean;
+  /** Emoji or "Watched it!" set by the recipient */
+  reaction?: string | null;
+  reactedAt?: string | null;
   createdAt: string;
 }
 
@@ -266,6 +269,67 @@ export interface NotificationUsersResponse {
   users: NotificationUser[];
 }
 
+export interface ReactNotificationBody {
+  /**
+     * Emoji or predefined text e.g. "Watched it!"
+     * @maxLength 20
+     */
+  reaction: string;
+}
+
+export interface ReactNotificationResponse {
+  id: number;
+  reaction?: string | null;
+  reactedAt?: string | null;
+}
+
+export interface NotificationThreadResponse {
+  sender?: NotificationUser | null;
+  notifications: FilmNotification[];
+}
+
+export interface UserProfile {
+  clerkId: string;
+  email: string;
+  username?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface SyncUserBody {
+  email: string;
+  avatarUrl?: string | null;
+  username?: string | null;
+}
+
+export interface UpdateMeBody {
+  /**
+     * @minLength 2
+     * @maxLength 30
+     */
+  username?: string;
+}
+
+export interface SearchUsersResponse {
+  users: UserProfile[];
+}
+
+export interface FollowBody {
+  /** Clerk user ID of the user to follow */
+  followeeId: string;
+}
+
+export interface FollowsResponse {
+  /** Users that the authenticated user follows */
+  following: UserProfile[];
+  /** Users that follow the authenticated user */
+  followers: UserProfile[];
+}
+
+export interface UpdatePushTokenBody {
+  /** Expo push token for the device */
+  expoPushToken: string;
+}
+
 export type SearchMoviesParams = {
 /**
  * @minLength 1
@@ -278,5 +342,12 @@ export type GetFilmCommentsParams = {
  * @minimum 1
  */
 page?: number;
+};
+
+export type SearchUsersParams = {
+/**
+ * @minLength 2
+ */
+q: string;
 };
 

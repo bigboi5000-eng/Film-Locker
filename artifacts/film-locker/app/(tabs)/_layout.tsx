@@ -4,7 +4,8 @@ import { Tabs } from 'expo-router';
 import { Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
-import { setAuthTokenGetter, useGetNotifications, getGetNotificationsQueryKey } from '@workspace/api-client-react';
+import { useUser } from '@clerk/expo';
+import { setAuthTokenGetter, useGetNotifications, getGetNotificationsQueryKey, useSyncUser } from '@workspace/api-client-react';
 
 const BLUE = '#0066FF';
 const INACTIVE = '#9CA3AF';
@@ -47,11 +48,26 @@ function NotificationTabIcon({
 
 export default function TabLayout() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { user } = useUser();
+  const { mutateAsync: syncUser } = useSyncUser();
 
   // Wire Clerk bearer token into the generated API client for every request
   useEffect(() => {
     setAuthTokenGetter(() => getToken());
   }, [getToken]);
+
+  // JIT-provision the user row in the DB on every sign-in
+  useEffect(() => {
+    if (!user) return;
+    const email = user.primaryEmailAddress?.emailAddress;
+    if (!email) return;
+    syncUser({
+      data: { email, avatarUrl: user.imageUrl ?? null, username: user.username ?? null },
+    }).catch(() => {
+      // Non-fatal — best-effort
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Fetch unread notification count for the badge
   const { data: notifData } = useGetNotifications({

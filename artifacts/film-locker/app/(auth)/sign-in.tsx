@@ -49,7 +49,7 @@ export default function SignInScreen() {
       await signIn.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) return;
-          router.replace('/(tabs)/');
+          router.replace('/(tabs)');
         },
       });
     } else if (signIn.status === 'needs_client_trust') {
@@ -63,7 +63,7 @@ export default function SignInScreen() {
       await signIn.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) return;
-          router.replace('/(tabs)/');
+          router.replace('/(tabs)');
         },
       });
     }
@@ -81,7 +81,7 @@ export default function SignInScreen() {
           session: createdSessionId,
           navigate: async ({ session }) => {
             if (session?.currentTask) return;
-            router.replace('/(tabs)/');
+            router.replace('/(tabs)');
           },
         });
       }

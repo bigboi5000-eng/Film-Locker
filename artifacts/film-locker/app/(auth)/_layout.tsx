@@ -7,7 +7,7 @@ export default function AuthLayout() {
   if (!isLoaded) return null;
 
   // Already signed in — send to the main app
-  if (isSignedIn) return <Redirect href="/(tabs)/" />;
+  if (isSignedIn) return <Redirect href="/(tabs)" />;
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />

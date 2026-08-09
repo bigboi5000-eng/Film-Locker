@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, desc } from "drizzle-orm";
 import { db, filmNotificationsTable, usersTable, followsTable } from "@workspace/db";
+import { z } from "zod";
 import {
   SendNotificationBody,
   GetNotificationsResponse,
@@ -225,6 +226,117 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
       createdAt: updated.createdAt,
     })
   );
+});
+
+// ── PATCH /notifications/:id/react ───────────────────────────────────────────
+// Set (or clear) an emoji / text reaction on a notification.
+
+const ReactBody = z.object({
+  reaction: z.string().max(20),
+});
+
+router.patch("/notifications/:id/react", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const body = ReactBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "reaction is required" }); return; }
+
+  const [updated] = await db
+    .update(filmNotificationsTable)
+    .set({ reaction: body.data.reaction, reactedAt: new Date(), isRead: true })
+    .where(
+      and(
+        eq(filmNotificationsTable.id, id),
+        eq(filmNotificationsTable.toUserId, clerkUserId)
+      )
+    )
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Notification not found." }); return; }
+
+  // Notify the sender that their recommendation was reacted to
+  const [[sender], [recipientWithToken]] = await Promise.all([
+    db.select({ username: usersTable.username, expoPushToken: usersTable.expoPushToken })
+      .from(usersTable).where(eq(usersTable.clerkId, updated.fromUserId)),
+    db.select({ username: usersTable.username })
+      .from(usersTable).where(eq(usersTable.clerkId, clerkUserId)),
+  ]);
+
+  const senderToken = sender?.expoPushToken;
+  if (senderToken && Expo.isExpoPushToken(senderToken)) {
+    try {
+      await expo.sendPushNotificationsAsync([{
+        to: senderToken,
+        title: "🎬 Reaction",
+        body: `${recipientWithToken?.username ?? "Someone"} reacted ${body.data.reaction} to your "${updated.filmTitle}" recommendation`,
+        data: { screen: "/(tabs)/notifications" },
+        sound: "default",
+      }]);
+    } catch { /* non-fatal */ }
+  }
+
+  res.json({ id: updated.id, reaction: updated.reaction, reactedAt: updated.reactedAt });
+});
+
+// ── GET /notifications/thread/:userId ─────────────────────────────────────────
+// All recommendations from a specific user to the authenticated user.
+
+router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const fromUserId = String(req.params.userId ?? "").trim();
+  if (!fromUserId) { res.status(400).json({ error: "userId is required" }); return; }
+
+  const [rows, [sender]] = await Promise.all([
+    db
+      .select({
+        id: filmNotificationsTable.id,
+        fromUserId: filmNotificationsTable.fromUserId,
+        toUserId: filmNotificationsTable.toUserId,
+        tmdbId: filmNotificationsTable.tmdbId,
+        filmTitle: filmNotificationsTable.filmTitle,
+        posterUrl: filmNotificationsTable.posterUrl,
+        isRead: filmNotificationsTable.isRead,
+        reaction: filmNotificationsTable.reaction,
+        reactedAt: filmNotificationsTable.reactedAt,
+        createdAt: filmNotificationsTable.createdAt,
+      })
+      .from(filmNotificationsTable)
+      .where(
+        and(
+          eq(filmNotificationsTable.fromUserId, fromUserId),
+          eq(filmNotificationsTable.toUserId, clerkUserId)
+        )
+      )
+      .orderBy(desc(filmNotificationsTable.createdAt)),
+
+    db
+      .select({ clerkId: usersTable.clerkId, username: usersTable.username, avatarUrl: usersTable.avatarUrl })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, fromUserId)),
+  ]);
+
+  // Mark all unread as read in the background
+  void db
+    .update(filmNotificationsTable)
+    .set({ isRead: true })
+    .where(
+      and(
+        eq(filmNotificationsTable.fromUserId, fromUserId),
+        eq(filmNotificationsTable.toUserId, clerkUserId),
+        eq(filmNotificationsTable.isRead, false)
+      )
+    );
+
+  res.json({
+    sender: sender ?? null,
+    notifications: rows.map((r) => ({
+      ...r,
+      fromUsername: sender?.username ?? null,
+      fromAvatarUrl: sender?.avatarUrl ?? null,
+    })),
+  });
 });
 
 export default router;

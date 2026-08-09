@@ -53,7 +53,7 @@ export default function SignUpScreen() {
       await signUp.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) return;
-          router.replace('/(tabs)/');
+          router.replace('/(tabs)');
         },
       });
     }
@@ -71,7 +71,7 @@ export default function SignUpScreen() {
           session: createdSessionId,
           navigate: async ({ session }) => {
             if (session?.currentTask) return;
-            router.replace('/(tabs)/');
+            router.replace('/(tabs)');
           },
         });
       }

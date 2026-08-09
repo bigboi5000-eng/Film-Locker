@@ -15,6 +15,8 @@ export const filmNotificationsTable = pgTable("film_notifications", {
   filmTitle: text("film_title").notNull(),
   posterUrl: text("poster_url").notNull(),
   isRead: boolean("is_read").notNull().default(false),
+  reaction: text("reaction"), // emoji or "Watched it!" — set by recipient
+  reactedAt: timestamp("reacted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
