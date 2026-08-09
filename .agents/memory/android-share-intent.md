@@ -25,6 +25,8 @@ yt-dlp must be installed as a Nix system dependency (`installSystemDependencies(
 
 ## Key implementation notes
 - Component must early-return (`if Platform.OS !== 'android') return null`) — web stub handles web but iOS also hits the native file.
-- `useEffect` must return cleanup: `ReceiveSharingIntent.clearReceivedFiles()` + `mountedRef.current = false` to prevent post-unmount setState.
+- **`useEffect` dependency MUST be `[]`**, not `[processLink]`. `mutateAsync` from useMutation creates a new reference every render; if it's a dep, cleanup (clearReceivedFiles) runs on every re-render, wiping the URL before the callback can read it. Hold processLink in a ref instead.
+- Do NOT call `clearReceivedFiles()` in the useEffect cleanup — only call it after the user dismisses the ShareFilmSheet. Calling it on cleanup wipes the intent before it's read.
+- `newArchEnabled: false` is required in app.json — the library's legacy NativeModules bridge is unreliable with the New Architecture interop layer on real devices.
 - Reset `handledRef.current = null` in the catch block so a failed share can be retried.
 - Shared URL from Instagram arrives as `files[0].weblink`; plain text shares use `files[0].text`.

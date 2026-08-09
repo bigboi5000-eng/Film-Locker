@@ -1,4 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+/**
+ * ShareIntentHandler — Android only.
+ *
+ * Mounted at the root layout. Listens for incoming share intents, calls the
+ * API in dry-run mode (no DB write) to identify the film, then shows
+ * ShareFilmSheet for user confirmation.
+ *
+ * Critical implementation notes:
+ *  - useEffect dependency is [] — processLink must be in a ref so the cleanup
+ *    (clearReceivedFiles) never runs on a re-render. If the dep were
+ *    [processLink], every re-render would call clearReceivedFiles() and wipe
+ *    the shared URL before the callback can read it.
+ *  - Requires newArchEnabled: false — react-native-receive-sharing-intent uses
+ *    the legacy NativeModules bridge which is unreliable with the New Architecture
+ *    interop layer on real devices.
+ */
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +22,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
+  Alert,
 } from 'react-native';
 import ReceiveSharingIntent from 'react-native-receive-sharing-intent';
 import {
@@ -19,15 +36,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export function ShareIntentHandler() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { mutateAsync: processLink, isPending } = useProcessSocialLink();
+  const { mutateAsync: processLink } = useProcessSocialLink();
+
+  // Hold processLink in a ref so the useEffect can reference the latest
+  // version without needing it as a dependency.
+  const processLinkRef = useRef(processLink);
+  useEffect(() => { processLinkRef.current = processLink; }, [processLink]);
+
+  const [isPending, setIsPending] = useState(false);
   const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
   const [showSheet, setShowSheet] = useState(false);
+
   // Track the last handled URL so we don't re-process on AppState resume.
   const handledRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    // Share intents are Android-only — .web.tsx stub handles web builds.
     if (Platform.OS !== 'android') return;
 
     mountedRef.current = true;
@@ -35,52 +59,74 @@ export function ShareIntentHandler() {
     ReceiveSharingIntent.getReceivedFiles(
       (files: Array<{ weblink?: string; text?: string; filePath?: string }>) => {
         if (!mountedRef.current) return;
+
         const file = files?.[0];
         if (!file) return;
 
-        // Prefer weblink (a shared URL), fall back to plain text.
+        // Prefer weblink (shared URL) over plain text.
         const url = file.weblink ?? file.text ?? file.filePath ?? null;
         if (!url) return;
-        if (handledRef.current === url) return; // already handling this share
+
+        // Deduplicate — app may receive the same intent on resume.
+        if (handledRef.current === url) return;
         handledRef.current = url;
 
-        // Dry-run: identify films without saving so the user confirms first.
-        processLink({ data: { url, dryRun: true } })
+        setIsPending(true);
+
+        // Call in dry-run mode: identify films without saving to DB.
+        processLinkRef.current({ data: { url, dryRun: true } })
           .then((data) => {
             if (!mountedRef.current) return;
             setMatches(data.matches ?? []);
             setShowSheet(true);
           })
           .catch(() => {
-            // Reset so the user can retry by sharing again.
+            if (!mountedRef.current) return;
+            Alert.alert(
+              'Could not identify film',
+              "Film Locker couldn't read this link. Try sharing again.",
+              [{ text: 'OK' }]
+            );
             handledRef.current = null;
+          })
+          .finally(() => {
+            if (mountedRef.current) setIsPending(false);
           });
       },
-      () => {
-        // Error reading intent — ignore silently.
+      (error: unknown) => {
+        // Receiving the intent failed at the native level — show an error so
+        // the user knows something went wrong rather than a silent blank screen.
+        if (!mountedRef.current) return;
+        Alert.alert(
+          'Share error',
+          "Film Locker couldn't read the shared content.",
+          [{ text: 'OK' }]
+        );
       },
+      // Must match the "scheme" in app.json
       'film-locker',
     );
 
     return () => {
       mountedRef.current = false;
-      ReceiveSharingIntent.clearReceivedFiles();
+      // Do NOT call clearReceivedFiles() here — doing so would wipe the
+      // shared URL if the component unmounts/remounts before the callback fires.
     };
-  }, [processLink]);
+    // Empty deps — intentional. processLink is accessed via ref.
+  }, []);
 
-  // Nothing to render on non-Android platforms.
-  if (Platform.OS !== 'android') return null;
-
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setShowSheet(false);
     setMatches([]);
     handledRef.current = null;
     ReceiveSharingIntent.clearReceivedFiles();
-  };
+  }, []);
+
+  if (Platform.OS !== 'android') return null;
 
   return (
     <>
-      {/* Processing overlay — shown while Gemini extracts films */}
+      {/* Processing overlay — shown while Gemini identifies the film */}
       <Modal transparent visible={isPending} animationType="fade" statusBarTranslucent>
         <View style={styles.overlayBackdrop}>
           <View

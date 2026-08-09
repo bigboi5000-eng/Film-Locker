@@ -26,13 +26,15 @@ const IG_RAPIDAPI_ENDPOINTS = [
   "get_reel_title.php",
 ] as const;
 
-type Platform = "instagram" | "tiktok" | "unknown";
+type Platform = "instagram" | "tiktok" | "youtube" | "facebook" | "unknown";
 
-function detectPlatform(url: string): Platform {
+export function detectPlatform(url: string): Platform {
   try {
     const { hostname } = new URL(url);
     if (hostname.includes("instagram.com")) return "instagram";
     if (hostname.includes("tiktok.com")) return "tiktok";
+    if (hostname.includes("youtube.com") || hostname === "youtu.be" || hostname.endsWith(".youtu.be")) return "youtube";
+    if (hostname.includes("facebook.com") || hostname.includes("fb.com") || hostname.includes("fb.watch")) return "facebook";
     return "unknown";
   } catch {
     return "unknown";
@@ -51,6 +53,71 @@ function requireApiKey(): string {
 /** Detect whether an Instagram URL is a reel or a regular post. */
 function igType(url: string): "post" | "reel" {
   return url.includes("/reel/") ? "reel" : "post";
+}
+
+/**
+ * Pull a <meta property="…" content="…"> value from raw HTML.
+ * Used for og:title / og:description on YouTube and Facebook public pages.
+ */
+function extractMetaContent(html: string, property: string): string | null {
+  const metaRe = /<meta\s[^>]+>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = metaRe.exec(html)) !== null) {
+    const tag = m[0];
+    if (!tag.toLowerCase().includes(property.toLowerCase())) continue;
+    const contentMatch =
+      tag.match(/content=["']([\s\S]*?)["']/i) ??
+      tag.match(/content=(["'])([\s\S]*?)\1/i);
+    const val = (contentMatch?.[2] ?? contentMatch?.[1] ?? "").trim();
+    if (val.length > 0) return val;
+  }
+  return null;
+}
+
+/**
+ * Generic og:title + og:description scraper.
+ *
+ * Works for any public page that embeds Open Graph meta tags —
+ * currently used for YouTube and Facebook. Both title and description
+ * are concatenated and sent to Gemini so it has maximum context.
+ *
+ * YouTube example:
+ *   og:title    = "Inception – Explained (2010)"
+ *   og:description = "Today we break down Christopher Nolan's Inception…"
+ *
+ * Facebook example (public posts):
+ *   og:title    = "Rotten Tomatoes"
+ *   og:description = "Score for The Godfather (1972): 98%"
+ */
+async function fetchPageOgCaption(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        // Googlebot UA often gets cleaner HTML from YouTube/Facebook than a
+        // mobile UA, and avoids consent-gate redirects on some Facebook pages.
+        "User-Agent":
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "Accept-Language": "en-US,en;q=0.9",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      redirect: "follow",
+    });
+
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    const title = extractMetaContent(html, "og:title");
+    const description = extractMetaContent(html, "og:description");
+
+    const parts = [title, description].filter(Boolean) as string[];
+    if (parts.length === 0) return null;
+
+    const combined = decodeHtmlEntities(parts.join("\n")).trim();
+    return combined.length > 0 ? combined : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Decode HTML entities so caption text is clean before sending to Gemini. */
@@ -288,6 +355,10 @@ export async function fetchSocialCaption(url: string): Promise<string | null> {
 
   if (platform === "instagram") return fetchInstagramCaption(url);
   if (platform === "tiktok") return fetchTikTokCaption(url);
+  // YouTube and Facebook: og:title + og:description from the public page.
+  // If the scrape fails or returns nothing, processSocialLink falls back to
+  // yt-dlp audio extraction automatically.
+  if (platform === "youtube" || platform === "facebook") return fetchPageOgCaption(url);
 
   return null;
 }
