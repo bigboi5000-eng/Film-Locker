@@ -21,8 +21,9 @@ import {
   GetTrendingResponse,
   GetNewReleasesResponse,
   SearchMoviesResponse,
+  GetRecommendationsResponse,
 } from "@workspace/api-zod";
-import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying } from "../../lib/tmdb";
+import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
@@ -52,6 +53,66 @@ router.get("/movies/new-releases", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "new-releases: TMDB fetch failed");
     res.status(502).json({ error: "Could not fetch new releases from TMDB" });
+  }
+});
+
+// GET /movies/recommendations
+router.get("/movies/recommendations", async (req, res): Promise<void> => {
+  try {
+    // Fetch the user's watchlist — prioritise recently-added and highest-rated
+    const watchlist = await db
+      .select()
+      .from(moviesTable)
+      .orderBy(desc(moviesTable.addedAt));
+
+    if (watchlist.length === 0) {
+      res.json(GetRecommendationsResponse.parse({ movies: [] }));
+      return;
+    }
+
+    const savedTmdbIds = new Set(watchlist.map((m) => m.tmdbId));
+
+    // Score each saved film: base = 1, +1 per star of rating, +2 if watched
+    // Take the top 5 as seeds so we don't hammer the TMDB API
+    const scored = watchlist
+      .map((m) => ({
+        tmdbId: m.tmdbId,
+        score: 1 + (m.rating ?? 0) + (m.isWatched ? 2 : 0),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    // Fetch recommendations for each seed in parallel; tolerate individual failures
+    const results = await Promise.allSettled(
+      scored.map((s) => fetchTmdbRecommendations(s.tmdbId))
+    );
+
+    const seen = new Set<number>();
+    const recommendations: Array<{
+      tmdbId: number;
+      title: string;
+      releaseYear: string;
+      posterUrl: string;
+      overview: string;
+    }> = [];
+
+    for (const result of results) {
+      if (result.status === "rejected") continue;
+      for (const movie of result.value) {
+        // Skip films already in the locker or already in our deduped list
+        if (savedTmdbIds.has(movie.tmdbId)) continue;
+        if (seen.has(movie.tmdbId)) continue;
+        seen.add(movie.tmdbId);
+        recommendations.push(movie);
+      }
+    }
+
+    // Sort by TMDB popularity (already sorted per-seed; interleaving may lose order — re-sort isn't
+    // possible without storing popularity separately, so first-seen order is fine)
+    res.json(GetRecommendationsResponse.parse({ movies: recommendations.slice(0, 20) }));
+  } catch (err) {
+    req.log.error({ err }, "recommendations: failed");
+    res.status(502).json({ error: "Could not fetch recommendations" });
   }
 });
 

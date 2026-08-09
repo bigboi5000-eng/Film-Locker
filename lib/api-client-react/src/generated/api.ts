@@ -33,6 +33,7 @@ import type {
   PatchWatchedBody,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
+  RecommendationsResponse,
   SearchMoviesParams,
   SearchMoviesResponse,
   TmdbMovieDetailsResponse,
@@ -132,6 +133,85 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getHealthCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRecommendationsUrl = () => {
+
+
+
+
+  return `/api/movies/recommendations`
+}
+
+/**
+ * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
+
+ */
+export const getRecommendations = async ( options?: RequestInit): Promise<RecommendationsResponse> => {
+
+  return customFetch<RecommendationsResponse>(getGetRecommendationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecommendationsQueryKey = () => {
+    return [
+    `/api/movies/recommendations`
+    ] as const;
+    }
+
+
+export const getGetRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecommendationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecommendations>>> = ({ signal }) => getRecommendations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getRecommendations>>>
+export type GetRecommendationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
+
+ */
+
+export function useGetRecommendations<TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRecommendationsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

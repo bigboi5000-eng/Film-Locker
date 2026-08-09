@@ -16,6 +16,7 @@ import { Image } from 'expo-image';
 import {
   useGetTrending,
   useGetNewReleases,
+  useGetRecommendations,
   useListMovies,
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
@@ -113,15 +114,26 @@ export default function HomeScreen() {
   const { data: lockerData } = useListMovies();
   const savedTmdbIds = new Set(lockerData?.movies.map((m) => m.tmdbId) ?? []);
 
+  const hasWatchlist = (lockerData?.movies.length ?? 0) > 0;
+
+  const {
+    data: recommendationsData,
+    isLoading: recommendationsLoading,
+    refetch: refetchRecommendations,
+    isRefetching: recommendationsRefetching,
+  } = useGetRecommendations();
+
   const trending = trendingData?.movies ?? [];
   const newReleases = newReleasesData?.movies ?? [];
+  const recommendations = recommendationsData?.movies ?? [];
 
-  const isRefreshing = trendingRefetching || newRefetching;
+  const isRefreshing = trendingRefetching || newRefetching || recommendationsRefetching;
 
   const handleRefresh = useCallback(() => {
     refetchTrending();
     refetchNew();
-  }, [refetchTrending, refetchNew]);
+    if (hasWatchlist) refetchRecommendations();
+  }, [refetchTrending, refetchNew, refetchRecommendations, hasWatchlist]);
 
   // Find the saved version of the selected movie (if it exists in the locker)
   const savedVersion = selectedMovie
@@ -192,6 +204,29 @@ export default function HomeScreen() {
             />
           )}
         </View>
+
+        {/* Recommended for You — only shown when the locker has films */}
+        {hasWatchlist && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>✨ Recommended for You</Text>
+            </View>
+            {recommendationsLoading ? (
+              <SectionSkeleton />
+            ) : recommendations.length === 0 ? null : (
+              <FlatList
+                data={recommendations}
+                horizontal
+                keyExtractor={(item) => `rec-${item.tmdbId}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+                renderItem={({ item }) => (
+                  <DiscoverCard movie={item} onPress={setSelectedMovie} />
+                )}
+              />
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Film detail modal */}

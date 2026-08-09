@@ -27,6 +27,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /movies/recommendations:
+    get:
+      operationId: getRecommendations
+      tags: [movies]
+      summary: >
+        Personalised recommendations based on the user's watchlist.
+        Calls TMDB recommendations for each saved film, deduplicates,
+        and filters out already-saved films. Returns an empty list when
+        the watchlist is empty.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationsResponse"
+
   /movies/trending:
     get:
       operationId: getTrending
@@ -467,6 +484,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TmdbMovieCard"
+
+    RecommendationsResponse:
+      type: object
+      properties:
+        movies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TmdbMovieCard"
+      required:
+        - movies
 
     TrendingResponse:
       type: object

@@ -99,6 +99,10 @@ export interface SearchMoviesResponse {
   movies: TmdbMovieCard[];
 }
 
+export interface RecommendationsResponse {
+  movies: TmdbMovieCard[];
+}
+
 export interface TrendingResponse {
   movies: TmdbMovieCard[];
 }

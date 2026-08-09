@@ -267,3 +267,27 @@ export async function fetchNowPlaying(): Promise<TmdbCandidate[]> {
     .slice(0, 20)
     .map(movieToCandidate);
 }
+
+/**
+ * Fetch TMDB recommendations for a given movie (the "More like this" list).
+ * Returns up to 20 poster-bearing results sorted by popularity.
+ */
+export async function fetchTmdbRecommendations(
+  tmdbId: number
+): Promise<TmdbCandidate[]> {
+  const apiKey = getApiKey();
+  const res = await fetch(
+    `${TMDB_BASE}/movie/${tmdbId}/recommendations?api_key=${apiKey}&language=en-US&page=1`
+  );
+  if (!res.ok) {
+    // A 404 here just means TMDB doesn't know this ID — treat as empty
+    if (res.status === 404) return [];
+    throw new Error(`TMDB recommendations failed for ${tmdbId}: ${res.status}`);
+  }
+  const data = (await res.json()) as TmdbSearchResponse;
+  return data.results
+    .filter((m) => m.poster_path)
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, 20)
+    .map(movieToCandidate);
+}

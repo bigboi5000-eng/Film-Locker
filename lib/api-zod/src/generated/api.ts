@@ -18,6 +18,21 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
+
+ */
+export const GetRecommendationsResponse = zod.object({
+  "movies": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string()
+}))
+})
+
+
+/**
  * @summary Fetch trending movies this week from TMDB
  */
 export const GetTrendingResponse = zod.object({
