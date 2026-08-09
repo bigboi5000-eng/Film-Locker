@@ -398,3 +398,120 @@ export const DeleteMovieParams = zod.object({
 export const DeleteMovieResponse = zod.void()
 
 
+/**
+ * @summary Get the average community rating and count for a film
+ */
+export const GetFilmCommunityScoreParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const getFilmCommunityScoreResponseUserRatingMax = 5;
+
+
+
+export const GetFilmCommunityScoreResponse = zod.object({
+  "tmdbId": zod.number(),
+  "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
+  "count": zod.number().describe('Total number of community ratings'),
+  "userRating": zod.number().min(1).max(getFilmCommunityScoreResponseUserRatingMax).nullish().describe('The authenticated user\'s own community rating (null if not rated or not logged in)')
+})
+
+
+/**
+ * @summary Set or update the authenticated user's community rating for a film
+ */
+export const SetFilmCommunityRatingParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const setFilmCommunityRatingBodyRatingMax = 5;
+
+
+
+export const SetFilmCommunityRatingBody = zod.object({
+  "rating": zod.number().min(1).max(setFilmCommunityRatingBodyRatingMax)
+})
+
+export const setFilmCommunityRatingResponseUserRatingMax = 5;
+
+
+
+export const SetFilmCommunityRatingResponse = zod.object({
+  "tmdbId": zod.number(),
+  "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
+  "count": zod.number().describe('Total number of community ratings'),
+  "userRating": zod.number().min(1).max(setFilmCommunityRatingResponseUserRatingMax).nullish().describe('The authenticated user\'s own community rating (null if not rated or not logged in)')
+})
+
+
+/**
+ * @summary Get paginated public comments for a film
+ */
+export const GetFilmCommentsParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const getFilmCommentsQueryPageDefault = 1;
+
+
+
+export const GetFilmCommentsQueryParams = zod.object({
+  "page": zod.coerce.number().min(1).default(getFilmCommentsQueryPageDefault)
+})
+
+export const GetFilmCommentsResponse = zod.object({
+  "comments": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "userId": zod.string().describe('Clerk user ID of the author'),
+  "username": zod.string().nullish().describe('Display username of the author'),
+  "avatarUrl": zod.string().nullish(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "isOwn": zod.boolean().describe('True when the authenticated user authored this comment')
+})),
+  "page": zod.number(),
+  "hasMore": zod.boolean()
+})
+
+
+/**
+ * @summary Post a new comment on a film (auth required)
+ */
+export const PostFilmCommentParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const postFilmCommentBodyBodyMax = 280;
+
+
+
+export const PostFilmCommentBody = zod.object({
+  "body": zod.string().min(1).max(postFilmCommentBodyBodyMax)
+})
+
+export const PostFilmCommentResponse = zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "userId": zod.string().describe('Clerk user ID of the author'),
+  "username": zod.string().nullish().describe('Display username of the author'),
+  "avatarUrl": zod.string().nullish(),
+  "body": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "isOwn": zod.boolean().describe('True when the authenticated user authored this comment')
+})
+
+
+/**
+ * @summary Delete own comment (auth required)
+ */
+export const DeleteFilmCommentParams = zod.object({
+  "tmdbId": zod.coerce.number(),
+  "id": zod.coerce.number()
+})
+
+export const DeleteFilmCommentResponse = zod.void()
+
+

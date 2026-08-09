@@ -272,6 +272,119 @@ paths:
         "204":
           description: Movie removed
 
+  /films/{tmdbId}/community-score:
+    get:
+      operationId: getFilmCommunityScore
+      tags: [movies]
+      summary: Get the average community rating and count for a film
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Community score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmCommunityScore"
+
+  /films/{tmdbId}/community-rating:
+    post:
+      operationId: setFilmCommunityRating
+      tags: [movies]
+      summary: Set or update the authenticated user's community rating for a film
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCommunityRatingBody"
+      responses:
+        "200":
+          description: Rating saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmCommunityScore"
+
+  /films/{tmdbId}/comments:
+    get:
+      operationId: getFilmComments
+      tags: [movies]
+      summary: Get paginated public comments for a film
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: Comments list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmCommentsResponse"
+    post:
+      operationId: postFilmComment
+      tags: [movies]
+      summary: Post a new comment on a film (auth required)
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostCommentBody"
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilmComment"
+
+  /films/{tmdbId}/comments/{id}:
+    delete:
+      operationId: deleteFilmComment
+      tags: [movies]
+      summary: Delete own comment (auth required)
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Comment deleted
+
 components:
   schemas:
     HealthStatus:
@@ -648,4 +761,101 @@ components:
           maximum: 5
       required:
         - rating
+
+    FilmCommunityScore:
+      type: object
+      properties:
+        tmdbId:
+          type: integer
+        average:
+          type: number
+          format: float
+          nullable: true
+          description: Average star rating across all community ratings, null when no ratings exist
+        count:
+          type: integer
+          description: Total number of community ratings
+        userRating:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+          description: The authenticated user's own community rating (null if not rated or not logged in)
+      required:
+        - tmdbId
+        - average
+        - count
+
+    SetCommunityRatingBody:
+      type: object
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+      required:
+        - rating
+
+    FilmComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        tmdbId:
+          type: integer
+        userId:
+          type: string
+          description: Clerk user ID of the author
+        username:
+          type: string
+          nullable: true
+          description: Display username of the author
+        avatarUrl:
+          type: string
+          nullable: true
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        isOwn:
+          type: boolean
+          description: True when the authenticated user authored this comment
+      required:
+        - id
+        - tmdbId
+        - userId
+        - body
+        - createdAt
+        - updatedAt
+        - isOwn
+
+    FilmCommentsResponse:
+      type: object
+      properties:
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilmComment"
+        page:
+          type: integer
+        hasMore:
+          type: boolean
+      required:
+        - comments
+        - page
+        - hasMore
+
+    PostCommentBody:
+      type: object
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 280
+      required:
+        - body
 

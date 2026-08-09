@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,25 +11,37 @@ import {
   Alert,
   Platform,
   Linking,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { useAuth } from '@clerk/expo';
 import {
   useGetMovieDetails,
   usePatchWatched,
   usePatchRating,
   useAddMovie,
+  useGetFilmCommunityScore,
+  useSetFilmCommunityRating,
+  useGetFilmComments,
+  usePostFilmComment,
+  useDeleteFilmComment,
+  getGetFilmCommunityScoreQueryKey,
+  getGetFilmCommentsQueryKey,
   getListMoviesQueryKey,
   type Movie,
   type TmdbMovieCard,
   type WatchProvider,
+  type FilmComment,
 } from '@workspace/api-client-react';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
+const COMMENT_MAX = 280;
 
 interface FilmDetailModalProps {
   visible: boolean;
@@ -183,6 +195,422 @@ const tagStyles = StyleSheet.create({
   text: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#0066FF' },
 });
 
+// ── Community Stars (read-only display) ───────────────────────────────────────
+
+function CommunityStars({ value }: { value: number | null | undefined }) {
+  const filled = Math.round(value ?? 0);
+  return (
+    <View style={{ flexDirection: 'row' }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Ionicons
+          key={n}
+          name={filled >= n ? 'star' : 'star-outline'}
+          size={18}
+          color="#FF8C00"
+          style={{ marginRight: 2 }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ── Comment row ────────────────────────────────────────────────────────────────
+
+function CommentRow({
+  comment,
+  onDelete,
+}: {
+  comment: FilmComment;
+  onDelete: (id: number) => void;
+}) {
+  const initials = (comment.username ?? comment.userId.slice(0, 2)).slice(0, 2).toUpperCase();
+  const timeAgo = formatRelative(new Date(comment.createdAt));
+
+  return (
+    <View style={commentStyles.row}>
+      {/* Avatar */}
+      {comment.avatarUrl ? (
+        <Image
+          source={{ uri: comment.avatarUrl }}
+          style={commentStyles.avatar}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[commentStyles.avatar, commentStyles.avatarFallback]}>
+          <Text style={commentStyles.avatarText}>{initials}</Text>
+        </View>
+      )}
+
+      {/* Body */}
+      <View style={{ flex: 1 }}>
+        <View style={commentStyles.metaRow}>
+          <Text style={commentStyles.username}>
+            {comment.username ?? 'Anonymous'}
+          </Text>
+          <Text style={commentStyles.time}>{timeAgo}</Text>
+          {comment.isOwn && (
+            <TouchableOpacity
+              onPress={() => onDelete(comment.id)}
+              hitSlop={10}
+              style={commentStyles.deleteBtn}
+            >
+              <Ionicons name="trash-outline" size={14} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={commentStyles.body}>{comment.body}</Text>
+      </View>
+    </View>
+  );
+}
+
+function formatRelative(date: Date): string {
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString();
+}
+
+const commentStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  avatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
+  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  username: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  deleteBtn: { marginLeft: 'auto' },
+  body: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#374151', lineHeight: 20 },
+});
+
+// ── Community section ─────────────────────────────────────────────────────────
+
+function CommunitySection({
+  tmdbId,
+  isLoggedIn,
+}: {
+  tmdbId: number;
+  isLoggedIn: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [commentText, setCommentText] = useState('');
+  const [page, setPage] = useState(1);
+  // Accumulated comments across all loaded pages
+  const [allComments, setAllComments] = useState<FilmComment[]>([]);
+
+  const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId);
+  const { data: commentsData, isLoading: commentsLoading } = useGetFilmComments(tmdbId, { page });
+  const { mutateAsync: submitRating, isPending: ratingPending } = useSetFilmCommunityRating();
+  const { mutateAsync: postComment, isPending: commentPending } = usePostFilmComment();
+  const { mutateAsync: deleteComment } = useDeleteFilmComment();
+
+  // Append newly fetched page into accumulated list (dedup by id)
+  React.useEffect(() => {
+    if (!commentsData?.comments) return;
+    setAllComments((prev) => {
+      const existingIds = new Set(prev.map((c) => c.id));
+      const fresh = commentsData.comments.filter((c) => !existingIds.has(c.id));
+      return page === 1 ? commentsData.comments : [...prev, ...fresh];
+    });
+  }, [commentsData, page]);
+
+  const invalidateScore = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: getGetFilmCommunityScoreQueryKey(tmdbId) });
+  }, [queryClient, tmdbId]);
+
+  const resetComments = useCallback(async () => {
+    setPage(1);
+    setAllComments([]);
+    await queryClient.invalidateQueries({ queryKey: getGetFilmCommentsQueryKey(tmdbId) });
+  }, [queryClient, tmdbId]);
+
+  const handleCommunityRating = useCallback(
+    async (n: number) => {
+      if (!isLoggedIn) {
+        Alert.alert('Sign in required', 'Please sign in to rate this film.');
+        return;
+      }
+      if (Platform.OS !== 'web') Haptics.selectionAsync();
+      try {
+        await submitRating({ tmdbId, data: { rating: n } });
+        await invalidateScore();
+      } catch {
+        Alert.alert('Error', 'Could not save your rating.');
+      }
+    },
+    [isLoggedIn, submitRating, tmdbId, invalidateScore]
+  );
+
+  const handlePostComment = useCallback(async () => {
+    const text = commentText.trim();
+    if (!text) return;
+    try {
+      await postComment({ tmdbId, data: { body: text } });
+      setCommentText('');
+      await resetComments();
+    } catch {
+      Alert.alert('Error', 'Could not post your comment.');
+    }
+  }, [commentText, postComment, tmdbId, resetComments]);
+
+  const handleDeleteComment = useCallback(
+    async (id: number) => {
+      Alert.alert('Delete comment', 'Remove this comment?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteComment({ tmdbId, id });
+              await resetComments();
+            } catch {
+              Alert.alert('Error', 'Could not delete comment.');
+            }
+          },
+        },
+      ]);
+    },
+    [deleteComment, tmdbId, resetComments]
+  );
+
+  const userRating = score?.userRating ?? null;
+  const average = score?.average ?? null;
+  const ratingCount = score?.count ?? 0;
+  const comments = allComments;
+  const hasMore = commentsData?.hasMore ?? false;
+
+  return (
+    <View style={communityStyles.container}>
+      {/* Section header */}
+      <View style={communityStyles.headerRow}>
+        <Ionicons name="people-outline" size={16} color="#111827" style={{ marginRight: 6 }} />
+        <Text style={communityStyles.title}>COMMUNITY</Text>
+      </View>
+
+      {/* Aggregate score */}
+      <View style={communityStyles.scoreRow}>
+        {scoreLoading ? (
+          <ActivityIndicator size="small" color="#0066FF" />
+        ) : (
+          <>
+            <CommunityStars value={average} />
+            <Text style={communityStyles.scoreText}>
+              {average !== null ? average.toFixed(1) : '—'} / 5
+            </Text>
+            <Text style={communityStyles.ratingCount}>
+              ({ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'})
+            </Text>
+          </>
+        )}
+      </View>
+
+      {/* User's community rating */}
+      <View style={communityStyles.userRatingRow}>
+        <Text style={communityStyles.userRatingLabel}>Your community rating:</Text>
+        <StarRating
+          value={userRating}
+          onChange={handleCommunityRating}
+        />
+        {ratingPending && (
+          <ActivityIndicator size="small" color="#0066FF" style={{ marginLeft: 8 }} />
+        )}
+      </View>
+
+      {/* Divider */}
+      <View style={communityStyles.divider} />
+
+      {/* Comment compose box */}
+      {isLoggedIn ? (
+        <View style={communityStyles.compose}>
+          <TextInput
+            style={communityStyles.input}
+            placeholder="Share your thoughts… (280 chars)"
+            placeholderTextColor="#9CA3AF"
+            value={commentText}
+            onChangeText={(t) => setCommentText(t.slice(0, COMMENT_MAX))}
+            multiline
+            maxLength={COMMENT_MAX}
+            textAlignVertical="top"
+          />
+          <View style={communityStyles.composeFooter}>
+            <Text style={communityStyles.charCount}>
+              {commentText.length}/{COMMENT_MAX}
+            </Text>
+            <TouchableOpacity
+              style={[
+                communityStyles.postBtn,
+                (!commentText.trim() || commentPending) && communityStyles.postBtnDisabled,
+              ]}
+              onPress={handlePostComment}
+              disabled={!commentText.trim() || commentPending}
+              activeOpacity={0.8}
+            >
+              {commentPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={communityStyles.postBtnText}>Post</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <Text style={communityStyles.signInHint}>
+          Sign in to leave a rating or comment.
+        </Text>
+      )}
+
+      {/* Disclaimer */}
+      <Text style={communityStyles.disclaimer}>
+        These are user opinions, not editorial reviews.
+      </Text>
+
+      {/* Comments list */}
+      {commentsLoading ? (
+        <ActivityIndicator size="small" color="#0066FF" style={{ marginTop: 12 }} />
+      ) : comments.length === 0 ? (
+        <Text style={communityStyles.emptyText}>
+          No comments yet. Be the first to share your thoughts!
+        </Text>
+      ) : (
+        <>
+          {comments.map((c) => (
+            <CommentRow key={c.id} comment={c} onDelete={handleDeleteComment} />
+          ))}
+          {hasMore && (
+            <TouchableOpacity
+              style={communityStyles.loadMoreBtn}
+              onPress={() => setPage((p) => p + 1)}
+            >
+              <Text style={communityStyles.loadMoreText}>Load more comments</Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+const communityStyles = StyleSheet.create({
+  container: {
+    marginTop: 4,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  title: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
+    color: '#111827',
+    letterSpacing: 0.5,
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  scoreText: {
+    fontSize: 20,
+    fontFamily: 'Inter_700Bold',
+    color: '#111827',
+  },
+  ratingCount: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#6B7280',
+  },
+  userRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  userRatingLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#6B7280',
+  },
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginBottom: 16 },
+  compose: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    marginBottom: 10,
+  },
+  input: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: '#111827',
+    minHeight: 60,
+    maxHeight: 120,
+  },
+  composeFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  charCount: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#9CA3AF',
+  },
+  postBtn: {
+    backgroundColor: '#0066FF',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  postBtnDisabled: { backgroundColor: '#93C5FD' },
+  postBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  signInHint: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#6B7280',
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  disclaimer: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: '#9CA3AF',
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  loadMoreBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: '#0066FF',
+  },
+});
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function FilmDetailModal({
@@ -225,6 +653,10 @@ export function FilmDetailModal({
   const displayLanguage = details?.language ?? '';
   const displayProviders = details?.watchProviders ?? [];
   const displayOverview = details?.overview || overview;
+
+  // Use Clerk auth state — works for both saved and unsaved films
+  const { isSignedIn } = useAuth();
+  const isLoggedIn = Boolean(isSignedIn);
 
   const handleRating = useCallback(
     async (n: number) => {
@@ -289,181 +721,191 @@ export function FilmDetailModal({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={[styles.root, { paddingTop: insets.top }]}>
-        {/* Close button */}
-        <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
-          <Ionicons name="close" size={22} color="#111827" />
-        </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={[styles.root, { paddingTop: insets.top }]}>
+          {/* Close button */}
+          <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+            <Ionicons name="close" size={22} color="#111827" />
+          </TouchableOpacity>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
-        >
-          {/* Poster */}
-          <View style={styles.posterContainer}>
-            <Image
-              source={{ uri: posterUrl }}
-              style={styles.poster}
-              contentFit="cover"
-              transition={300}
-              placeholder={require('@/assets/images/icon.png')}
-            />
-            <View style={styles.posterOverlay}>
-              <Text style={styles.posterTitle} numberOfLines={2}>{title}</Text>
-              <Text style={styles.posterYear}>{releaseYear}</Text>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Poster */}
+            <View style={styles.posterContainer}>
+              <Image
+                source={{ uri: posterUrl }}
+                style={styles.poster}
+                contentFit="cover"
+                transition={300}
+                placeholder={require('@/assets/images/icon.png')}
+              />
+              <View style={styles.posterOverlay}>
+                <Text style={styles.posterTitle} numberOfLines={2}>{title}</Text>
+                <Text style={styles.posterYear}>{releaseYear}</Text>
+              </View>
             </View>
-          </View>
 
-          {/* Content */}
-          <View style={styles.content}>
+            {/* Content */}
+            <View style={styles.content}>
 
-            {/* Genre tags */}
-            {displayGenres.length > 0 && (
-              <View style={styles.tagRow}>
-                {displayGenres.map((g) => <GenreTag key={g} label={g} />)}
-              </View>
-            )}
-
-            {/* Director + Language */}
-            {isLoading && (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color="#0066FF" />
-                <Text style={styles.loadingText}>Loading details…</Text>
-              </View>
-            )}
-
-            {displayDirector ? (
-              <View style={styles.metaRow}>
-                <Ionicons name="film-outline" size={15} color="#6B7280" style={styles.metaIcon} />
-                <Text style={styles.metaLabel}>Director</Text>
-                <Text style={styles.metaValue}>{displayDirector}</Text>
-              </View>
-            ) : null}
-
-            {displayLanguage ? (
-              <View style={styles.metaRow}>
-                <Ionicons name="language-outline" size={15} color="#6B7280" style={styles.metaIcon} />
-                <Text style={styles.metaLabel}>Language</Text>
-                <Text style={styles.metaValue}>{displayLanguage}</Text>
-              </View>
-            ) : null}
-
-            {/* Lead Actors */}
-            {displayCast.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Lead Actors</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8 }}
-                >
-                  {displayCast.slice(0, 8).map((name) => (
-                    <View key={name} style={styles.actorPill}>
-                      <Text style={styles.actorName}>{name}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Where to Watch */}
-            {displayProviders.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Where to Watch</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 4 }}
-                >
-                  {displayProviders.map((p) => (
-                    <ProviderPill
-                      key={p.provider_id}
-                      provider={p}
-                      movieTitle={details?.title ?? title}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Synopsis */}
-            {displayOverview ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Synopsis</Text>
-                <Text style={styles.synopsisText}>{displayOverview}</Text>
-              </View>
-            ) : null}
-
-            {/* Divider */}
-            <View style={styles.divider} />
-
-            {/* Actions (only for saved movies) */}
-            {savedMovie ? (
-              <>
-                {/* Star rating */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Your Rating</Text>
-                  <StarRating value={currentRating} onChange={handleRating} />
-                  {isRatingPending && (
-                    <Text style={styles.savingText}>Saving…</Text>
-                  )}
+              {/* Genre tags */}
+              {displayGenres.length > 0 && (
+                <View style={styles.tagRow}>
+                  {displayGenres.map((g) => <GenreTag key={g} label={g} />)}
                 </View>
+              )}
 
-                {/* Mark as Watched / Move to Watchlist */}
+              {/* Director + Language */}
+              {isLoading && (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color="#0066FF" />
+                  <Text style={styles.loadingText}>Loading details…</Text>
+                </View>
+              )}
+
+              {displayDirector ? (
+                <View style={styles.metaRow}>
+                  <Ionicons name="film-outline" size={15} color="#6B7280" style={styles.metaIcon} />
+                  <Text style={styles.metaLabel}>Director</Text>
+                  <Text style={styles.metaValue}>{displayDirector}</Text>
+                </View>
+              ) : null}
+
+              {displayLanguage ? (
+                <View style={styles.metaRow}>
+                  <Ionicons name="language-outline" size={15} color="#6B7280" style={styles.metaIcon} />
+                  <Text style={styles.metaLabel}>Language</Text>
+                  <Text style={styles.metaValue}>{displayLanguage}</Text>
+                </View>
+              ) : null}
+
+              {/* Lead Actors */}
+              {displayCast.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Lead Actors</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8 }}
+                  >
+                    {displayCast.slice(0, 8).map((name) => (
+                      <View key={name} style={styles.actorPill}>
+                        <Text style={styles.actorName}>{name}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Where to Watch */}
+              {displayProviders.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Where to Watch</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 4 }}
+                  >
+                    {displayProviders.map((p) => (
+                      <ProviderPill
+                        key={p.provider_id}
+                        provider={p}
+                        movieTitle={details?.title ?? title}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Synopsis */}
+              {displayOverview ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Synopsis</Text>
+                  <Text style={styles.synopsisText}>{displayOverview}</Text>
+                </View>
+              ) : null}
+
+              {/* Divider */}
+              <View style={styles.divider} />
+
+              {/* Actions (only for saved movies) */}
+              {savedMovie ? (
+                <>
+                  {/* Star rating */}
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Your Rating</Text>
+                    <StarRating value={currentRating} onChange={handleRating} />
+                    {isRatingPending && (
+                      <Text style={styles.savingText}>Saving…</Text>
+                    )}
+                  </View>
+
+                  {/* Mark as Watched / Move to Watchlist */}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      currentWatched
+                        ? styles.actionButtonSecondary
+                        : styles.actionButtonPrimary,
+                    ]}
+                    onPress={handleToggleWatched}
+                    disabled={isWatchingPending}
+                    activeOpacity={0.85}
+                  >
+                    {isWatchingPending ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name={currentWatched ? 'bookmark-outline' : 'checkmark-circle-outline'}
+                          size={20}
+                          color="#FFFFFF"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.actionButtonText}>
+                          {currentWatched ? 'Move to Watchlist' : 'Mark as Watched'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                /* Add to Watchlist (for home screen movies) */
                 <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    currentWatched
-                      ? styles.actionButtonSecondary
-                      : styles.actionButtonPrimary,
-                  ]}
-                  onPress={handleToggleWatched}
-                  disabled={isWatchingPending}
+                  style={[styles.actionButton, styles.actionButtonPrimary]}
+                  onPress={handleAddToWatchlist}
+                  disabled={isAddingPending}
                   activeOpacity={0.85}
                 >
-                  {isWatchingPending ? (
+                  {isAddingPending ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
                     <>
                       <Ionicons
-                        name={currentWatched ? 'bookmark-outline' : 'checkmark-circle-outline'}
+                        name="bookmark-outline"
                         size={20}
                         color="#FFFFFF"
                         style={{ marginRight: 8 }}
                       />
-                      <Text style={styles.actionButtonText}>
-                        {currentWatched ? 'Move to Watchlist' : 'Mark as Watched'}
-                      </Text>
+                      <Text style={styles.actionButtonText}>Add to Watchlist</Text>
                     </>
                   )}
                 </TouchableOpacity>
-              </>
-            ) : (
-              /* Add to Watchlist (for home screen movies) */
-              <TouchableOpacity
-                style={[styles.actionButton, styles.actionButtonPrimary]}
-                onPress={handleAddToWatchlist}
-                disabled={isAddingPending}
-                activeOpacity={0.85}
-              >
-                {isAddingPending ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="bookmark-outline"
-                      size={20}
-                      color="#FFFFFF"
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text style={styles.actionButtonText}>Add to Watchlist</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-        </ScrollView>
-      </View>
+              )}
+
+              {/* ── Community Section ── */}
+              <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
+
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

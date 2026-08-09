@@ -176,10 +176,68 @@ export interface PatchRatingBody {
   rating: number | null;
 }
 
+export interface FilmCommunityScore {
+  tmdbId: number;
+  /** Average star rating across all community ratings, null when no ratings exist */
+  average: number | null;
+  /** Total number of community ratings */
+  count: number;
+  /**
+     * The authenticated user's own community rating (null if not rated or not logged in)
+     * @minimum 1
+     * @maximum 5
+     */
+  userRating?: number | null;
+}
+
+export interface SetCommunityRatingBody {
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+}
+
+export interface FilmComment {
+  id: number;
+  tmdbId: number;
+  /** Clerk user ID of the author */
+  userId: string;
+  /** Display username of the author */
+  username?: string | null;
+  avatarUrl?: string | null;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  /** True when the authenticated user authored this comment */
+  isOwn: boolean;
+}
+
+export interface FilmCommentsResponse {
+  comments: FilmComment[];
+  page: number;
+  hasMore: boolean;
+}
+
+export interface PostCommentBody {
+  /**
+     * @minLength 1
+     * @maxLength 280
+     */
+  body: string;
+}
+
 export type SearchMoviesParams = {
 /**
  * @minLength 1
  */
 q: string;
+};
+
+export type GetFilmCommentsParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
 };
 

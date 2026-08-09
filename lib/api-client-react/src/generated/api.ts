@@ -23,6 +23,10 @@ import type {
   AddMovieBody,
   AiExtractBody,
   AiExtractResponse,
+  FilmComment,
+  FilmCommentsResponse,
+  FilmCommunityScore,
+  GetFilmCommentsParams,
   HealthStatus,
   ListMoviesResponse,
   Movie,
@@ -31,11 +35,13 @@ import type {
   ParseCaptionResponse,
   PatchRatingBody,
   PatchWatchedBody,
+  PostCommentBody,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
   RecommendationsResponse,
   SearchMoviesParams,
   SearchMoviesResponse,
+  SetCommunityRatingBody,
   TmdbMovieDetailsResponse,
   TrendingResponse
 } from './api.schemas';
@@ -1112,5 +1118,385 @@ export const useDeleteMovie = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteMovieMutationOptions(options));
+    }
+
+export const getGetFilmCommunityScoreUrl = (tmdbId: number,) => {
+
+
+
+
+  return `/api/films/${tmdbId}/community-score`
+}
+
+/**
+ * @summary Get the average community rating and count for a film
+ */
+export const getFilmCommunityScore = async (tmdbId: number, options?: RequestInit): Promise<FilmCommunityScore> => {
+
+  return customFetch<FilmCommunityScore>(getGetFilmCommunityScoreUrl(tmdbId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFilmCommunityScoreQueryKey = (tmdbId: number,) => {
+    return [
+    `/api/films/${tmdbId}/community-score`
+    ] as const;
+    }
+
+
+export const getGetFilmCommunityScoreQueryOptions = <TData = Awaited<ReturnType<typeof getFilmCommunityScore>>, TError = ErrorType<unknown>>(tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilmCommunityScore>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFilmCommunityScoreQueryKey(tmdbId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFilmCommunityScore>>> = ({ signal }) => getFilmCommunityScore(tmdbId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tmdbId !== null && tmdbId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFilmCommunityScore>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFilmCommunityScoreQueryResult = NonNullable<Awaited<ReturnType<typeof getFilmCommunityScore>>>
+export type GetFilmCommunityScoreQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the average community rating and count for a film
+ */
+
+export function useGetFilmCommunityScore<TData = Awaited<ReturnType<typeof getFilmCommunityScore>>, TError = ErrorType<unknown>>(
+ tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilmCommunityScore>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFilmCommunityScoreQueryOptions(tmdbId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetFilmCommunityRatingUrl = (tmdbId: number,) => {
+
+
+
+
+  return `/api/films/${tmdbId}/community-rating`
+}
+
+/**
+ * @summary Set or update the authenticated user's community rating for a film
+ */
+export const setFilmCommunityRating = async (tmdbId: number,
+    setCommunityRatingBody: SetCommunityRatingBody, options?: RequestInit): Promise<FilmCommunityScore> => {
+
+  return customFetch<FilmCommunityScore>(getSetFilmCommunityRatingUrl(tmdbId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setCommunityRatingBody)
+  }
+);}
+
+
+
+
+export const getSetFilmCommunityRatingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setFilmCommunityRating>>, TError,{tmdbId: number;data: BodyType<SetCommunityRatingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setFilmCommunityRating>>, TError,{tmdbId: number;data: BodyType<SetCommunityRatingBody>}, TContext> => {
+
+const mutationKey = ['setFilmCommunityRating'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setFilmCommunityRating>>, {tmdbId: number;data: BodyType<SetCommunityRatingBody>}> = (props) => {
+          const {tmdbId,data} = props ?? {};
+
+          return  setFilmCommunityRating(tmdbId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetFilmCommunityRatingMutationResult = NonNullable<Awaited<ReturnType<typeof setFilmCommunityRating>>>
+    export type SetFilmCommunityRatingMutationBody = BodyType<SetCommunityRatingBody>
+    export type SetFilmCommunityRatingMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Set or update the authenticated user's community rating for a film
+ */
+export const useSetFilmCommunityRating = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setFilmCommunityRating>>, TError,{tmdbId: number;data: BodyType<SetCommunityRatingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setFilmCommunityRating>>,
+        TError,
+        {tmdbId: number;data: BodyType<SetCommunityRatingBody>},
+        TContext
+      > => {
+      return useMutation(getSetFilmCommunityRatingMutationOptions(options));
+    }
+
+export const getGetFilmCommentsUrl = (tmdbId: number,
+    params?: GetFilmCommentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/films/${tmdbId}/comments?${stringifiedParams}` : `/api/films/${tmdbId}/comments`
+}
+
+/**
+ * @summary Get paginated public comments for a film
+ */
+export const getFilmComments = async (tmdbId: number,
+    params?: GetFilmCommentsParams, options?: RequestInit): Promise<FilmCommentsResponse> => {
+
+  return customFetch<FilmCommentsResponse>(getGetFilmCommentsUrl(tmdbId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFilmCommentsQueryKey = (tmdbId: number,
+    params?: GetFilmCommentsParams,) => {
+    return [
+    `/api/films/${tmdbId}/comments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFilmCommentsQueryOptions = <TData = Awaited<ReturnType<typeof getFilmComments>>, TError = ErrorType<unknown>>(tmdbId: number,
+    params?: GetFilmCommentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilmComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFilmCommentsQueryKey(tmdbId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFilmComments>>> = ({ signal }) => getFilmComments(tmdbId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tmdbId !== null && tmdbId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFilmComments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFilmCommentsQueryResult = NonNullable<Awaited<ReturnType<typeof getFilmComments>>>
+export type GetFilmCommentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get paginated public comments for a film
+ */
+
+export function useGetFilmComments<TData = Awaited<ReturnType<typeof getFilmComments>>, TError = ErrorType<unknown>>(
+ tmdbId: number,
+    params?: GetFilmCommentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilmComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFilmCommentsQueryOptions(tmdbId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPostFilmCommentUrl = (tmdbId: number,) => {
+
+
+
+
+  return `/api/films/${tmdbId}/comments`
+}
+
+/**
+ * @summary Post a new comment on a film (auth required)
+ */
+export const postFilmComment = async (tmdbId: number,
+    postCommentBody: PostCommentBody, options?: RequestInit): Promise<FilmComment> => {
+
+  return customFetch<FilmComment>(getPostFilmCommentUrl(tmdbId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(postCommentBody)
+  }
+);}
+
+
+
+
+export const getPostFilmCommentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postFilmComment>>, TError,{tmdbId: number;data: BodyType<PostCommentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postFilmComment>>, TError,{tmdbId: number;data: BodyType<PostCommentBody>}, TContext> => {
+
+const mutationKey = ['postFilmComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postFilmComment>>, {tmdbId: number;data: BodyType<PostCommentBody>}> = (props) => {
+          const {tmdbId,data} = props ?? {};
+
+          return  postFilmComment(tmdbId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostFilmCommentMutationResult = NonNullable<Awaited<ReturnType<typeof postFilmComment>>>
+    export type PostFilmCommentMutationBody = BodyType<PostCommentBody>
+    export type PostFilmCommentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Post a new comment on a film (auth required)
+ */
+export const usePostFilmComment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postFilmComment>>, TError,{tmdbId: number;data: BodyType<PostCommentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postFilmComment>>,
+        TError,
+        {tmdbId: number;data: BodyType<PostCommentBody>},
+        TContext
+      > => {
+      return useMutation(getPostFilmCommentMutationOptions(options));
+    }
+
+export const getDeleteFilmCommentUrl = (tmdbId: number,
+    id: number,) => {
+
+
+
+
+  return `/api/films/${tmdbId}/comments/${id}`
+}
+
+/**
+ * @summary Delete own comment (auth required)
+ */
+export const deleteFilmComment = async (tmdbId: number,
+    id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteFilmCommentUrl(tmdbId,id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteFilmCommentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFilmComment>>, TError,{tmdbId: number;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFilmComment>>, TError,{tmdbId: number;id: number}, TContext> => {
+
+const mutationKey = ['deleteFilmComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFilmComment>>, {tmdbId: number;id: number}> = (props) => {
+          const {tmdbId,id} = props ?? {};
+
+          return  deleteFilmComment(tmdbId,id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFilmCommentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFilmComment>>>
+
+    export type DeleteFilmCommentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete own comment (auth required)
+ */
+export const useDeleteFilmComment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFilmComment>>, TError,{tmdbId: number;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFilmComment>>,
+        TError,
+        {tmdbId: number;id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteFilmCommentMutationOptions(options));
     }
 
