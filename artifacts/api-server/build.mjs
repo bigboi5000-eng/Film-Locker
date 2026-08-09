@@ -96,6 +96,7 @@ async function buildAll() {
       "wrangler",
       "zeromq",
       "zeromq-prebuilt",
+      "expo-server-sdk",
       "playwright",
       "puppeteer",
       "puppeteer-core",

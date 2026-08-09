@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, desc, ne } from "drizzle-orm";
-import { db, filmNotificationsTable, usersTable } from "@workspace/db";
+import { and, eq, desc } from "drizzle-orm";
+import { db, filmNotificationsTable, usersTable, followsTable } from "@workspace/db";
 import {
   SendNotificationBody,
   GetNotificationsResponse,
@@ -17,19 +17,22 @@ const expo = new Expo();
 const router: IRouter = Router();
 
 // ── GET /notifications/users ─────────────────────────────────────────────────
-// Must be registered before /notifications/:id/read to avoid route collision
+// Returns only users the caller follows. Must be registered before
+// /notifications/:id/read to avoid route collision.
 
 router.get("/notifications/users", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
 
+  // Join follows → users to return only people this caller follows
   const users = await db
     .select({
       clerkId: usersTable.clerkId,
       username: usersTable.username,
       avatarUrl: usersTable.avatarUrl,
     })
-    .from(usersTable)
-    .where(ne(usersTable.clerkId, clerkUserId))
+    .from(followsTable)
+    .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
+    .where(eq(followsTable.followerId, clerkUserId))
     .orderBy(usersTable.username);
 
   res.json(GetNotificationUsersResponse.parse({ users }));
@@ -92,6 +95,22 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   // Cannot recommend to yourself
   if (toUserId === clerkUserId) {
     res.status(400).json({ error: "Cannot send a recommendation to yourself." });
+    return;
+  }
+
+  // Enforce follow relationship — caller must follow the recipient
+  const [followRow] = await db
+    .select({ id: followsTable.id })
+    .from(followsTable)
+    .where(
+      and(
+        eq(followsTable.followerId, clerkUserId),
+        eq(followsTable.followeeId, toUserId)
+      )
+    );
+
+  if (!followRow) {
+    res.status(403).json({ error: "You can only recommend films to people you follow." });
     return;
   }
 

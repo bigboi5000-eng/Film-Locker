@@ -727,7 +727,7 @@ function RecommendSheet({
         ) : users.length === 0 ? (
           <View style={rsStyles.empty}>
             <Ionicons name="people-outline" size={48} color="#D1D5DB" />
-            <Text style={rsStyles.emptyText}>No other users to recommend to yet.</Text>
+            <Text style={rsStyles.emptyText}>Follow someone first to recommend films to them.</Text>
           </View>
         ) : (
           <FlatList
@@ -818,6 +818,17 @@ export function FilmDetailModal({
   // is selected, so the hook always runs against a valid tmdbId.
   const { data: details, isLoading } = useGetMovieDetails(tmdbId);
 
+  // Use Clerk auth state — works for both saved and unsaved films
+  const { isSignedIn } = useAuth();
+  const isLoggedIn = Boolean(isSignedIn);
+
+  // Pre-fetch the followee list so we know whether to show the recommend button.
+  // Only runs when the modal is open and the user is signed in.
+  const { data: notifUsersData } = useGetNotificationUsers({
+    query: { queryKey: getGetNotificationUsersQueryKey(), enabled: isLoggedIn && visible },
+  });
+  const followingCount = notifUsersData?.users?.length ?? 0;
+
   const { mutateAsync: patchWatched, isPending: isWatchingPending } = usePatchWatched();
   const { mutateAsync: patchRating, isPending: isRatingPending } = usePatchRating();
   const { mutateAsync: addMovie, isPending: isAddingPending } = useAddMovie();
@@ -838,10 +849,6 @@ export function FilmDetailModal({
   const displayLanguage = details?.language ?? '';
   const displayProviders = details?.watchProviders ?? [];
   const displayOverview = details?.overview || overview;
-
-  // Use Clerk auth state — works for both saved and unsaved films
-  const { isSignedIn } = useAuth();
-  const isLoggedIn = Boolean(isSignedIn);
 
   const handleRating = useCallback(
     async (n: number) => {
@@ -1084,8 +1091,8 @@ export function FilmDetailModal({
                 </TouchableOpacity>
               )}
 
-              {/* Recommend to a friend */}
-              {isLoggedIn && (
+              {/* Recommend to a friend — only shown when the user follows at least one person */}
+              {isLoggedIn && followingCount > 0 && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.actionButtonRecommend]}
                   onPress={() => setRecommendVisible(true)}
