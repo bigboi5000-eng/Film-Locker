@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, desc, ne, count } from "drizzle-orm";
+import { and, eq, desc, ne } from "drizzle-orm";
 import { db, filmNotificationsTable, usersTable } from "@workspace/db";
 import {
   SendNotificationBody,
@@ -10,6 +10,9 @@ import {
   GetNotificationUsersResponse,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { Expo } from "expo-server-sdk";
+
+const expo = new Expo();
 
 const router: IRouter = Router();
 
@@ -108,11 +111,35 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
     .values({ fromUserId: clerkUserId, toUserId, tmdbId, filmTitle, posterUrl })
     .returning();
 
-  // Look up sender info for the response
-  const [sender] = await db
-    .select({ username: usersTable.username, avatarUrl: usersTable.avatarUrl })
-    .from(usersTable)
-    .where(eq(usersTable.clerkId, clerkUserId));
+  // Look up sender info and recipient's push token in parallel
+  const [[sender], [recipientWithToken]] = await Promise.all([
+    db
+      .select({ username: usersTable.username, avatarUrl: usersTable.avatarUrl })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, clerkUserId)),
+    db
+      .select({ expoPushToken: usersTable.expoPushToken })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, toUserId)),
+  ]);
+
+  // Fire push notification — best-effort, never block the response
+  const pushToken = recipientWithToken?.expoPushToken;
+  if (pushToken && Expo.isExpoPushToken(pushToken)) {
+    try {
+      await expo.sendPushNotificationsAsync([
+        {
+          to: pushToken,
+          title: "🎬 New film recommendation",
+          body: `${sender?.username ?? "Someone"} recommended "${filmTitle}" to you`,
+          data: { screen: "/(tabs)/notifications" },
+          sound: "default",
+        },
+      ]);
+    } catch {
+      // Push failure is non-fatal — in-app inbox always works as fallback
+    }
+  }
 
   res.status(201).json(
     SendNotificationResponse.parse({

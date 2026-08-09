@@ -387,6 +387,25 @@ paths:
         "204":
           description: Comment deleted
 
+  /users/push-token:
+    put:
+      operationId: updatePushToken
+      tags: [notifications]
+      summary: Store or update the authenticated user's Expo push token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePushTokenBody"
+      responses:
+        "204":
+          description: Token saved
+        "400":
+          description: Invalid token
+        "401":
+          description: Unauthorized
+
   /notifications:
     get:
       operationId: getNotifications

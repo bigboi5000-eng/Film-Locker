@@ -536,6 +536,14 @@ export const GetNotificationsResponse = zod.object({
 
 
 /**
+ * @summary Store or update the authenticated user's Expo push token
+ */
+export const UpdatePushTokenBody = zod.object({
+  "expoPushToken": zod.string()
+})
+
+
+/**
  * @summary Send a film recommendation to another user (auth required)
  */
 export const SendNotificationBody = zod.object({

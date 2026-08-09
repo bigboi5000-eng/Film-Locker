@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import moviesRouter from "./movies";
 import communityRouter from "./films/community";
 import notificationsRouter from "./notifications";
+import usersRouter from "./users";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,6 @@ router.use(healthRouter);
 router.use(moviesRouter);
 router.use(communityRouter);
 router.use(notificationsRouter);
+router.use(usersRouter);
 
 export default router;

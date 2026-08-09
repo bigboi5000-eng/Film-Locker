@@ -7,3 +7,4 @@
 - [Film Locker schema & redesign](film-locker-redesign.md) — DB gained 8 new columns; pipeline upsert logic for enrichment vs user-state fields.
 - [EAS build pitfalls](eas-prebuild-pitfalls.md) — intent filter short-form names only; expo prebuild mutates package.json, must clean up dupes after.
 - [Share intent flow](share-intent-flow.md) — dry-run mode skips DB; ShareFilmSheet confirms before add; BackHandler.exitApp() returns to social app.
+- [expo-notifications v57 API](expo-notifications-v57.md) — NotificationBehavior needs shouldShowBanner/shouldShowList; permission .granted/.status needs `as any` cast.
