@@ -31,6 +31,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="discover/[section]" options={{ headerShown: false, animation: 'slide_from_right' }} />
     </Stack>
   );
 }

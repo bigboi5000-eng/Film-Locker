@@ -5,14 +5,14 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Dimensions,
   ActivityIndicator,
   Platform,
   ScrollView,
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
   useGetTrending,
   useGetNewReleases,
@@ -20,75 +20,58 @@ import {
   useListMovies,
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
+import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 
-const { width: W } = Dimensions.get('window');
 const CARD_W = 120;
 const CARD_H = 180; // 2:3 ratio
 
-interface DiscoverCardProps {
-  movie: TmdbMovieCard;
-  onPress: (movie: TmdbMovieCard) => void;
-}
-
-function DiscoverCard({ movie, onPress }: DiscoverCardProps) {
-  return (
-    <TouchableOpacity
-      style={discoverStyles.card}
-      onPress={() => onPress(movie)}
-      activeOpacity={0.85}
-    >
-      <Image
-        source={{ uri: movie.posterUrl }}
-        style={discoverStyles.poster}
-        contentFit="cover"
-        transition={250}
-        placeholder={require('@/assets/images/icon.png')}
-      />
-      <View style={discoverStyles.overlay}>
-        <Text style={discoverStyles.title} numberOfLines={2}>{movie.title}</Text>
-        {movie.releaseYear ? (
-          <Text style={discoverStyles.year}>{movie.releaseYear}</Text>
-        ) : null}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-const discoverStyles = StyleSheet.create({
-  card: {
-    width: CARD_W,
-    height: CARD_H,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  poster: { width: '100%', height: '100%' },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  title: { color: '#FFFFFF', fontSize: 11, fontFamily: 'Inter_600SemiBold', lineHeight: 15 },
-  year: { color: '#FF8C00', fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 2 },
-});
-
 function SectionSkeleton() {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+    >
       {[...Array(5)].map((_, i) => (
-        <View key={i} style={[discoverStyles.card, { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }]}>
+        <View
+          key={i}
+          style={{
+            width: CARD_W,
+            height: CARD_H,
+            borderRadius: 10,
+            backgroundColor: '#F3F4F6',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <ActivityIndicator color="#D1D5DB" size="small" />
         </View>
       ))}
     </ScrollView>
+  );
+}
+
+interface SectionHeaderProps {
+  title: string;
+  section: string;
+}
+
+function SectionHeader({ title, section }: SectionHeaderProps) {
+  const router = useRouter();
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <TouchableOpacity
+        style={styles.seeAllBtn}
+        onPress={() => router.push(`/discover/${section}` as never)}
+        activeOpacity={0.7}
+        hitSlop={8}
+      >
+        <Text style={styles.seeAllText}>See All</Text>
+        <Ionicons name="chevron-forward" size={13} color="#0066FF" />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -112,7 +95,6 @@ export default function HomeScreen() {
 
   // Used to check if a discovered movie is already saved
   const { data: lockerData } = useListMovies();
-  const savedTmdbIds = new Set(lockerData?.movies.map((m) => m.tmdbId) ?? []);
 
   const hasWatchlist = (lockerData?.movies.length ?? 0) > 0;
 
@@ -132,8 +114,8 @@ export default function HomeScreen() {
   const handleRefresh = useCallback(() => {
     refetchTrending();
     refetchNew();
-    if (hasWatchlist) refetchRecommendations();
-  }, [refetchTrending, refetchNew, refetchRecommendations, hasWatchlist]);
+    refetchRecommendations();
+  }, [refetchTrending, refetchNew, refetchRecommendations]);
 
   // Find the saved version of the selected movie (if it exists in the locker)
   const savedVersion = selectedMovie
@@ -165,20 +147,25 @@ export default function HomeScreen() {
 
         {/* Trending section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🔥 Trending This Week</Text>
-          </View>
+          <SectionHeader title="🔥 Trending This Week" section="trending" />
           {trendingLoading ? (
             <SectionSkeleton />
           ) : (
             <FlatList
               data={trending}
               horizontal
-              keyExtractor={(item) => String(item.tmdbId)}
+              keyExtractor={(item) => `trend-${item.tmdbId}`}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
-                <DiscoverCard movie={item} onPress={setSelectedMovie} />
+                <View style={{ marginRight: 12 }}>
+                  <DiscoverCard
+                    movie={item}
+                    onPress={setSelectedMovie}
+                    width={CARD_W}
+                    height={CARD_H}
+                  />
+                </View>
               )}
             />
           )}
@@ -186,20 +173,25 @@ export default function HomeScreen() {
 
         {/* New Releases section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🎬 New Releases</Text>
-          </View>
+          <SectionHeader title="🎬 New Releases" section="new-releases" />
           {newReleasesLoading ? (
             <SectionSkeleton />
           ) : (
             <FlatList
               data={newReleases}
               horizontal
-              keyExtractor={(item) => String(item.tmdbId)}
+              keyExtractor={(item) => `new-${item.tmdbId}`}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
-                <DiscoverCard movie={item} onPress={setSelectedMovie} />
+                <View style={{ marginRight: 12 }}>
+                  <DiscoverCard
+                    movie={item}
+                    onPress={setSelectedMovie}
+                    width={CARD_W}
+                    height={CARD_H}
+                  />
+                </View>
               )}
             />
           )}
@@ -208,9 +200,7 @@ export default function HomeScreen() {
         {/* Recommended for You — only shown when the locker has films */}
         {hasWatchlist && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>✨ Recommended for You</Text>
-            </View>
+            <SectionHeader title="✨ Recommended for You" section="recommendations" />
             {recommendationsLoading ? (
               <SectionSkeleton />
             ) : recommendations.length === 0 ? null : (
@@ -221,7 +211,14 @@ export default function HomeScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.horizontalList}
                 renderItem={({ item }) => (
-                  <DiscoverCard movie={item} onPress={setSelectedMovie} />
+                  <View style={{ marginRight: 12 }}>
+                    <DiscoverCard
+                      movie={item}
+                      onPress={setSelectedMovie}
+                      width={CARD_W}
+                      height={CARD_H}
+                    />
+                  </View>
                 )}
               />
             )}
@@ -288,6 +285,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: 'Inter_700Bold',
     color: '#111827',
+  },
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#0066FF',
   },
   horizontalList: { paddingHorizontal: 20 },
 });
