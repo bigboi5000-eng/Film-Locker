@@ -1,6 +1,6 @@
 ---
 name: Social link pipeline
-description: processSocialLink() architecture, Instagram caption scraping, shell-safety, and non-throwing contract
+description: processSocialLink() architecture, shell-safety, and non-throwing contract
 ---
 
 ## Rule
@@ -11,48 +11,25 @@ All yt-dlp shell execution must use `execFile` with an argument **array** — ne
 **How to apply:** Use `execFile(bin, ["-x", "--audio-format", "mp3", ..., videoUrl])` — never `exec(`${bin} ... "${videoUrl}"`)`.
 
 ## Rule
-`processSocialLink(url)` must never throw to the route handler. All three async steps (caption fetch, audio transcription, runMoviePipeline) are individually wrapped in try/catch; failures return a graceful degraded response with `source` set to the last successful stage.
+`processSocialLink(url)` must never throw to the route handler. Each async step (search-query fast path, Gemini URL analysis, audio fallback, runMoviePipeline) is individually wrapped in try/catch; failures return a graceful degraded response with `source` set to the last successful stage.
 
 ## Rule
 Temp files created by yt-dlp must be cleaned up in two places:
 1. In `downloadAudio`'s catch block (partial file yt-dlp may have written before failing).
-2. In `transcribeAudio`'s finally block (successful download, Whisper may fail after).
+2. In `extractMoviesFromAudio`'s finally block (successful download; local temp file AND the Gemini-hosted upload are both deleted).
 
-## Instagram caption scraping (PRIMARY approach)
+## Caption/URL analysis (PRIMARY approach)
 
-**Use direct HTML scrape of `og:description` as the first method, not RapidAPI.**
+**Gemini + Google Search grounding, not platform-specific scrapers.** `geminiUrlAnalyzer.ts` hands the raw URL to Gemini with search grounding enabled — it looks up what the URL is about and extracts film references directly. Works uniformly for Instagram, TikTok, YouTube, Facebook, or anything else Google has indexed, with no per-platform HTML scraping and no RapidAPI key.
 
-The RapidAPI `instagram-scraper-stable-api` endpoints are unreliable: they change naming conventions, go under maintenance, and rate-limit aggressively during debugging sessions. The HTML scrape is dependency-free and works for all public posts.
-
-```
-fetchInstagramHtmlCaption(url):
-  1. Strip tracking params, GET canonical URL with mobile UA
-  2. Check final URL pathname (not res.url string) for /accounts/login to avoid
-     false-null on shortcodes containing "login"
-  3. Check HTML body for login-wall markers
-  4. Extract og:description via <meta> tag scan (attribute-order-agnostic)
-  5. Decode HTML entities using String.fromCodePoint (not fromCharCode — needed for emoji)
-  6. Return decoded string or null
-```
-
-**Why RapidAPI fails:** v2 endpoint goes "under maintenance"; v1/reel_title return "Data not found" when rate-limited. The `get_reel_title.php` response put caption in `post_caption` not `title` — the `extractIgCaption` function must check `post_caption` first. The `title` field is always `"Instagram"` (browser page title) and must be filtered out via `IG_JUNK_TITLES`.
-
-**RapidAPI waterfall is kept as fallback** (v2 → v1 → reel_title) after HTML scrape fails.
+**2025-11: removed the Instagram/TikTok scraper (`socialScraper.ts`) and its `POST /movies/debug-social-link` debug route.** `fetchSocialCaption` (its only production-facing export) was never called from `processSocialLink.ts` — the Gemini-grounding step above made it dead code. The RapidAPI waterfall it fell back to was also unreliable (endpoints under maintenance, aggressive rate limits) and cost money per call. Do not re-add a platform-specific scraper as the primary path — extend `geminiUrlAnalyzer.ts` instead.
 
 ## Architecture
-- `socialScraper.ts` — HTML scrape (primary) + RapidAPI fallback for Instagram; RapidAPI for TikTok
-- `audioExtractor.ts` — yt-dlp binary (system Nix package, confirmed working) + Gemini native audio
+- `geminiUrlAnalyzer.ts` — Gemini + Google Search grounding, primary path for any URL
+- `audioExtractor.ts` — yt-dlp binary (system Nix package, confirmed working) + Gemini native audio, fallback path
 - `moviePipeline.ts` — shared Gemini→TMDB→DB logic
-- `processSocialLink.ts` — orchestrator: caption → audio fallback → pipeline
-
-## Debug endpoint
-`POST /api/movies/debug-social-link` with `{"url":"..."}` returns:
-- `scraper.htmlScrape.caption` — what the HTML scrape extracted
-- `scraper.rapidApiEndpoints[]` — raw JSON from each RapidAPI endpoint
-- `scraper.extractedCaption` — first non-null caption found
-- `gemini.input/output/error` — what was sent to Gemini and what came back
+- `processSocialLink.ts` — orchestrator: search-query fast path → Gemini URL analysis → audio fallback → pipeline
 
 ## Secrets & tooling
-- `RAPIDAPI_KEY` — RapidAPI auth header `x-rapidapi-key`
-- `GEMINI_API_KEY` — Gemini 2.5 Flash for both text and audio extraction
+- `GEMINI_API_KEY` — Gemini 2.5 Flash for both URL grounding and native audio extraction
 - yt-dlp: installed as Nix system package (`yt-dlp`), confirmed at `/nix/store/.../bin/yt-dlp`

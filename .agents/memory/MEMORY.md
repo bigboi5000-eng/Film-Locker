@@ -3,7 +3,7 @@
 - [FlatList numColumns switching](flatlist-numcolumns.md) — two FlatLists with different numColumns in same conditional slot must have distinct key props or React throws Invariant Violation.
 - [Android share intent setup](android-share-intent.md) — package choice, Metro web stub pattern, New Architecture risk, intent filter config.
 - [expo-image placeholder](expo-image-placeholder.md) — placeholder prop on expo-image Image does not accept `{ color }` — use require() or URI string.
-- [Social link pipeline](social-link-pipeline.md) — shell-safe yt-dlp (execFile args array), non-throwing orchestrator, dual temp-file cleanup, RapidAPI endpoint map.
+- [Social link pipeline](social-link-pipeline.md) — Gemini URL grounding is the primary path (no scraper); shell-safe yt-dlp audio fallback; non-throwing orchestrator.
 - [Film Locker schema & redesign](film-locker-redesign.md) — DB gained 8 new columns; pipeline upsert logic for enrichment vs user-state fields.
 - [EAS build pitfalls](eas-prebuild-pitfalls.md) — intent filter short-form names only; expo prebuild mutates package.json, must clean up dupes after.
 - [Share intent flow](share-intent-flow.md) — dry-run mode skips DB; ShareFilmSheet confirms before add; BackHandler.exitApp() returns to social app.

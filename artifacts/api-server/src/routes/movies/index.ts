@@ -27,8 +27,6 @@ import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowP
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
-import { debugInstagramScrape } from "../../lib/socialScraper";
-import { extractMoviesWithGemini } from "../../lib/geminiParser";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -131,45 +129,6 @@ router.post("/movies/parse-caption", async (req, res): Promise<void> => {
   }
 
   res.json(ParseCaptionResponse.parse({ candidates: results.slice(0, 24) }));
-});
-
-// POST /movies/debug-social-link — dev debug, no saves, no auth required
-router.post("/movies/debug-social-link", async (req, res): Promise<void> => {
-  const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
-  if (!url) {
-    res.status(400).json({ error: "url is required" });
-    return;
-  }
-
-  req.log.info({ url }, "debug-social-link: start");
-
-  let scraperResult: Awaited<ReturnType<typeof debugInstagramScrape>> | null = null;
-  let scraperError: string | null = null;
-  try {
-    scraperResult = await debugInstagramScrape(url);
-  } catch (err) {
-    scraperError = err instanceof Error ? err.message : String(err);
-  }
-
-  const caption = scraperResult?.extractedCaption ?? null;
-
-  let geminiInput: string | null = null;
-  let geminiRaw: unknown = null;
-  let geminiError: string | null = null;
-  if (caption) {
-    geminiInput = caption;
-    try {
-      geminiRaw = await extractMoviesWithGemini(caption);
-    } catch (err) {
-      geminiError = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  res.json({
-    url,
-    scraper: scraperError ? { error: scraperError } : scraperResult,
-    gemini: { input: geminiInput, output: geminiRaw, error: geminiError },
-  });
 });
 
 // ── Protected locker routes (require Clerk auth) ──────────────────────────────
