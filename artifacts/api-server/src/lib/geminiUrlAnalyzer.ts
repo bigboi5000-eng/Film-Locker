@@ -50,8 +50,8 @@ async function fetchUrlDescription(url: string): Promise<string | null> {
     `URL: ${url}\n\n` +
     `Include: the platform, creator/channel name, and — most importantly — ` +
     `any specific film titles, directors, or movie references mentioned. ` +
-    `If the page is a film listing, ranked countdown (e.g. "Top 10 Horror " +` +
-    `"Films of All Time"), or watchlist, enumerate every single title shown, ` +
+    `If the page is a film listing, ranked countdown (e.g. "Top 10 Horror Films ` +
+    `of All Time"), or watchlist, enumerate every single title shown, ` +
     `in order — do not stop after the first few if more are listed. Also state ` +
     `plainly whether this is a curated/ranked list of multiple films (and if so, ` +
     `what it's called) versus a single film being discussed.`;
