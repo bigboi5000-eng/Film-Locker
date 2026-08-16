@@ -13,11 +13,19 @@
  *        Extract the `q=` search query → Gemini text pipeline → TMDB → DB
  *        (Fast path — no search grounding needed, we already have the text.)
  *
+ *   0.5. Direct page caption scrape (pageCaptionScraper.ts):
+ *        Free HTTP GET for the page's og:description — no API cost, no
+ *        Google index dependency. This is the step that actually finds
+ *        Instagram/TikTok/YouTube/Facebook captions most reliably, since
+ *        Google's index of Instagram in particular is unreliable (login
+ *        walls keep much of it out) — step 1 below regularly finds nothing
+ *        for Instagram posts that this step picks up directly from the page.
+ *
  *   1. Gemini + Google Search grounding:
  *        Gemini searches Google to find out what the URL is about, then
- *        identifies any films referenced. Works for YouTube, Instagram,
- *        TikTok, Facebook, and anything else Google has indexed.
- *        No platform-specific scrapers or RapidAPI keys needed.
+ *        identifies any films referenced. Fallback for content the direct
+ *        scrape above couldn't reach (private/login-walled pages) or
+ *        platforms without a specific scraper.
  *
  *   2. yt-dlp audio fallback:
  *        Downloads the audio track, sends it to Gemini 2.5 Flash via the
@@ -41,6 +49,7 @@
  *   "none"      — all steps returned empty
  */
 
+import { fetchPageCaption } from "./pageCaptionScraper";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import { extractMoviesFromAudio } from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
@@ -154,9 +163,29 @@ export async function processSocialLink(
     }
   }
 
+  // ── Step 0.5: direct page caption scrape (free, no API cost) ─────────────
+  // Fetches og:description directly from the page — catches Instagram/TikTok/
+  // YouTube/Facebook captions that Google hasn't indexed (Instagram especially).
+  try {
+    const pageCaption = await fetchPageCaption(url);
+    if (pageCaption) {
+      warn?.({ url, captionPreview: pageCaption.slice(0, 300) }, "processSocialLink: page caption scrape succeeded");
+      const { matches, saved, listTitle } = await runMoviePipeline(pageCaption, warn, dryRun, clerkUserId);
+      if (matches.length > 0) {
+        warn?.({ matchCount: matches.length }, "processSocialLink: page caption pipeline succeeded");
+        return { source: "caption", text: pageCaption, matches, saved, listTitle };
+      }
+      warn?.({ url }, "processSocialLink: page caption found no films — falling back to Gemini URL grounding");
+    } else {
+      warn?.({ url }, "processSocialLink: page caption scrape found nothing — falling back to Gemini URL grounding");
+    }
+  } catch (err) {
+    warn?.({ url, err }, "processSocialLink: page caption scrape failed — falling back to Gemini URL grounding");
+  }
+
   // ── Step 1: Gemini + Google Search grounding ──────────────────────────────
   // Gemini looks up what this URL is about and extracts film references.
-  // Replaces platform-specific scrapers — works for any publicly indexed URL.
+  // Fallback for content the direct scrape above couldn't reach.
   try {
     const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
     warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
