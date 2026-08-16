@@ -212,19 +212,87 @@ const cardStyles = StyleSheet.create({
   },
 });
 
-// ── Playlist picker (used in multi-film mode) ────────────────────────────────
+// ── Film selection row (checklist shown before choosing a destination) ───────
 
-function PlaylistPicker({
+function FilmSelectRow({
+  match,
+  selected,
+  onToggle,
+}: {
+  match: GeminiMovieMatch;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const colors = useColors();
+  const displayTitle = match.title ?? match.movie_title;
+
+  return (
+    <TouchableOpacity
+      style={[selectStyles.row, { borderColor: colors.border }]}
+      onPress={onToggle}
+      activeOpacity={0.75}
+    >
+      {match.poster_url ? (
+        <Image
+          source={{ uri: match.poster_url }}
+          style={selectStyles.poster}
+          contentFit="cover"
+          transition={200}
+          placeholder={require('@/assets/images/icon.png')}
+        />
+      ) : (
+        <View style={[selectStyles.poster, selectStyles.posterFallback, { backgroundColor: colors.secondary }]}>
+          <Text style={{ fontSize: 18 }}>🎬</Text>
+        </View>
+      )}
+      <View style={selectStyles.info}>
+        <Text style={[selectStyles.title, { color: colors.foreground }]} numberOfLines={1}>
+          {displayTitle}
+        </Text>
+        {match.release_year ? (
+          <Text style={[selectStyles.year, { color: colors.mutedForeground }]}>{match.release_year}</Text>
+        ) : null}
+      </View>
+      <Ionicons
+        name={selected ? 'checkbox' : 'square-outline'}
+        size={24}
+        color={selected ? colors.primary : colors.mutedForeground}
+      />
+    </TouchableOpacity>
+  );
+}
+
+const selectStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  poster: { width: 40, height: 58, borderRadius: 6, flexShrink: 0 },
+  posterFallback: { alignItems: 'center', justifyContent: 'center' },
+  info: { flex: 1 },
+  title: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  year: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
+});
+
+// ── Bulk add panel (playlist / watchlist / both) — acts on the selected set ──
+
+type BulkAddMode = 'playlist' | 'watchlist' | 'both';
+
+function BulkAddPanel({
   candidates,
+  mode,
   initialName,
-  alsoAddToWatchlist = false,
   onDone,
 }: {
+  /** Already the user-selected subset — not the full match list. */
   candidates: GeminiMovieMatch[];
+  mode: BulkAddMode;
   /** Prefills the "new playlist" name input, e.g. a detected list_title. */
   initialName?: string | null;
-  /** When true, also add each candidate to the individual watchlist. */
-  alsoAddToWatchlist?: boolean;
   onDone: () => void;
 }) {
   const { showToast } = useToast();
@@ -236,12 +304,47 @@ function PlaylistPicker({
   const { mutateAsync: addItem } = useAddPlaylistItem();
   const { mutateAsync: addMovie } = useAddMovie();
 
+  const alsoAddToWatchlist = mode === 'both';
+
   const [newName, setNewName] = useState(initialName ?? '');
   const [showNewInput, setShowNewInput] = useState(Boolean(initialName));
-  const [addingTo, setAddingTo] = useState<number | null>(null);
+  const [addingTo, setAddingTo] = useState<number | 'watchlist' | null>(mode === 'watchlist' ? 'watchlist' : null);
   const [done, setDone] = useState(false);
 
   const playlists = data?.playlists ?? [];
+
+  const addAllToWatchlistOnly = useCallback(async () => {
+    let added = 0;
+    for (const m of candidates) {
+      if (!m.tmdb_id) continue;
+      try {
+        await addMovie({
+          data: {
+            tmdbId: m.tmdb_id,
+            title: m.title ?? m.movie_title,
+            releaseYear: m.release_year,
+            posterUrl: m.poster_url ?? '',
+            overview: m.overview ?? '',
+          },
+        });
+        added++;
+      } catch { /* already in watchlist — skip */ }
+    }
+    await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+    setAddingTo(null);
+    setDone(true);
+    showToast({ title: `Added ${added} film${added !== 1 ? 's' : ''} to watchlist`, variant: 'success' });
+    setTimeout(onDone, 1200);
+  }, [candidates, addMovie, queryClient, showToast, onDone]);
+
+  // Watchlist-only mode has no destination to pick — run immediately.
+  useEffect(() => {
+    if (mode === 'watchlist') {
+      addAllToWatchlistOnly();
+    }
+    // Intentionally run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addAllToPlaylist = useCallback(async (playlistId: number) => {
     setAddingTo(playlistId);
@@ -298,6 +401,24 @@ function PlaylistPicker({
     }
   }, [newName, createPlaylist, addAllToPlaylist, showToast]);
 
+  if (mode === 'watchlist') {
+    return (
+      <View style={ppStyles.doneWrap}>
+        {done ? (
+          <>
+            <Ionicons name="checkmark-circle" size={44} color="#16A34A" />
+            <Text style={ppStyles.doneText}>Films added to watchlist!</Text>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator size="large" color="#0066FF" />
+            <Text style={ppStyles.doneText}>Adding {candidates.length} film{candidates.length !== 1 ? 's' : ''} to watchlist…</Text>
+          </>
+        )}
+      </View>
+    );
+  }
+
   if (done) {
     return (
       <View style={ppStyles.doneWrap}>
@@ -312,7 +433,7 @@ function PlaylistPicker({
   return (
     <ScrollView contentContainerStyle={ppStyles.root} keyboardShouldPersistTaps="handled">
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
-      <Text style={ppStyles.sub}>{candidates.length} films will be added</Text>
+      <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
 
       {/* Existing playlists */}
       {playlists.map((pl) => (
@@ -403,13 +524,12 @@ const ppStyles = StyleSheet.create({
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
-type MultiMode = null | 'individual' | 'playlist' | 'both';
-
 export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFilmSheetProps) {
   const colors = useColors();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [addedCount, setAddedCount] = useState(0);
-  const [multiMode, setMultiMode] = useState<MultiMode>(null);
+  const [multiMode, setMultiMode] = useState<BulkAddMode | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Candidates are matches that passed confidence threshold and have a TMDB id
   const candidates = matches.filter(
@@ -417,6 +537,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
   );
 
   const isMultiFilm = candidates.length > 1;
+  const selectedCandidates = candidates.filter((m) => selectedIds.has(String(m.tmdb_id)));
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -427,13 +548,27 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
     }).start();
   }, [visible, slideAnim]);
 
-  // Reset state when sheet opens for a new share
+  // Reset state when sheet opens for a new share — default selection is "all".
   useEffect(() => {
     if (visible) {
       setAddedCount(0);
       setMultiMode(null);
+      setSelectedIds(new Set(matches
+        .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null)
+        .map((m) => String(m.tmdb_id))
+      ));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  const toggleSelected = useCallback((tmdbId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const key = String(tmdbId);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   const handleAdded = useCallback(() => {
     setAddedCount((n) => n + 1);
@@ -494,77 +629,122 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
             </View>
 
             {/* Content */}
-            {multiMode === 'playlist' || multiMode === 'both' ? (
-              /* Playlist picker (optionally also adds to the watchlist) */
-              <PlaylistPicker
-                candidates={candidates}
+            {multiMode !== null ? (
+              /* Bulk add panel — acts on whatever was checked in the selection list */
+              <BulkAddPanel
+                candidates={selectedCandidates}
+                mode={multiMode}
                 initialName={listTitle}
-                alsoAddToWatchlist={multiMode === 'both'}
                 onDone={handleReturn}
               />
-            ) : (
+            ) : candidates.length === 0 ? (
               <>
+                <View style={styles.scrollContent}>
+                  <View style={styles.emptyState}>
+                    <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
+                    <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No film identified</Text>
+                    <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
+                      Try sharing a post with a visible film title or caption.
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.footer, { borderTopColor: colors.border }]}>
+                  <TouchableOpacity
+                    style={[styles.returnBtn, { backgroundColor: colors.muted }]}
+                    onPress={handleReturn}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
+                    <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
+                      Return without adding
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : isMultiFilm ? (
+              <>
+                {/* Selection checklist — every film defaults to selected */}
                 <ScrollView
                   style={{ flex: 1 }}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
                 >
-                  {candidates.length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
-                      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No film identified</Text>
-                      <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                        Try sharing a post with a visible film title or caption.
-                      </Text>
-                    </View>
-                  ) : (
-                    <>
-                      {/* Multi-film mode selector */}
-                      {isMultiFilm && multiMode === null && (
-                        <View style={styles.multiSelector}>
-                          <TouchableOpacity
-                            style={styles.multiBtn}
-                            onPress={() => setMultiMode('both')}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="albums-outline" size={18} color="#0066FF" style={{ marginRight: 8 }} />
-                            <Text style={styles.multiBtnText}>Add to playlist + watchlist</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.multiBtn, styles.multiBtnSecondary]}
-                            onPress={() => setMultiMode('playlist')}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="list-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
-                            <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Save all to a playlist only</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.multiBtn, styles.multiBtnSecondary]}
-                            onPress={() => setMultiMode('individual')}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="apps-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
-                            <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add each to watchlist only</Text>
-                          </TouchableOpacity>
-                        </View>
+                  <View style={styles.selectHeaderRow}>
+                    <Text style={[styles.selectCount, { color: colors.mutedForeground }]}>
+                      {selectedCandidates.length} of {candidates.length} selected
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setSelectedIds(
+                        selectedCandidates.length === candidates.length
+                          ? new Set()
+                          : new Set(candidates.map((m) => String(m.tmdb_id)))
                       )}
-
-                      {/* Individual film cards — always shown for 1 film; shown after "add separately" for multi */}
-                      {(!isMultiFilm || multiMode === 'individual') &&
-                        candidates.map((match, i) => (
-                          <FilmCard
-                            key={`${match.tmdb_id ?? match.movie_title}-${i}`}
-                            match={match}
-                            onAdded={handleAdded}
-                          />
-                        ))
-                      }
-                    </>
-                  )}
+                    >
+                      <Text style={styles.selectAllBtn}>
+                        {selectedCandidates.length === candidates.length ? 'Deselect all' : 'Select all'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {candidates.map((match, i) => (
+                    <FilmSelectRow
+                      key={`${match.tmdb_id ?? match.movie_title}-${i}`}
+                      match={match}
+                      selected={selectedIds.has(String(match.tmdb_id))}
+                      onToggle={() => match.tmdb_id != null && toggleSelected(match.tmdb_id)}
+                    />
+                  ))}
                 </ScrollView>
 
-                {/* Footer — Return button */}
+                {/* Footer — destination actions, act on the selected set */}
+                <View style={[styles.footer, { borderTopColor: colors.border }]}>
+                  <View style={styles.multiSelector}>
+                    <TouchableOpacity
+                      style={[styles.multiBtn, selectedCandidates.length === 0 && styles.multiBtnDisabled]}
+                      onPress={() => setMultiMode('watchlist')}
+                      disabled={selectedCandidates.length === 0}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="bookmark-outline" size={18} color="#0066FF" style={{ marginRight: 8 }} />
+                      <Text style={styles.multiBtnText}>Add to Watchlist ({selectedCandidates.length})</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.multiBtn, styles.multiBtnSecondary, selectedCandidates.length === 0 && styles.multiBtnDisabled]}
+                      onPress={() => setMultiMode('playlist')}
+                      disabled={selectedCandidates.length === 0}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="list-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
+                      <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add to Playlist</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.multiBtn, styles.multiBtnSecondary, selectedCandidates.length === 0 && styles.multiBtnDisabled]}
+                      onPress={() => setMultiMode('both')}
+                      disabled={selectedCandidates.length === 0}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="albums-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
+                      <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add to Both</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Single film — unchanged inline add-to-watchlist flow */}
+                <ScrollView
+                  style={{ flex: 1 }}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {candidates.map((match, i) => (
+                    <FilmCard
+                      key={`${match.tmdb_id ?? match.movie_title}-${i}`}
+                      match={match}
+                      onAdded={handleAdded}
+                    />
+                  ))}
+                </ScrollView>
+
                 <View style={[styles.footer, { borderTopColor: colors.border }]}>
                   {allAdded ? (
                     <TouchableOpacity
@@ -676,7 +856,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   multiSelector: {
-    marginBottom: 16,
     gap: 10,
   },
   multiBtn: {
@@ -694,8 +873,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     borderColor: '#E5E7EB',
   },
+  multiBtnDisabled: {
+    opacity: 0.5,
+  },
   multiBtnText: {
     fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#0066FF',
+  },
+  selectHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  selectCount: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+  },
+  selectAllBtn: {
+    fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
     color: '#0066FF',
   },
