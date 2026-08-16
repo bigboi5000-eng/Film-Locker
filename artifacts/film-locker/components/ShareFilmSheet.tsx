@@ -42,6 +42,8 @@ interface ShareFilmSheetProps {
   visible: boolean;
   /** Matches returned by the dry-run processLink call */
   matches: GeminiMovieMatch[];
+  /** Suggested playlist name when the share was a curated/ranked list, e.g. "Top 10 Horror Films of All Time" */
+  listTitle?: string | null;
   onClose: () => void;
 }
 
@@ -214,9 +216,15 @@ const cardStyles = StyleSheet.create({
 
 function PlaylistPicker({
   candidates,
+  initialName,
+  alsoAddToWatchlist = false,
   onDone,
 }: {
   candidates: GeminiMovieMatch[];
+  /** Prefills the "new playlist" name input, e.g. a detected list_title. */
+  initialName?: string | null;
+  /** When true, also add each candidate to the individual watchlist. */
+  alsoAddToWatchlist?: boolean;
   onDone: () => void;
 }) {
   const { showToast } = useToast();
@@ -226,9 +234,10 @@ function PlaylistPicker({
   });
   const { mutateAsync: createPlaylist, isPending: creating } = useCreatePlaylist();
   const { mutateAsync: addItem } = useAddPlaylistItem();
+  const { mutateAsync: addMovie } = useAddMovie();
 
-  const [newName, setNewName] = useState('');
-  const [showNewInput, setShowNewInput] = useState(false);
+  const [newName, setNewName] = useState(initialName ?? '');
+  const [showNewInput, setShowNewInput] = useState(Boolean(initialName));
   const [addingTo, setAddingTo] = useState<number | null>(null);
   const [done, setDone] = useState(false);
 
@@ -250,13 +259,33 @@ function PlaylistPicker({
         });
         added++;
       } catch { /* already in playlist — skip */ }
+
+      if (alsoAddToWatchlist) {
+        try {
+          await addMovie({
+            data: {
+              tmdbId: m.tmdb_id,
+              title: m.title ?? m.movie_title,
+              releaseYear: m.release_year,
+              posterUrl: m.poster_url ?? '',
+              overview: m.overview ?? '',
+            },
+          });
+        } catch { /* already in watchlist — skip */ }
+      }
     }
     await queryClient.invalidateQueries({ queryKey: getGetMyPlaylistsQueryKey() });
+    if (alsoAddToWatchlist) {
+      await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+    }
     setAddingTo(null);
     setDone(true);
-    showToast({ title: `Added ${added} film${added !== 1 ? 's' : ''} to playlist`, variant: 'success' });
+    const summary = alsoAddToWatchlist
+      ? `Added ${added} film${added !== 1 ? 's' : ''} to playlist and watchlist`
+      : `Added ${added} film${added !== 1 ? 's' : ''} to playlist`;
+    showToast({ title: summary, variant: 'success' });
     setTimeout(onDone, 1200);
-  }, [candidates, addItem, queryClient, showToast, onDone]);
+  }, [candidates, addItem, addMovie, alsoAddToWatchlist, queryClient, showToast, onDone]);
 
   const handleCreateAndAdd = useCallback(async () => {
     const name = newName.trim();
@@ -273,14 +302,16 @@ function PlaylistPicker({
     return (
       <View style={ppStyles.doneWrap}>
         <Ionicons name="checkmark-circle" size={44} color="#16A34A" />
-        <Text style={ppStyles.doneText}>Films added to playlist!</Text>
+        <Text style={ppStyles.doneText}>
+          {alsoAddToWatchlist ? 'Films added to playlist and watchlist!' : 'Films added to playlist!'}
+        </Text>
       </View>
     );
   }
 
   return (
     <ScrollView contentContainerStyle={ppStyles.root} keyboardShouldPersistTaps="handled">
-      <Text style={ppStyles.heading}>Save to a playlist</Text>
+      <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
       <Text style={ppStyles.sub}>{candidates.length} films will be added</Text>
 
       {/* Existing playlists */}
@@ -372,9 +403,9 @@ const ppStyles = StyleSheet.create({
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
-type MultiMode = null | 'individual' | 'playlist';
+type MultiMode = null | 'individual' | 'playlist' | 'both';
 
-export function ShareFilmSheet({ visible, matches, onClose }: ShareFilmSheetProps) {
+export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFilmSheetProps) {
   const colors = useColors();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [addedCount, setAddedCount] = useState(0);
@@ -427,7 +458,7 @@ export function ShareFilmSheet({ visible, matches, onClose }: ShareFilmSheetProp
     ? `🎬 ${candidates.length} Film${candidates.length !== 1 ? 's' : ''} Found`
     : 'No Film Found';
   const headerSub = candidates.length > 0
-    ? `${candidates.length} film${candidates.length !== 1 ? 's' : ''} identified from this link`
+    ? (listTitle ? `"${listTitle}" — ${candidates.length} film${candidates.length !== 1 ? 's' : ''} identified` : `${candidates.length} film${candidates.length !== 1 ? 's' : ''} identified from this link`)
     : 'Gemini could not identify a film in this post';
 
   return (
@@ -463,9 +494,14 @@ export function ShareFilmSheet({ visible, matches, onClose }: ShareFilmSheetProp
             </View>
 
             {/* Content */}
-            {multiMode === 'playlist' ? (
-              /* Playlist picker */
-              <PlaylistPicker candidates={candidates} onDone={handleReturn} />
+            {multiMode === 'playlist' || multiMode === 'both' ? (
+              /* Playlist picker (optionally also adds to the watchlist) */
+              <PlaylistPicker
+                candidates={candidates}
+                initialName={listTitle}
+                alsoAddToWatchlist={multiMode === 'both'}
+                onDone={handleReturn}
+              />
             ) : (
               <>
                 <ScrollView
@@ -489,11 +525,19 @@ export function ShareFilmSheet({ visible, matches, onClose }: ShareFilmSheetProp
                         <View style={styles.multiSelector}>
                           <TouchableOpacity
                             style={styles.multiBtn}
+                            onPress={() => setMultiMode('both')}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="albums-outline" size={18} color="#0066FF" style={{ marginRight: 8 }} />
+                            <Text style={styles.multiBtnText}>Add to playlist + watchlist</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.multiBtn, styles.multiBtnSecondary]}
                             onPress={() => setMultiMode('playlist')}
                             activeOpacity={0.8}
                           >
-                            <Ionicons name="list-outline" size={18} color="#0066FF" style={{ marginRight: 8 }} />
-                            <Text style={styles.multiBtnText}>Save all to a playlist</Text>
+                            <Ionicons name="list-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
+                            <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Save all to a playlist only</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.multiBtn, styles.multiBtnSecondary]}
@@ -501,7 +545,7 @@ export function ShareFilmSheet({ visible, matches, onClose }: ShareFilmSheetProp
                             activeOpacity={0.8}
                           >
                             <Ionicons name="apps-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
-                            <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add each separately</Text>
+                            <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add each to watchlist only</Text>
                           </TouchableOpacity>
                         </View>
                       )}

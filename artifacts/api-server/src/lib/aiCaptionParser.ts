@@ -19,8 +19,8 @@ const CONFIDENCE_THRESHOLD = 0.45;
  * Returns an array of title strings for the caller to look up in TMDB.
  */
 export async function extractMovieTitlesAI(caption: string): Promise<string[]> {
-  const matches = await extractMoviesWithGemini(caption);
-  return matches
+  const { movies } = await extractMoviesWithGemini(caption);
+  return movies
     .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD)
     .map((m) => m.movie_title);
 }

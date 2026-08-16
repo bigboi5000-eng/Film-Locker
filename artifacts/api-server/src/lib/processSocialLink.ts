@@ -22,25 +22,35 @@
  *   2. yt-dlp audio fallback:
  *        Downloads the audio track, sends it to Gemini 2.5 Flash via the
  *        Files API for native multimodal film extraction. Catches private
- *        or very-new content that Gemini's search index hasn't indexed yet.
+ *        or very-new content that Gemini's search index hasn't indexed yet,
+ *        as long as the films are narrated aloud.
  *
- *   3. Nothing worked → return an empty result (never throws).
+ *   3. yt-dlp video fallback:
+ *        Downloads the full video and sends it to Gemini natively so it can
+ *        read on-screen text — catches silent "Top N" countdown posts where
+ *        the list is shown as on-screen graphics with no voiceover, which
+ *        step 2 would miss entirely. Slower/costlier, so it only runs when
+ *        steps 1 and 2 both come up empty.
+ *
+ *   4. Nothing worked → return an empty result (never throws).
  *
  * The `source` field tells the UI how movies were found:
  *   "caption"   — search query or Gemini URL analysis found something
  *   "audio"     — yt-dlp + Gemini native audio understanding
+ *   "video"     — yt-dlp + Gemini native video understanding (on-screen text)
  *   "none"      — all steps returned empty
  */
 
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import { extractMoviesFromAudio } from "./audioExtractor";
+import { extractMoviesFromVideo } from "./videoExtractor";
 import {
   runMoviePipeline,
   enrichAndSaveMatches,
   type PipelineResult,
 } from "./moviePipeline";
 
-export type SocialLinkSource = "caption" | "audio" | "none";
+export type SocialLinkSource = "caption" | "audio" | "video" | "none";
 
 export interface ProcessSocialLinkResult extends PipelineResult {
   source: SocialLinkSource;
@@ -118,10 +128,10 @@ export async function processSocialLink(
     if (mixed.titleHint) {
       warn?.({ url, titleHint: mixed.titleHint }, "processSocialLink: mixed-text share detected — trying title as search query first");
       try {
-        const { matches, saved } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId);
+        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId);
         if (matches.length > 0) {
           warn?.({ matchCount: matches.length }, "processSocialLink: title text pipeline succeeded");
-          return { source: "caption", text: mixed.titleHint, matches, saved };
+          return { source: "caption", text: mixed.titleHint, matches, saved, listTitle };
         }
         warn?.({ titleHint: mixed.titleHint }, "processSocialLink: title text pipeline returned no matches — continuing with URL");
       } catch (err) {
@@ -135,12 +145,12 @@ export async function processSocialLink(
   if (searchQuery) {
     warn?.({ url, searchQuery }, "processSocialLink: search URL detected — running text pipeline on query");
     try {
-      const { matches, saved } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId);
+      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId);
       warn?.({ matchCount: matches.length }, "processSocialLink: search query pipeline complete");
-      return { source: "caption", text: searchQuery, matches, saved };
+      return { source: "caption", text: searchQuery, matches, saved, listTitle };
     } catch (err) {
       warn?.({ url, searchQuery, err }, "processSocialLink: search query pipeline failed");
-      return { source: "none", text: searchQuery, matches: [], saved: [] };
+      return { source: "none", text: searchQuery, matches: [], saved: [], listTitle: null };
     }
   }
 
@@ -148,12 +158,13 @@ export async function processSocialLink(
   // Gemini looks up what this URL is about and extracts film references.
   // Replaces platform-specific scrapers — works for any publicly indexed URL.
   try {
-    const matches = await analyzeUrlForFilms(url);
+    const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
     warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
 
     if (matches.length > 0) {
-      const { matches: enriched, saved } = await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId);
-      return { source: "caption", text: null, matches: enriched, saved };
+      const { matches: enriched, saved, listTitle: enrichedListTitle } =
+        await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
+      return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
     }
 
     warn?.({ url }, "processSocialLink: Gemini URL analysis returned no matches — falling back to audio");
@@ -163,17 +174,38 @@ export async function processSocialLink(
 
   // ── Step 2: yt-dlp audio fallback ────────────────────────────────────────
   // For private posts, very new content, or anything Gemini's search index
-  // hasn't indexed yet — download the audio and analyse it directly.
+  // hasn't indexed yet — download the audio and analyse it directly. Only
+  // catches films that are actually narrated aloud.
   try {
-    const audioMatches = await extractMoviesFromAudio(url);
+    const { movies: audioMatches, list_title: audioListTitle } = await extractMoviesFromAudio(url);
     warn?.({ url, matchCount: audioMatches.length }, "processSocialLink: audio extraction complete");
 
-    const { matches, saved } = await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId);
-    return { source: "audio", text: null, matches, saved };
+    if (audioMatches.length > 0) {
+      const { matches, saved, listTitle } =
+        await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId, audioListTitle);
+      return { source: "audio", text: null, matches, saved, listTitle };
+    }
+
+    warn?.({ url }, "processSocialLink: audio extraction returned no matches — falling back to video");
   } catch (err) {
-    warn?.({ url, err }, "processSocialLink: audio extraction failed — no data available");
+    warn?.({ url, err }, "processSocialLink: audio extraction failed — falling back to video");
   }
 
-  // ── Step 3: nothing worked ────────────────────────────────────────────────
-  return { source: "none", text: null, matches: [], saved: [] };
+  // ── Step 3: yt-dlp video fallback ────────────────────────────────────────
+  // Catches silent "Top N" countdown posts where the list is shown as
+  // on-screen text/graphics with no voiceover — audio-only (step 2) misses
+  // these entirely. Slower and costlier, so it's the last resort.
+  try {
+    const { movies: videoMatches, list_title: videoListTitle } = await extractMoviesFromVideo(url);
+    warn?.({ url, matchCount: videoMatches.length }, "processSocialLink: video extraction complete");
+
+    const { matches, saved, listTitle } =
+      await enrichAndSaveMatches(videoMatches, warn, dryRun, clerkUserId, videoListTitle);
+    return { source: "video", text: null, matches, saved, listTitle };
+  } catch (err) {
+    warn?.({ url, err }, "processSocialLink: video extraction failed — no data available");
+  }
+
+  // ── Step 4: nothing worked ────────────────────────────────────────────────
+  return { source: "none", text: null, matches: [], saved: [], listTitle: null };
 }

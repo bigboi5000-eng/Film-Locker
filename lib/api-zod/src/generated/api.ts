@@ -165,7 +165,7 @@ export const processSocialLinkResponseSavedItemRatingMax = 5;
 
 
 export const ProcessSocialLinkResponse = zod.object({
-  "source": zod.enum(['caption', 'audio', 'none']),
+  "source": zod.enum(['caption', 'audio', 'video', 'none']),
   "text": zod.string().nullish(),
   "matches": zod.array(zod.object({
   "movie_title": zod.string(),
@@ -198,7 +198,8 @@ export const ProcessSocialLinkResponse = zod.object({
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
-}))
+})),
+  "listTitle": zod.string().nullable().describe('Suggested playlist name when the source was a curated\/ranked list of films (e.g. \"Top 10 Horror Films of All Time\"), null otherwise.\n')
 })
 
 

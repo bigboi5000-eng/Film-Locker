@@ -29,6 +29,8 @@ export interface EnrichedMatch {
 export interface PipelineResult {
   matches: EnrichedMatch[];
   saved: SavedMovie[];
+  /** Suggested playlist name when the source was a curated/ranked list, null otherwise. */
+  listTitle: string | null;
 }
 
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
@@ -49,7 +51,8 @@ export async function enrichAndSaveMatches(
   rawMatches: GeminiMovieMatch[],
   warn?: WarnFn,
   dryRun = false,
-  clerkUserId = ""
+  clerkUserId = "",
+  listTitle: string | null = null
 ): Promise<PipelineResult> {
   const sanitised = rawMatches
     .map((m) => ({
@@ -170,7 +173,7 @@ export async function enrichAndSaveMatches(
     }
   }
 
-  return { matches: enrichedMatches, saved };
+  return { matches: enrichedMatches, saved, listTitle };
 }
 
 /**
@@ -182,6 +185,6 @@ export async function runMoviePipeline(
   dryRun = false,
   clerkUserId = ""
 ): Promise<PipelineResult> {
-  const rawMatches = await extractMoviesWithGemini(text);
-  return enrichAndSaveMatches(rawMatches, warn, dryRun, clerkUserId);
+  const { movies: rawMatches, list_title: listTitle } = await extractMoviesWithGemini(text);
+  return enrichAndSaveMatches(rawMatches, warn, dryRun, clerkUserId, listTitle);
 }

@@ -6,8 +6,18 @@ export interface GeminiMovieMatch {
   confidence_score: number;
 }
 
+export interface GeminiExtractionResult {
+  movies: GeminiMovieMatch[];
+  /**
+   * Suggested playlist name when the source text is a curated/ranked list
+   * (e.g. "Top 10 Horror Films of All Time"), null for a single-film mention.
+   */
+  list_title: string | null;
+}
+
 interface GeminiResponse {
   movies: GeminiMovieMatch[];
+  list_title?: string | null;
 }
 
 let _client: GoogleGenAI | null = null;
@@ -47,6 +57,17 @@ const RESPONSE_SCHEMA = {
         required: ["movie_title", "release_year", "confidence_score"],
       },
     },
+    list_title: {
+      type: Type.STRING,
+      nullable: true,
+      description:
+        "When the text is a curated/ranked list of multiple films (e.g. a " +
+        "'Top 10 Horror Films' countdown, a 'Best of' roundup, a themed " +
+        "watchlist), a short human-readable title suitable for naming a " +
+        "playlist — e.g. 'Top 10 Horror Films of All Time'. Null when the " +
+        "text is not a list (a single film mention, a review of one movie, " +
+        "unrelated content).",
+    },
   },
   required: ["movies"],
 };
@@ -57,15 +78,25 @@ const SYSTEM_PROMPT =
   "referenced. For each film return its canonical title, the four-digit release year " +
   "(leave empty if genuinely unknown), and a confidence_score from 0.0 to 1.0 " +
   "reflecting how certain you are this is a real movie reference and not a song, " +
-  "book, or figure of speech. Exclude TV series and short films.";
+  "book, or figure of speech. Exclude TV series and short films.\n\n" +
+  "If the text is a 'Top N', countdown, ranked, or curated list of films " +
+  "(e.g. 'Top 10 Horror Films of All Time', 'My 5 favorite heist movies'), " +
+  "you MUST extract every single title in the list, not just the first few — " +
+  "count the items and keep going until you've covered all of them, even if " +
+  "the list runs to 10, 20, or more entries. Also set list_title to a short, " +
+  "human-readable name for the list (e.g. 'Top 10 Horror Films of All Time') " +
+  "so it can be used as a playlist name. If the text is not a list — a single " +
+  "film mention, a review of one movie, or unrelated content — set list_title " +
+  "to null.";
 
 /**
  * Uses Gemini 2.5 Flash with a structured JSON schema to extract movie
- * references (title, release_year, confidence_score) from arbitrary text.
+ * references (title, release_year, confidence_score) from arbitrary text,
+ * plus a list_title when the text is a curated/ranked list of films.
  */
 export async function extractMoviesWithGemini(
   text: string
-): Promise<GeminiMovieMatch[]> {
+): Promise<GeminiExtractionResult> {
   const ai = getClient();
 
   const response = await ai.models.generateContent({
@@ -96,7 +127,7 @@ export async function extractMoviesWithGemini(
 
   const movies = Array.isArray(parsed.movies) ? parsed.movies : [];
 
-  return movies
+  const mapped = movies
     .filter(
       (m) =>
         m != null &&
@@ -114,4 +145,13 @@ export async function extractMoviesWithGemini(
         confidence_score,
       };
     });
+
+  // Only treat list_title as meaningful when Gemini actually found more than
+  // one film — a single-match "list" is just a regular mention.
+  const list_title =
+    mapped.length > 1 && typeof parsed.list_title === "string" && parsed.list_title.trim().length > 0
+      ? parsed.list_title.trim()
+      : null;
+
+  return { movies: mapped, list_title };
 }

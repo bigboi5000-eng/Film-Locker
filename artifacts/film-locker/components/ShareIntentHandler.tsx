@@ -45,6 +45,7 @@ export function ShareIntentHandler() {
 
   const [isPending, setIsPending] = useState(false);
   const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
+  const [listTitle, setListTitle] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
 
   // Track the last handled URL so we don't re-process on AppState resume.
@@ -78,6 +79,7 @@ export function ShareIntentHandler() {
           .then((data) => {
             if (!mountedRef.current) return;
             setMatches(data.matches ?? []);
+            setListTitle(data.listTitle ?? null);
             setShowSheet(true);
           })
           .catch(() => {
@@ -118,6 +120,7 @@ export function ShareIntentHandler() {
   const handleClose = useCallback(() => {
     setShowSheet(false);
     setMatches([]);
+    setListTitle(null);
     handledRef.current = null;
     ReceiveSharingIntent.clearReceivedFiles();
   }, []);
@@ -153,6 +156,7 @@ export function ShareIntentHandler() {
       <ShareFilmSheet
         visible={showSheet}
         matches={matches}
+        listTitle={listTitle}
         onClose={handleClose}
       />
     </>

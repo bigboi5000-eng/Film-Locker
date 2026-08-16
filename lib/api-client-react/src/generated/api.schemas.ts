@@ -154,6 +154,7 @@ export type ProcessSocialLinkResponseSource = typeof ProcessSocialLinkResponseSo
 export const ProcessSocialLinkResponseSource = {
   caption: 'caption',
   audio: 'audio',
+  video: 'video',
   none: 'none',
 } as const;
 
@@ -162,6 +163,8 @@ export interface ProcessSocialLinkResponse {
   text?: string | null;
   matches: GeminiMovieMatch[];
   saved: Movie[];
+  /** Suggested playlist name when the source was a curated/ranked list of films (e.g. "Top 10 Horror Films of All Time"), null otherwise. */
+  listTitle: string | null;
 }
 
 export interface PatchWatchedBody {

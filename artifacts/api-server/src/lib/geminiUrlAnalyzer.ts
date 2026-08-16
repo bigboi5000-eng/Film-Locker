@@ -21,7 +21,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-import type { GeminiMovieMatch } from "./geminiParser";
+import type { GeminiExtractionResult } from "./geminiParser";
 import { extractMoviesWithGemini } from "./geminiParser";
 
 let _client: GoogleGenAI | null = null;
@@ -50,7 +50,11 @@ async function fetchUrlDescription(url: string): Promise<string | null> {
     `URL: ${url}\n\n` +
     `Include: the platform, creator/channel name, and — most importantly — ` +
     `any specific film titles, directors, or movie references mentioned. ` +
-    `If the page is a film listing or watchlist, enumerate all titles shown.`;
+    `If the page is a film listing, ranked countdown (e.g. "Top 10 Horror " +` +
+    `"Films of All Time"), or watchlist, enumerate every single title shown, ` +
+    `in order — do not stop after the first few if more are listed. Also state ` +
+    `plainly whether this is a curated/ranked list of multiple films (and if so, ` +
+    `what it's called) versus a single film being discussed.`;
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
@@ -71,14 +75,15 @@ async function fetchUrlDescription(url: string): Promise<string | null> {
 
 /**
  * Analyse a social media URL with Gemini + Google Search grounding and return
- * extracted movie matches.
+ * extracted movie matches (plus a suggested playlist name when the content is
+ * a curated/ranked list).
  *
- * Returns an empty array (not an error) when Gemini could not find useful info.
+ * Returns an empty result (not an error) when Gemini could not find useful info.
  */
 export async function analyzeUrlForFilms(
   url: string
-): Promise<GeminiMovieMatch[]> {
+): Promise<GeminiExtractionResult> {
   const description = await fetchUrlDescription(url);
-  if (!description) return [];
+  if (!description) return { movies: [], list_title: null };
   return extractMoviesWithGemini(description);
 }

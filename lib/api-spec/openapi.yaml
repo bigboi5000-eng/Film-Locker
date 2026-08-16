@@ -1187,7 +1187,7 @@ components:
       properties:
         source:
           type: string
-          enum: [caption, audio, none]
+          enum: [caption, audio, video, none]
         text:
           type: string
           nullable: true
@@ -1199,10 +1199,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Movie"
+        listTitle:
+          type: string
+          nullable: true
+          description: >
+            Suggested playlist name when the source was a curated/ranked list
+            of films (e.g. "Top 10 Horror Films of All Time"), null otherwise.
       required:
         - source
         - matches
         - saved
+        - listTitle
 
     PatchWatchedBody:
       type: object
