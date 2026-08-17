@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { getAuth } from "@clerk/express";
 import { and, eq, ilike, desc, count, sql } from "drizzle-orm";
 import { db, playlistsTable, playlistItemsTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
@@ -138,13 +139,15 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
 
   if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
 
-  // Auth check for private playlists
+  // Auth check for private playlists.
+  // requireAuth isn't used on this route (public playlists must stay
+  // accessible without a token), so read the Clerk session directly —
+  // req.auth is a function in @clerk/express (req.auth()), not a plain
+  // object; reading req.auth.userId off the function itself always
+  // returns undefined, which previously locked owners out of their own
+  // private playlists.
   if (!playlist.isPublic) {
-    // Pull Clerk userId from header if present
-    const authHeader = req.headers.authorization;
-    if (!authHeader) { res.status(403).json({ error: "Private playlist" }); return; }
-    // requireAuth middleware not used here — read userId from the request after Clerk middleware
-    const clerkUserId = (req as any).auth?.userId;
+    const clerkUserId = getAuth(req)?.userId;
     if (!clerkUserId || clerkUserId !== playlist.userId) {
       res.status(403).json({ error: "Private playlist" });
       return;
