@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useToast } from '@/components/ToastProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -131,6 +132,22 @@ export default function WatchlistScreen() {
   const [resultListTitle, setResultListTitle] = useState<string | null>(null);
   const [showResultSheet, setShowResultSheet] = useState(false);
 
+  // AI recommendation bar — separate from the main search bar, revealed by
+  // tapping the sparkles toggle. aiVisible controls mounting; aiOpen is the
+  // target state driving the animation direction (kept apart so the closing
+  // animation gets to finish playing before the bar unmounts).
+  const [aiVisible, setAiVisible] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiQuery, setAiQuery] = useState('');
+  const [searchRowWidth, setSearchRowWidth] = useState(0);
+  const aiAnim = useRef(new Animated.Value(0)).current;
+  const aiInputRef = useRef<TextInput>(null);
+  // Row minus the fixed 44px toggle button and the 8px gap between them —
+  // the pixel width the AI bar animates open to. Flex can't be animated
+  // smoothly here since it's the row's only flex-grow child (nothing to
+  // proportionally share space with), so this measures a concrete target.
+  const aiTargetWidth = Math.max(searchRowWidth - 44 - 8, 0);
+
   const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
   const isSearchActive =
     debouncedQuery.length >= 2 && !looksLikeUrl(debouncedQuery) && !looksLikeSentence(debouncedQuery);
@@ -139,7 +156,6 @@ export default function WatchlistScreen() {
   const { mutateAsync: deleteMovie } = useDeleteMovie();
   const { mutateAsync: processLink, isPending: isProcessingLink } = useProcessSocialLink();
   const { mutateAsync: recommend, isPending: isRecommending } = useRecommendMovies();
-  const isBusy = isProcessingLink || isRecommending;
 
   // TMDB search — only fires when query has ≥ 2 chars.
   // params.q and queryKey both derive from debouncedQuery so they stay aligned;
@@ -175,45 +191,46 @@ export default function WatchlistScreen() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  // Single submit action for the unified bar — routes to whichever pipeline
-  // matches the input, then shows the same dry-run result sheet either way:
+  // Main bar submit — URL only now that AI has its own bar. Dry-run: identify
+  // films without saving, then let ShareFilmSheet decide the flow —
   // individual add-to-watchlist for 1-2 films, or a playlist/watchlist/both
-  // prompt (prefilled with a detected/suggested title) for 3 or more.
+  // prompt (prefilled with a detected list title) for 3 or more.
   const handleSubmit = useCallback(async () => {
     const trimmed = searchQuery.trim();
-    if (!trimmed || isBusy) return;
-
-    if (looksLikeUrl(trimmed)) {
-      try {
-        const result = await processLink({ data: { url: trimmed, dryRun: true } });
-        setSearchQuery('');
-        const matches = result.matches ?? [];
-        if (matches.length === 0) {
-          showToast({
-            title: 'No Films Found',
-            subtitle:
-              result.source === 'none'
-                ? 'Could not extract any titles from this link.'
-                : `Processed via ${result.source} — no recognizable titles found.`,
-            variant: 'error',
-          });
-          return;
-        }
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-        setResultMatches(matches);
-        setResultListTitle(result.listTitle ?? null);
-        setShowResultSheet(true);
-      } catch {
-        Alert.alert('Error', 'Could not process the link. Please try again.');
+    if (!trimmed || !looksLikeUrl(trimmed) || isProcessingLink) return;
+    try {
+      const result = await processLink({ data: { url: trimmed, dryRun: true } });
+      setSearchQuery('');
+      const matches = result.matches ?? [];
+      if (matches.length === 0) {
+        showToast({
+          title: 'No Films Found',
+          subtitle:
+            result.source === 'none'
+              ? 'Could not extract any titles from this link.'
+              : `Processed via ${result.source} — no recognizable titles found.`,
+          variant: 'error',
+        });
+        return;
       }
-      return;
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      setResultMatches(matches);
+      setResultListTitle(result.listTitle ?? null);
+      setShowResultSheet(true);
+    } catch {
+      Alert.alert('Error', 'Could not process the link. Please try again.');
     }
+  }, [searchQuery, isProcessingLink, processLink, showToast]);
 
+  // AI bar submit — the only entry point into the recommend endpoint now.
+  const handleAiSubmit = useCallback(async () => {
+    const trimmed = aiQuery.trim();
+    if (!trimmed || isRecommending) return;
     try {
       const result = await recommend({ data: { query: trimmed, dryRun: true } });
-      setSearchQuery('');
+      setAiQuery('');
       if (result.offTopic) {
         showToast({
           title: 'Film & TV only',
@@ -240,7 +257,27 @@ export default function WatchlistScreen() {
     } catch {
       Alert.alert('Error', 'Could not get a recommendation. Please try again.');
     }
-  }, [searchQuery, isBusy, processLink, recommend, showToast]);
+  }, [aiQuery, isRecommending, recommend, showToast]);
+
+  // Grows the AI bar open from the left (flex 0 → 1, sibling toggle button
+  // stays fixed-width so the box fills exactly the remaining row space) and
+  // shrinks it closed again — aiVisible unmounts only once the closing
+  // animation has actually finished playing.
+  const toggleAiSearch = useCallback(() => {
+    if (!aiOpen) {
+      setAiVisible(true);
+      setAiOpen(true);
+      Animated.timing(aiAnim, { toValue: 1, duration: 260, useNativeDriver: false }).start(() => {
+        setTimeout(() => aiInputRef.current?.focus(), 30);
+      });
+    } else {
+      setAiOpen(false);
+      Animated.timing(aiAnim, { toValue: 0, duration: 220, useNativeDriver: false }).start(() => {
+        setAiVisible(false);
+        setAiQuery('');
+      });
+    }
+  }, [aiOpen, aiAnim]);
 
   const handleCloseResultSheet = useCallback(() => {
     setShowResultSheet(false);
@@ -346,54 +383,85 @@ export default function WatchlistScreen() {
         </View>
       </View>
 
-      {/* Unified bar — search a film, paste a social link, or ask for a recommendation */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Paste a URL, search a film, or ask for a recommendation…"
-            placeholderTextColor="#9CA3AF"
-            style={styles.searchInput}
-            returnKeyType="go"
-            autoCapitalize="none"
-            autoCorrect={false}
-            onSubmitEditing={handleSubmit}
-          />
-          <Ionicons
-            name="sparkles"
-            size={14}
-            color="#9CA3AF"
-            style={{ marginRight: searchQuery.length > 0 ? 6 : 0 }}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-        </View>
+      {/* Search / paste-link bar, plus a separate AI recommendation bar that
+          grows open from the sparkles toggle — kept apart so typing in either
+          one never resizes or shifts the other. */}
+      <View
+        style={styles.searchRow}
+        onLayout={(e) => setSearchRowWidth(e.nativeEvent.layout.width)}
+      >
+        {aiVisible ? (
+          <Animated.View
+            style={[
+              styles.aiContainer,
+              { width: aiAnim.interpolate({ inputRange: [0, 1], outputRange: [0, aiTargetWidth] }) },
+            ]}
+          >
+            <Ionicons name="sparkles" size={15} color="#0066FF" style={styles.searchIcon} />
+            <TextInput
+              ref={aiInputRef}
+              value={aiQuery}
+              onChangeText={setAiQuery}
+              placeholder="Ask for a recommendation…"
+              placeholderTextColor="#9CA3AF"
+              style={styles.searchInput}
+              returnKeyType="go"
+              onSubmitEditing={handleAiSubmit}
+            />
+            {aiQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setAiQuery('')} hitSlop={8} style={{ marginRight: 6 }}>
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+            {aiQuery.trim().length > 0 && (
+              <TouchableOpacity onPress={handleAiSubmit} disabled={isRecommending} hitSlop={8}>
+                {isRecommending ? (
+                  <ActivityIndicator color="#0066FF" size="small" />
+                ) : (
+                  <Ionicons name="arrow-forward-circle" size={24} color="#0066FF" />
+                )}
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        ) : (
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search a film or paste a social link…"
+              placeholderTextColor="#9CA3AF"
+              style={styles.searchInput}
+              returnKeyType="go"
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={handleSubmit}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8} style={{ marginRight: 6 }}>
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+            {looksLikeUrl(searchQuery.trim()) && (
+              <TouchableOpacity onPress={handleSubmit} disabled={isProcessingLink} hitSlop={8}>
+                {isProcessingLink ? (
+                  <ActivityIndicator color="#0066FF" size="small" />
+                ) : (
+                  <Ionicons name="arrow-forward-circle" size={24} color="#0066FF" />
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         <TouchableOpacity
-          style={[
-            styles.searchSubmitBtn,
-            (!searchQuery.trim() || isBusy) && styles.searchSubmitBtnDisabled,
-          ]}
-          onPress={handleSubmit}
-          disabled={!searchQuery.trim() || isBusy}
+          style={styles.aiToggleBtn}
+          onPress={toggleAiSearch}
           activeOpacity={0.8}
         >
-          {isBusy ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Ionicons
-              name={looksLikeUrl(searchQuery.trim()) ? 'link-outline' : 'sparkles'}
-              size={17}
-              color="#FFFFFF"
-            />
-          )}
+          <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
-      {isBusy && (
+      {(isProcessingLink || isRecommending) && (
         <Text style={styles.processingHint}>
           {isProcessingLink ? 'Extracting films via Gemini…' : 'Asking Gemini for a recommendation…'}
         </Text>
@@ -558,7 +626,7 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFFFFF' },
 
-  // Unified search / paste-link / ask-AI bar
+  // Search / paste-link bar, plus the separate AI recommendation bar
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -578,6 +646,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
+  // Same shape as searchContainer but blue-tinted, so it reads as a distinct
+  // "AI mode" even mid-animation. Width is driven by the animated `flex`
+  // style prop passed alongside this at the call site, not by anything here.
+  aiContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 12,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+    overflow: 'hidden',
+  },
   searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1,
@@ -585,7 +667,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
   },
-  searchSubmitBtn: {
+  aiToggleBtn: {
     width: 44,
     height: 44,
     borderRadius: 10,
@@ -593,7 +675,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchSubmitBtnDisabled: { backgroundColor: '#93C5FD' },
   processingHint: {
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
