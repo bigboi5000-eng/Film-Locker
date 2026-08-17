@@ -139,6 +139,7 @@ export default function WatchlistScreen() {
   const [aiVisible, setAiVisible] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiQuery, setAiQuery] = useState('');
+  const [aiResults, setAiResults] = useState<GeminiMovieMatch[]>([]);
   const [searchRowWidth, setSearchRowWidth] = useState(0);
   const aiAnim = useRef(new Animated.Value(0)).current;
   const aiInputRef = useRef<TextInput>(null);
@@ -189,6 +190,21 @@ export default function WatchlistScreen() {
 
   const searchResults = searchData?.movies ?? [];
 
+  // AI recommendations reuse the same row component as TMDB search results —
+  // only tmdb_id-resolved matches ever reach the sheet-less list.
+  const aiResultCards: TmdbMovieCard[] = useMemo(
+    () =>
+      aiResults.map((m) => ({
+        tmdbId: m.tmdb_id as number,
+        title: m.title ?? m.movie_title,
+        releaseYear: m.release_year,
+        posterUrl: m.poster_url ?? '',
+        overview: m.overview ?? '',
+        genres: [],
+      })),
+    [aiResults]
+  );
+
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   // Main bar submit — URL only now that AI has its own bar. Dry-run: identify
@@ -224,13 +240,15 @@ export default function WatchlistScreen() {
     }
   }, [searchQuery, isProcessingLink, processLink, showToast]);
 
-  // AI bar submit — the only entry point into the recommend endpoint now.
+  // AI bar submit — renders as a plain tappable results list (top 5, no
+  // Gemini prose) below the bar, the same as a TMDB search result list.
+  // Not a chat: one request in, a short list out, nothing conversational.
   const handleAiSubmit = useCallback(async () => {
     const trimmed = aiQuery.trim();
     if (!trimmed || isRecommending) return;
+    setAiResults([]);
     try {
       const result = await recommend({ data: { query: trimmed, dryRun: true } });
-      setAiQuery('');
       if (result.offTopic) {
         showToast({
           title: 'Film & TV only',
@@ -239,7 +257,7 @@ export default function WatchlistScreen() {
         });
         return;
       }
-      const matches = result.matches ?? [];
+      const matches = (result.matches ?? []).filter((m) => m.tmdb_id != null).slice(0, 5);
       if (matches.length === 0) {
         showToast({
           title: 'No Recommendations Found',
@@ -248,12 +266,7 @@ export default function WatchlistScreen() {
         });
         return;
       }
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      setResultMatches(matches);
-      setResultListTitle(result.listTitle ?? null);
-      setShowResultSheet(true);
+      setAiResults(matches);
     } catch {
       Alert.alert('Error', 'Could not get a recommendation. Please try again.');
     }
@@ -275,6 +288,7 @@ export default function WatchlistScreen() {
       Animated.timing(aiAnim, { toValue: 0, duration: 220, useNativeDriver: false }).start(() => {
         setAiVisible(false);
         setAiQuery('');
+        setAiResults([]);
       });
     }
   }, [aiOpen, aiAnim]);
@@ -408,20 +422,7 @@ export default function WatchlistScreen() {
               returnKeyType="go"
               onSubmitEditing={handleAiSubmit}
             />
-            {aiQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setAiQuery('')} hitSlop={8} style={{ marginRight: 6 }}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            )}
-            {aiQuery.trim().length > 0 && (
-              <TouchableOpacity onPress={handleAiSubmit} disabled={isRecommending} hitSlop={8}>
-                {isRecommending ? (
-                  <ActivityIndicator color="#0066FF" size="small" />
-                ) : (
-                  <Ionicons name="arrow-forward-circle" size={24} color="#0066FF" />
-                )}
-              </TouchableOpacity>
-            )}
+            {isRecommending && <ActivityIndicator color="#0066FF" size="small" />}
           </Animated.View>
         ) : (
           <View style={styles.searchContainer}>
@@ -467,13 +468,21 @@ export default function WatchlistScreen() {
         </Text>
       )}
 
-      {/* Filter bar — only when not searching */}
-      {!isSearchActive && (
+      {/* Filter bar — hidden while searching or asking the AI */}
+      {!isSearchActive && !aiOpen && (
         <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
       )}
 
       {/* Context label row */}
-      {isSearchActive ? (
+      {aiOpen ? (
+        aiResults.length > 0 && (
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionLabel}>
+              TOP {aiResults.length} RECOMMENDATION{aiResults.length === 1 ? '' : 'S'}
+            </Text>
+          </View>
+        )
+      ) : isSearchActive ? (
         <View style={styles.sectionLabelRow}>
           <Text style={styles.sectionLabel}>
             {isSearchFetching
@@ -494,7 +503,33 @@ export default function WatchlistScreen() {
       ) : null}
 
       {/* ── LIST AREA ── */}
-      {isSearchActive ? (
+      {aiOpen ? (
+        /* AI RECOMMENDATIONS — plain tappable list, no chat, top 5 max */
+        <FlatList<TmdbMovieCard>
+          key="ai-results"
+          data={aiResultCards}
+          keyExtractor={(item) => `ai-${item.tmdbId}`}
+          renderItem={renderSearchResult}
+          ListEmptyComponent={
+            isRecommending ? (
+              <View style={styles.searchingState}>
+                <ActivityIndicator color="#0066FF" />
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="sparkles" size={48} color="#D1D5DB" />
+                <Text style={styles.emptyTitle}>Ask for a recommendation</Text>
+                <Text style={styles.emptySubtitle}>
+                  e.g. "a 90 minute horror film similar to Texas Chainsaw"
+                </Text>
+              </View>
+            )
+          }
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
+      ) : isSearchActive ? (
         /* SEARCH RESULTS */
         <FlatList<TmdbMovieCard>
           key="search-results"

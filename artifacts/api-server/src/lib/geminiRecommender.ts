@@ -104,12 +104,14 @@ const SYSTEM_PROMPT =
   "satisfy every constraint mentioned (genre, mood, runtime, similarity to a " +
   "reference title, era, etc.) using your own knowledge — you have no search " +
   "access here, so rely on what you actually know rather than guessing at " +
-  "bibliographic details you're unsure of. Recommend exactly one title unless " +
-  "the request clearly asks for multiple ('a few', 'some', 'a list', a " +
-  "specific number) — for multiple, return up to 10 and set list_title to a " +
-  "short name for the set; for a single recommendation set list_title to " +
-  "null. Exclude short films. TV shows are allowed since the request may ask " +
-  "for either.";
+  "bibliographic details you're unsure of. These results are shown to the " +
+  "user as a short tappable list, not read out as prose, so always return " +
+  "up to 5 titles ranked best-fit-first — even for a request naming one " +
+  "specific reference film, suggest up to 5 similar options rather than " +
+  "just one. Fewer than 5 is fine if you genuinely can't think of that many " +
+  "good fits; never pad with weak matches just to reach 5. Exclude short " +
+  "films. TV shows are allowed since the request may ask for either. Set " +
+  "list_title to null always — it isn't used here.";
 
 /**
  * Ask Gemini for film/TV recommendations matching a natural-language query.
