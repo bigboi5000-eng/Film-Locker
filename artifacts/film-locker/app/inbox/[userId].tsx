@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, Platform, Modal, ScrollView,
@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useGetNotificationThread,
   useReactToNotification,
@@ -20,8 +21,12 @@ import {
   type ReactNotificationBodyReaction,
 } from '@workspace/api-client-react';
 
-// Emoji top row — always visible, no scrolling needed (7 fits one row).
-const EMOJI_KEYS = ['👍', '👎', '😊', '😍', '😱', '😂', '😢'] as const;
+// Top row — ordered by how likely each is to be someone's go-to reaction to
+// a friend's film pick (warm/positive first, niche ones toward the end).
+// Scrollable like the phrase rows below, since the personalised reordering
+// (last-used floats to the front) means the "front" position changes.
+const EMOJI_KEYS = ['❤️', '😂', '😍', '😭', '🤪', '🤓', '🤯', '👍', '🤌', '👎'] as const;
+const LAST_EMOJI_STORAGE_KEY = 'film-locker:lastReactionEmoji';
 
 const WATCHED_IT = 'Watched it!';
 
@@ -79,7 +84,7 @@ function formatRelative(date: Date): string {
 // movie-catchphrase keys, styled to read as an actual keyboard popup rather
 // than a row of chat-style pills. Opens as a bottom sheet from a "React"
 // trigger on each film row instead of being permanently inline, since the
-// full set (7 emoji + 20 phrases) is too much to show inside every card. ────
+// full set (10 emoji + 21 phrases) is too much to show inside every card. ──
 
 function ReactionKeyboardSheet({
   visible,
@@ -96,6 +101,28 @@ function ReactionKeyboardSheet({
   onClose: () => void;
   disabled?: boolean;
 }) {
+  // Personalisation only — which emoji sits first — so it's a device-local
+  // preference, not something worth round-tripping to the server for.
+  const [lastEmoji, setLastEmoji] = useState<(typeof EMOJI_KEYS)[number] | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(LAST_EMOJI_STORAGE_KEY).then((stored) => {
+      if (stored && (EMOJI_KEYS as readonly string[]).includes(stored)) {
+        setLastEmoji(stored as (typeof EMOJI_KEYS)[number]);
+      }
+    });
+  }, []);
+
+  const orderedEmojis = lastEmoji
+    ? [lastEmoji, ...EMOJI_KEYS.filter((e) => e !== lastEmoji)]
+    : EMOJI_KEYS;
+
+  const handleEmojiPress = useCallback((emoji: (typeof EMOJI_KEYS)[number]) => {
+    setLastEmoji(emoji);
+    void AsyncStorage.setItem(LAST_EMOJI_STORAGE_KEY, emoji);
+    onSelect(emoji);
+  }, [onSelect]);
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={kStyles.overlay}>
@@ -112,12 +139,18 @@ function ReactionKeyboardSheet({
             </TouchableOpacity>
           </View>
 
-          {/* Emoji row — the keyboard's top row */}
-          <View style={kStyles.emojiRow}>
-            {EMOJI_KEYS.map((emoji) => (
+          {/* Emoji row — the keyboard's top row. Scrollable, and reordered so
+              whichever emoji you used last sits first — easy to get back to
+              your go-to reaction without hunting for it. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={kStyles.emojiRow}
+          >
+            {orderedEmojis.map((emoji) => (
               <TouchableOpacity
                 key={emoji}
-                onPress={() => onSelect(emoji)}
+                onPress={() => handleEmojiPress(emoji)}
                 disabled={disabled}
                 activeOpacity={0.6}
                 style={kStyles.emojiKey}
@@ -129,7 +162,7 @@ function ReactionKeyboardSheet({
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
 
           {/* Catchphrase "keys" — where the letters would be, one horizontally
               scrolling row per keyboard row */}
@@ -196,8 +229,8 @@ const kStyles = StyleSheet.create({
   // Emoji row — plain glyphs on the grey body, no key background, matching
   // how a real keyboard's emoji/symbol row sits directly on the keyboard.
   emojiRow: {
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
-    paddingHorizontal: 8, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 8, paddingVertical: 10, gap: 14,
   },
   emojiKey: { padding: 6, borderRadius: 10 },
   emojiText: { fontSize: 28 },

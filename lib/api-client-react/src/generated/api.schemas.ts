@@ -297,13 +297,16 @@ export type ReactNotificationBodyReaction = typeof ReactNotificationBodyReaction
 
 
 export const ReactNotificationBodyReaction = {
-  '👍': '👍',
-  '👎': '👎',
-  '😊': '😊',
-  '😍': '😍',
-  '😱': '😱',
+  '❤️': '❤️',
   '😂': '😂',
-  '😢': '😢',
+  '😍': '😍',
+  '😭': '😭',
+  '🤪': '🤪',
+  '🤓': '🤓',
+  '🤯': '🤯',
+  '👍': '👍',
+  '🤌': '🤌',
+  '👎': '👎',
   'Watched_it!': 'Watched it!',
   'Fool_of_a_Took!': 'Fool of a Took!',
   Prestige_Worldwide: 'Prestige Worldwide',

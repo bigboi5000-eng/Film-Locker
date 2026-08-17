@@ -1513,13 +1513,16 @@ components:
         reaction:
           type: string
           enum:
-            - "👍"
-            - "👎"
-            - "😊"
-            - "😍"
-            - "😱"
+            - "❤️"
             - "😂"
-            - "😢"
+            - "😍"
+            - "😭"
+            - "🤪"
+            - "🤓"
+            - "🤯"
+            - "👍"
+            - "🤌"
+            - "👎"
             - "Watched it!"
             - "Fool of a Took!"
             - "Prestige Worldwide"
