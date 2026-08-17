@@ -45,6 +45,14 @@ interface ShareFilmSheetProps {
   /** Suggested playlist name when the share was a curated/ranked list, e.g. "Top 10 Horror Films of All Time" */
   listTitle?: string | null;
   onClose: () => void;
+  /**
+   * Exit the app after the user is done — correct for the Android share-intent
+   * flow, which should return to whatever app the user shared from. Pass
+   * false when the sheet is opened from inside Film Locker itself (e.g. the
+   * watchlist screen's paste-link box), where "done" should just dismiss the
+   * sheet. Defaults to true to preserve the share-intent behavior.
+   */
+  exitAppOnReturn?: boolean;
 }
 
 const CONFIDENCE_THRESHOLD = 0.45;
@@ -524,7 +532,7 @@ const ppStyles = StyleSheet.create({
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
-export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFilmSheetProps) {
+export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
   const colors = useColors();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [addedCount, setAddedCount] = useState(0);
@@ -536,7 +544,9 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
     (m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null
   );
 
-  const isMultiFilm = candidates.length > 1;
+  // 3+ films offer the playlist/watchlist/both picker; 1-2 use the simpler
+  // per-card "Add to Watchlist" flow below instead.
+  const isMultiFilm = candidates.length > 2;
   const selectedCandidates = candidates.filter((m) => selectedIds.has(String(m.tmdb_id)));
 
   useEffect(() => {
@@ -576,10 +586,15 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
 
   const handleReturn = useCallback(() => {
     onClose();
-    setTimeout(() => {
-      BackHandler.exitApp();
-    }, 200);
-  }, [onClose]);
+    if (exitAppOnReturn) {
+      setTimeout(() => {
+        BackHandler.exitApp();
+      }, 200);
+    }
+  }, [onClose, exitAppOnReturn]);
+
+  const doneLabel = exitAppOnReturn ? 'Return to previous app' : 'Done';
+  const skipLabel = exitAppOnReturn ? 'Return without adding' : 'Close';
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
@@ -656,7 +671,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                   >
                     <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
                     <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
-                      Return without adding
+                      {skipLabel}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -753,7 +768,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                       activeOpacity={0.85}
                     >
                       <Ionicons name="arrow-back" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.returnBtnText}>Return to previous app</Text>
+                      <Text style={styles.returnBtnText}>{doneLabel}</Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
@@ -763,7 +778,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                     >
                       <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
                       <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
-                        Return without adding
+                        {skipLabel}
                       </Text>
                     </TouchableOpacity>
                   )}

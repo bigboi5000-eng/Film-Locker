@@ -26,10 +26,12 @@ import {
   getSearchMoviesQueryKey,
   type Movie,
   type TmdbMovieCard,
+  type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -108,6 +110,9 @@ export default function WatchlistScreen() {
   const [linkUrl, setLinkUrl] = useState('');
   const [filters, setFilters] = useState<FilterState>({});
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
+  const [linkMatches, setLinkMatches] = useState<GeminiMovieMatch[]>([]);
+  const [linkListTitle, setLinkListTitle] = useState<string | null>(null);
+  const [showLinkSheet, setShowLinkSheet] = useState(false);
 
   const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
   const isSearchActive = debouncedQuery.length >= 2;
@@ -154,14 +159,14 @@ export default function WatchlistScreen() {
     const trimmed = linkUrl.trim();
     if (!trimmed) return;
     try {
-      const result = await processLink({ data: { url: trimmed } });
+      // Dry-run: identify films without saving, then let ShareFilmSheet
+      // decide the flow — individual add-to-watchlist for 1-2 films,
+      // or a playlist/watchlist/both prompt (prefilled with the post's
+      // detected title, e.g. "Best Feel Good Movies") for 3 or more.
+      const result = await processLink({ data: { url: trimmed, dryRun: true } });
       setLinkUrl('');
-      await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-      const saved = result.saved ?? [];
-      if (Platform.OS !== 'web' && saved.length > 0) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      if (saved.length === 0) {
+      const matches = result.matches ?? [];
+      if (matches.length === 0) {
         showToast({
           title: 'No Films Found',
           subtitle:
@@ -170,25 +175,25 @@ export default function WatchlistScreen() {
               : `Processed via ${result.source} — no recognizable titles found.`,
           variant: 'error',
         });
-      } else {
-        const titleList = saved
-          .slice(0, 3)
-          .map((m) => m.title)
-          .join(' · ');
-        const extra = saved.length > 3 ? ` +${saved.length - 3} more` : '';
-        showToast({
-          title:
-            saved.length === 1
-              ? `"${saved[0]!.title}" added to your Watchlist!`
-              : `${saved.length} films added to your Watchlist!`,
-          subtitle: saved.length > 1 ? `${titleList}${extra}` : undefined,
-          variant: 'success',
-        });
+        return;
       }
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      setLinkMatches(matches);
+      setLinkListTitle(result.listTitle ?? null);
+      setShowLinkSheet(true);
     } catch {
       Alert.alert('Error', 'Could not process the link. Please try again.');
     }
-  }, [linkUrl, processLink, queryClient]);
+  }, [linkUrl, processLink, showToast]);
+
+  const handleCloseLinkSheet = useCallback(() => {
+    setShowLinkSheet(false);
+    setLinkMatches([]);
+    setLinkListTitle(null);
+    queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+  }, [queryClient]);
 
   const handleDelete = useCallback(
     (id: number) => {
@@ -463,6 +468,15 @@ export default function WatchlistScreen() {
           savedMovie={modalTarget.savedMovie}
         />
       )}
+
+      {/* Pasted-link results — individual add for 1-2 films, playlist/watchlist/both picker for 3+ */}
+      <ShareFilmSheet
+        visible={showLinkSheet}
+        matches={linkMatches}
+        listTitle={linkListTitle}
+        onClose={handleCloseLinkSheet}
+        exitAppOnReturn={false}
+      />
     </View>
   );
 }
