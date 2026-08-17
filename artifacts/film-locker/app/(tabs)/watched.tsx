@@ -21,6 +21,7 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { confirmDestructive } from '@/lib/confirm';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -45,24 +46,17 @@ export default function WatchedScreen() {
 
   const handleDelete = useCallback(
     (id: number) => {
-      Alert.alert('Remove Film', 'Remove this film from your Watched list?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }
-            try {
-              await deleteMovie({ id });
-              await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-            } catch {
-              Alert.alert('Error', 'Could not remove the film.');
-            }
-          },
-        },
-      ]);
+      confirmDestructive('Remove Film', 'Remove this film from your Watched list?', 'Remove', async () => {
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        try {
+          await deleteMovie({ id });
+          await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+        } catch {
+          Alert.alert('Error', 'Could not remove the film.');
+        }
+      });
     },
     [deleteMovie, queryClient]
   );

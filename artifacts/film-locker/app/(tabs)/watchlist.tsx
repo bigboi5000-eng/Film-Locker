@@ -32,6 +32,7 @@ import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
+import { confirmDestructive } from '@/lib/confirm';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -197,24 +198,17 @@ export default function WatchlistScreen() {
 
   const handleDelete = useCallback(
     (id: number) => {
-      Alert.alert('Remove from Locker', 'Remove this film?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }
-            try {
-              await deleteMovie({ id });
-              await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-            } catch {
-              Alert.alert('Error', 'Could not remove the film.');
-            }
-          },
-        },
-      ]);
+      confirmDestructive('Remove from Locker', 'Remove this film?', 'Remove', async () => {
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        try {
+          await deleteMovie({ id });
+          await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+        } catch {
+          Alert.alert('Error', 'Could not remove the film.');
+        }
+      });
     },
     [deleteMovie, queryClient]
   );
