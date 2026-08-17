@@ -291,25 +291,44 @@ export interface NotificationUsersResponse {
 }
 
 /**
- * A fixed set of emoji/canned-phrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it.
+ * A fixed set of emoji + movie-catchphrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it.
  */
 export type ReactNotificationBodyReaction = typeof ReactNotificationBodyReaction[keyof typeof ReactNotificationBodyReaction];
 
 
 export const ReactNotificationBodyReaction = {
   '👍': '👍',
-  '❤️': '❤️',
+  '👎': '👎',
+  '😊': '😊',
+  '😍': '😍',
+  '😱': '😱',
   '😂': '😂',
-  '🎬': '🎬',
-  '🤩': '🤩',
+  '😢': '😢',
   'Watched_it!': 'Watched it!',
+  'Fool_of_a_Took!': 'Fool of a Took!',
+  Prestige_Worldwide: 'Prestige Worldwide',
+  I_miss_your_whispering_eye: 'I miss your whispering eye',
+  Aim_for_the_bushes: 'Aim for the bushes',
+  'Read_a_f***ing_book': 'Read a f***ing book',
+  'I\'ll_be_back': 'I\'ll be back',
+  'Why_so_serious?': 'Why so serious?',
+  'You_can\'t_handle_the_truth!': 'You can\'t handle the truth!',
+  May_the_Force_be_with_you: 'May the Force be with you',
+  'Here\'s_looking_at_you,_kid': 'Here\'s looking at you, kid',
+  'You_shall_not_pass!': 'You shall not pass!',
+  I_am_Groot: 'I am Groot',
+  'Say_hello_to_my_little_friend!': 'Say hello to my little friend!',
+  Life_is_like_a_box_of_chocolates: 'Life is like a box of chocolates',
+  'To_infinity_and_beyond!': 'To infinity and beyond!',
+  Nobody_puts_Baby_in_a_corner: 'Nobody puts Baby in a corner',
+  'Great_Scott!': 'Great Scott!',
   'This_was_great!': 'This was great!',
   'Thank_you!': 'Thank you!',
   Not_for_me_this_one: 'Not for me this one',
 } as const;
 
 export interface ReactNotificationBody {
-  /** A fixed set of emoji/canned-phrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it. */
+  /** A fixed set of emoji + movie-catchphrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it. */
   reaction: ReactNotificationBodyReaction;
 }
 

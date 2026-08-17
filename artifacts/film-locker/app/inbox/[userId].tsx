@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, Platform,
+  ActivityIndicator, Alert, Platform, Modal, ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,13 +20,48 @@ import {
   type ReactNotificationBodyReaction,
 } from '@workspace/api-client-react';
 
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎬', '🤩'] as const;
+// Emoji top row — always visible, no scrolling needed (7 fits one row).
+const EMOJI_KEYS = ['👍', '👎', '😊', '😍', '😱', '😂', '😢'] as const;
+
 const WATCHED_IT = 'Watched it!';
-// Canned follow-up responses — kept separate from WATCHED_IT since that's a
-// status marker, these are a reply to the recommender. Matches the fixed
-// enum enforced server-side by ReactToNotificationBody; there's no way to
-// send free text through this endpoint even via a direct API call.
-const RESPONSE_PHRASES = ['This was great!', 'Thank you!', 'Not for me this one'] as const;
+
+// "Letter keys" — movie catchphrases instead of letters, laid out as
+// horizontally-scrolling keyboard rows. Matches the fixed enum enforced
+// server-side by ReactToNotificationBody — there's no way to send free text
+// through this endpoint even via a direct API call, so this list IS the
+// entire vocabulary two users can exchange here.
+const QUOTE_KEYS = [
+  WATCHED_IT,
+  'Fool of a Took!',
+  'Prestige Worldwide',
+  'I miss your whispering eye',
+  'Aim for the bushes',
+  'Read a f***ing book',
+  "I'll be back",
+  'Why so serious?',
+  "You can't handle the truth!",
+  'May the Force be with you',
+  "Here's looking at you, kid",
+  'You shall not pass!',
+  'I am Groot',
+  'Say hello to my little friend!',
+  'Life is like a box of chocolates',
+  'To infinity and beyond!',
+  'Nobody puts Baby in a corner',
+  'Great Scott!',
+  'This was great!',
+  'Thank you!',
+  'Not for me this one',
+] as const;
+
+/** Splits QUOTE_KEYS into fixed-size rows so the sheet reads as multiple
+ * scrollable keyboard rows rather than one very long one. */
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size) as T[]);
+  return rows;
+}
+const QUOTE_ROWS = chunk(QUOTE_KEYS, 7);
 
 function formatRelative(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -40,100 +75,161 @@ function formatRelative(date: Date): string {
   return date.toLocaleDateString();
 }
 
-function ReactionBar({
-  notificationId,
+// ── Reaction "keyboard" — emoji top row + horizontally-scrolling rows of
+// movie-catchphrase keys, styled to read as an actual keyboard popup rather
+// than a row of chat-style pills. Opens as a bottom sheet from a "React"
+// trigger on each film row instead of being permanently inline, since the
+// full set (7 emoji + 20 phrases) is too much to show inside every card. ────
+
+function ReactionKeyboardSheet({
+  visible,
+  filmTitle,
   currentReaction,
-  onReact,
+  onSelect,
+  onClose,
   disabled,
 }: {
-  notificationId: number;
+  visible: boolean;
+  filmTitle: string | null;
   currentReaction: string | null | undefined;
-  onReact: (id: number, r: ReactNotificationBodyReaction) => void;
+  onSelect: (r: ReactNotificationBodyReaction) => void;
+  onClose: () => void;
   disabled?: boolean;
 }) {
   return (
-    <View style={rStyles.row}>
-      {QUICK_REACTIONS.map((emoji) => {
-        const selected = currentReaction === emoji;
-        return (
-          <TouchableOpacity
-            key={emoji}
-            style={[rStyles.pill, selected && rStyles.pillSelected]}
-            onPress={() => onReact(notificationId, emoji)}
-            disabled={disabled}
-            activeOpacity={0.7}
-          >
-            <Text style={rStyles.emoji}>{emoji}</Text>
-          </TouchableOpacity>
-        );
-      })}
-      <TouchableOpacity
-        style={[rStyles.watchedPill, currentReaction === WATCHED_IT && rStyles.watchedPillSelected]}
-        onPress={() => onReact(notificationId, WATCHED_IT)}
-        disabled={disabled}
-        activeOpacity={0.7}
-      >
-        <Ionicons
-          name="checkmark-circle"
-          size={13}
-          color={currentReaction === WATCHED_IT ? '#FFFFFF' : '#059669'}
-          style={{ marginRight: 3 }}
-        />
-        <Text style={[rStyles.watchedText, currentReaction === WATCHED_IT && rStyles.watchedTextSelected]}>
-          Watched it!
-        </Text>
-      </TouchableOpacity>
-      {RESPONSE_PHRASES.map((phrase) => {
-        const selected = currentReaction === phrase;
-        return (
-          <TouchableOpacity
-            key={phrase}
-            style={[rStyles.pill, selected && rStyles.pillSelected]}
-            onPress={() => onReact(notificationId, phrase)}
-            disabled={disabled}
-            activeOpacity={0.7}
-          >
-            <Text style={[rStyles.phraseText, selected && rStyles.phraseTextSelected]}>
-              {phrase}
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={kStyles.overlay}>
+        <TouchableOpacity style={kStyles.backdrop} onPress={onClose} activeOpacity={1} />
+        <View style={kStyles.sheet}>
+          <View style={kStyles.handle} />
+
+          <View style={kStyles.header}>
+            <Text style={kStyles.headerTitle} numberOfLines={1}>
+              {filmTitle ? `React to "${filmTitle}"` : 'React'}
             </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+            <TouchableOpacity onPress={onClose} style={kStyles.closeBtn} hitSlop={8}>
+              <Ionicons name="close" size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Emoji row — the keyboard's top row */}
+          <View style={kStyles.emojiRow}>
+            {EMOJI_KEYS.map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                onPress={() => onSelect(emoji)}
+                disabled={disabled}
+                activeOpacity={0.6}
+                style={kStyles.emojiKey}
+              >
+                <Text
+                  style={[kStyles.emojiText, currentReaction === emoji && kStyles.emojiTextSelected]}
+                >
+                  {emoji}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Catchphrase "keys" — where the letters would be, one horizontally
+              scrolling row per keyboard row */}
+          {QUOTE_ROWS.map((row, rowIndex) => (
+            <ScrollView
+              key={rowIndex}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={kStyles.quoteRow}
+            >
+              {row.map((phrase) => {
+                const selected = currentReaction === phrase;
+                const isWatched = phrase === WATCHED_IT;
+                return (
+                  <TouchableOpacity
+                    key={phrase}
+                    style={[kStyles.quoteKey, selected && kStyles.quoteKeySelected]}
+                    onPress={() => onSelect(phrase)}
+                    disabled={disabled}
+                    activeOpacity={0.7}
+                  >
+                    {isWatched && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={13}
+                        color={selected ? '#FFFFFF' : '#059669'}
+                        style={{ marginRight: 4 }}
+                      />
+                    )}
+                    <Text style={[kStyles.quoteText, selected && kStyles.quoteTextSelected]}>
+                      {phrase}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ))}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
-const rStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  pill: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
-    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
+const kStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: {
+    backgroundColor: '#F1F3F6', // keyboard-body grey, not white
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
   },
-  pillSelected: { backgroundColor: '#EFF6FF', borderColor: '#0066FF' },
-  emoji: { fontSize: 16 },
-  phraseText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#374151' },
-  phraseTextSelected: { color: '#0066FF' },
-  watchedPill: {
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: '#D1D5DB', alignSelf: 'center', marginTop: 10, marginBottom: 4,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  headerTitle: { flex: 1, fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  closeBtn: { padding: 4, marginLeft: 8 },
+
+  // Emoji row — plain glyphs on the grey body, no key background, matching
+  // how a real keyboard's emoji/symbol row sits directly on the keyboard.
+  emojiRow: {
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+    paddingHorizontal: 8, paddingVertical: 10,
+  },
+  emojiKey: { padding: 6, borderRadius: 10 },
+  emojiText: { fontSize: 28 },
+  emojiTextSelected: { opacity: 0.5 },
+
+  // Catchphrase rows — each phrase gets a white key-cap (unlike single-glyph
+  // keys, multi-word phrases need a visible boundary to read as one "key").
+  quoteRow: { paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
+  quoteKey: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
-    backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 1,
+    elevation: 1,
   },
-  watchedPillSelected: { backgroundColor: '#059669', borderColor: '#059669' },
-  watchedText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#059669' },
-  watchedTextSelected: { color: '#FFFFFF' },
+  quoteKeySelected: { backgroundColor: '#0066FF' },
+  quoteText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#111827' },
+  quoteTextSelected: { color: '#FFFFFF' },
 });
 
 function FilmRow({
   item,
-  onReact,
+  onOpenReactionSheet,
   onAddToWatchlist,
-  reactingId,
 }: {
   item: FilmNotification;
-  onReact: (id: number, reaction: ReactNotificationBodyReaction) => void;
+  onOpenReactionSheet: (item: FilmNotification) => void;
   onAddToWatchlist: (item: FilmNotification) => void;
-  reactingId: number | null;
 }) {
+  const hasReacted = Boolean(item.reaction);
+
   return (
     <View style={styles.filmCard}>
       <Image source={{ uri: item.posterUrl }} style={styles.poster} contentFit="cover" transition={200} />
@@ -141,23 +237,33 @@ function FilmRow({
         <Text style={styles.filmTitle}>{item.filmTitle}</Text>
         <Text style={styles.time}>{formatRelative(new Date(item.createdAt))}</Text>
 
-        {/* Add to Watchlist */}
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => onAddToWatchlist(item)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="bookmark-outline" size={13} color="#FFF" style={{ marginRight: 4 }} />
-          <Text style={styles.addBtnText}>Add to Watchlist</Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          {/* Add to Watchlist */}
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => onAddToWatchlist(item)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="bookmark-outline" size={13} color="#FFF" style={{ marginRight: 4 }} />
+            <Text style={styles.addBtnText}>Add to Watchlist</Text>
+          </TouchableOpacity>
 
-        {/* Reactions */}
-        <ReactionBar
-          notificationId={item.id}
-          currentReaction={item.reaction}
-          onReact={onReact}
-          disabled={reactingId === item.id}
-        />
+          {/* Opens the reaction keyboard — shows the current pick, or a prompt */}
+          <TouchableOpacity
+            style={[styles.reactBtn, hasReacted && styles.reactBtnActive]}
+            onPress={() => onOpenReactionSheet(item)}
+            activeOpacity={0.8}
+          >
+            {hasReacted ? (
+              <Text style={styles.reactBtnText} numberOfLines={1}>{item.reaction}</Text>
+            ) : (
+              <>
+                <Ionicons name="happy-outline" size={14} color="#6B7280" style={{ marginRight: 4 }} />
+                <Text style={styles.reactBtnPromptText}>React</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -170,6 +276,7 @@ export default function InboxThreadScreen() {
   const queryClient = useQueryClient();
 
   const [reactingId, setReactingId] = useState<number | null>(null);
+  const [reactionTarget, setReactionTarget] = useState<FilmNotification | null>(null);
 
   const { data, isLoading } = useGetNotificationThread(userId!, {
     query: { queryKey: getGetNotificationThreadQueryKey(userId!), enabled: !!userId },
@@ -183,21 +290,24 @@ export default function InboxThreadScreen() {
   const displayName = sender?.username ?? username ?? 'User';
   const initials = displayName.slice(0, 2).toUpperCase();
 
-  const handleReact = useCallback(
-    async (id: number, reaction: ReactNotificationBodyReaction) => {
+  const handleSelectReaction = useCallback(
+    async (reaction: ReactNotificationBodyReaction) => {
+      if (!reactionTarget) return;
+      const id = reactionTarget.id;
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setReactingId(id);
       try {
         await reactTo({ id, data: { reaction } });
         await queryClient.invalidateQueries({ queryKey: getGetNotificationThreadQueryKey(userId!) });
         await queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+        setReactionTarget(null);
       } catch {
         Alert.alert('Error', 'Could not save your reaction.');
       } finally {
         setReactingId(null);
       }
     },
-    [reactTo, queryClient, userId]
+    [reactTo, queryClient, userId, reactionTarget]
   );
 
   const handleAddToWatchlist = useCallback(
@@ -259,9 +369,8 @@ export default function InboxThreadScreen() {
           renderItem={({ item }) => (
             <FilmRow
               item={item}
-              onReact={handleReact}
+              onOpenReactionSheet={setReactionTarget}
               onAddToWatchlist={handleAddToWatchlist}
-              reactingId={reactingId}
             />
           )}
           ListEmptyComponent={
@@ -278,6 +387,15 @@ export default function InboxThreadScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />}
         />
       )}
+
+      <ReactionKeyboardSheet
+        visible={reactionTarget !== null}
+        filmTitle={reactionTarget?.filmTitle ?? null}
+        currentReaction={reactionTarget?.reaction}
+        onSelect={handleSelectReaction}
+        onClose={() => setReactionTarget(null)}
+        disabled={reactingId !== null}
+      />
     </View>
   );
 }
@@ -309,12 +427,23 @@ const styles = StyleSheet.create({
   filmTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827', marginBottom: 4 },
   time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginBottom: 10 },
 
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+
   addBtn: {
     flexDirection: 'row', alignItems: 'center',
-    alignSelf: 'flex-start',
     backgroundColor: '#0066FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
   },
   addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+
+  reactBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    maxWidth: 150,
+    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+  },
+  reactBtnActive: { backgroundColor: '#EFF6FF', borderColor: '#0066FF' },
+  reactBtnPromptText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#6B7280' },
+  reactBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center' },
