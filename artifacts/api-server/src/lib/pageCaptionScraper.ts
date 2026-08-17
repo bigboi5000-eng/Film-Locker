@@ -18,9 +18,9 @@
  * grounding, then the audio/video fallbacks.
  */
 
-type Platform = "instagram" | "tiktok" | "youtube" | "facebook" | "unknown";
+export type Platform = "instagram" | "tiktok" | "youtube" | "facebook" | "unknown";
 
-function detectPlatform(url: string): Platform {
+export function detectPlatform(url: string): Platform {
   try {
     const { hostname } = new URL(url);
     if (hostname.includes("instagram.com")) return "instagram";

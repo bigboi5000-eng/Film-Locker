@@ -8,7 +8,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "20b897da-e05d-44cc-ae5e-a20adc7042b1-00-i0w2vkum4nxc.picard.replit.dev"
+        "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
       }
     },
     "production": {

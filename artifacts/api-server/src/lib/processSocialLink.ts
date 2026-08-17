@@ -21,11 +21,17 @@
  *        walls keep much of it out) — step 1 below regularly finds nothing
  *        for Instagram posts that this step picks up directly from the page.
  *
- *   1. Gemini + Google Search grounding:
+ *   1. Gemini + Google Search grounding (skipped for Instagram):
  *        Gemini searches Google to find out what the URL is about, then
  *        identifies any films referenced. Fallback for content the direct
  *        scrape above couldn't reach (private/login-walled pages) or
- *        platforms without a specific scraper.
+ *        platforms without a specific scraper. Skipped entirely for
+ *        Instagram — Google's index of Instagram is too sparse for this to
+ *        reliably find anything, and grounding-by-search asks Gemini to
+ *        guess at content it can't verify rather than analyse content it
+ *        was actually given. Instagram goes straight from step 0.5 to the
+ *        audio/video steps below, where Gemini analyses real downloaded
+ *        content instead of searching for the URL.
  *
  *   2. yt-dlp audio fallback:
  *        Downloads the audio track, sends it to Gemini 2.5 Flash via the
@@ -49,7 +55,7 @@
  *   "none"      — all steps returned empty
  */
 
-import { fetchPageCaption } from "./pageCaptionScraper";
+import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import { extractMoviesFromAudio } from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
@@ -183,22 +189,37 @@ export async function processSocialLink(
     warn?.({ url, err }, "processSocialLink: page caption scrape failed — falling back to Gemini URL grounding");
   }
 
-  // ── Step 1: Gemini + Google Search grounding ──────────────────────────────
+  // ── Step 1: Gemini + Google Search grounding (skipped for Instagram) ─────
   // Gemini looks up what this URL is about and extracts film references.
   // Fallback for content the direct scrape above couldn't reach.
-  try {
-    const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
-    warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
+  //
+  // Instagram is deliberately excluded: Google's index of Instagram is
+  // unreliable (login walls keep most of it out), so this step is asking
+  // Gemini to search for something it usually can't find — and when it
+  // can't verify a match it has previously substituted plausible-sounding
+  // content from the creator's other posts instead of reporting nothing
+  // (see geminiUrlAnalyzer.ts's FOUND/NOT_FOUND guard). Gemini's job here is
+  // to understand actual post content handed to it (caption text, or the
+  // downloaded audio/video in steps 2-3 below), not to search the web for
+  // the URL. For Instagram, an empty/failed caption scrape goes straight to
+  // the audio fallback instead.
+  if (detectPlatform(url) !== "instagram") {
+    try {
+      const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
+      warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
 
-    if (matches.length > 0) {
-      const { matches: enriched, saved, listTitle: enrichedListTitle } =
-        await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
-      return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
+      if (matches.length > 0) {
+        const { matches: enriched, saved, listTitle: enrichedListTitle } =
+          await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
+        return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
+      }
+
+      warn?.({ url }, "processSocialLink: Gemini URL analysis returned no matches — falling back to audio");
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: Gemini URL analysis failed — falling back to audio");
     }
-
-    warn?.({ url }, "processSocialLink: Gemini URL analysis returned no matches — falling back to audio");
-  } catch (err) {
-    warn?.({ url, err }, "processSocialLink: Gemini URL analysis failed — falling back to audio");
+  } else {
+    warn?.({ url }, "processSocialLink: Instagram URL — skipping Gemini search grounding, going straight to audio");
   }
 
   // ── Step 2: yt-dlp audio fallback ────────────────────────────────────────
