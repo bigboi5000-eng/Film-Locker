@@ -1512,8 +1512,22 @@ components:
       properties:
         reaction:
           type: string
-          maxLength: 20
-          description: Emoji or predefined text e.g. "Watched it!"
+          enum:
+            - "👍"
+            - "❤️"
+            - "😂"
+            - "🎬"
+            - "🤩"
+            - "Watched it!"
+            - "This was great!"
+            - "Thank you!"
+            - "Not for me this one"
+          description: >
+            A fixed set of emoji/canned-phrase reactions — deliberately not a
+            freeform string. There is no messaging feature in this app and
+            this is the only user-to-user "expression" endpoint, so the enum
+            is enforced here (not just left to the client UI) to guarantee
+            free text can never reach another user through it.
       required:
         - reaction
 

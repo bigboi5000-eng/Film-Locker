@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq, desc } from "drizzle-orm";
 import { db, filmNotificationsTable, usersTable, followsTable } from "@workspace/db";
-import { z } from "zod";
 import {
   SendNotificationBody,
   GetNotificationsResponse,
@@ -9,6 +8,7 @@ import {
   MarkNotificationReadParams,
   MarkNotificationReadResponse,
   GetNotificationUsersResponse,
+  ReactToNotificationBody,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { Expo } from "expo-server-sdk";
@@ -229,19 +229,18 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
 });
 
 // ── PATCH /notifications/:id/react ───────────────────────────────────────────
-// Set (or clear) an emoji / text reaction on a notification.
-
-const ReactBody = z.object({
-  reaction: z.string().max(20),
-});
+// Set a reaction on a notification — a fixed enum (emoji + canned phrases),
+// validated by ReactToNotificationBody, not a freeform string. There is no
+// messaging feature in this app; this is the only user-to-user "expression"
+// endpoint, so the enum is enforced here rather than left to the client UI.
 
 router.patch("/notifications/:id/react", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const body = ReactBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: "reaction is required" }); return; }
+  const body = ReactToNotificationBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const [updated] = await db
     .update(filmNotificationsTable)

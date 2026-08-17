@@ -17,10 +17,16 @@ import {
   getGetNotificationsQueryKey,
   getListMoviesQueryKey,
   type FilmNotification,
+  type ReactNotificationBodyReaction,
 } from '@workspace/api-client-react';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎬', '🤩'] as const;
 const WATCHED_IT = 'Watched it!';
+// Canned follow-up responses — kept separate from WATCHED_IT since that's a
+// status marker, these are a reply to the recommender. Matches the fixed
+// enum enforced server-side by ReactToNotificationBody; there's no way to
+// send free text through this endpoint even via a direct API call.
+const RESPONSE_PHRASES = ['This was great!', 'Thank you!', 'Not for me this one'] as const;
 
 function formatRelative(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -42,7 +48,7 @@ function ReactionBar({
 }: {
   notificationId: number;
   currentReaction: string | null | undefined;
-  onReact: (id: number, r: string) => void;
+  onReact: (id: number, r: ReactNotificationBodyReaction) => void;
   disabled?: boolean;
 }) {
   return (
@@ -77,6 +83,22 @@ function ReactionBar({
           Watched it!
         </Text>
       </TouchableOpacity>
+      {RESPONSE_PHRASES.map((phrase) => {
+        const selected = currentReaction === phrase;
+        return (
+          <TouchableOpacity
+            key={phrase}
+            style={[rStyles.pill, selected && rStyles.pillSelected]}
+            onPress={() => onReact(notificationId, phrase)}
+            disabled={disabled}
+            activeOpacity={0.7}
+          >
+            <Text style={[rStyles.phraseText, selected && rStyles.phraseTextSelected]}>
+              {phrase}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -89,6 +111,8 @@ const rStyles = StyleSheet.create({
   },
   pillSelected: { backgroundColor: '#EFF6FF', borderColor: '#0066FF' },
   emoji: { fontSize: 16 },
+  phraseText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#374151' },
+  phraseTextSelected: { color: '#0066FF' },
   watchedPill: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
@@ -106,7 +130,7 @@ function FilmRow({
   reactingId,
 }: {
   item: FilmNotification;
-  onReact: (id: number, reaction: string) => void;
+  onReact: (id: number, reaction: ReactNotificationBodyReaction) => void;
   onAddToWatchlist: (item: FilmNotification) => void;
   reactingId: number | null;
 }) {
@@ -160,7 +184,7 @@ export default function InboxThreadScreen() {
   const initials = displayName.slice(0, 2).toUpperCase();
 
   const handleReact = useCallback(
-    async (id: number, reaction: string) => {
+    async (id: number, reaction: ReactNotificationBodyReaction) => {
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setReactingId(id);
       try {

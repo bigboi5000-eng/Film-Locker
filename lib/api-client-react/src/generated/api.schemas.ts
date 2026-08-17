@@ -290,12 +290,27 @@ export interface NotificationUsersResponse {
   users: NotificationUser[];
 }
 
+/**
+ * A fixed set of emoji/canned-phrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it.
+ */
+export type ReactNotificationBodyReaction = typeof ReactNotificationBodyReaction[keyof typeof ReactNotificationBodyReaction];
+
+
+export const ReactNotificationBodyReaction = {
+  '👍': '👍',
+  '❤️': '❤️',
+  '😂': '😂',
+  '🎬': '🎬',
+  '🤩': '🤩',
+  'Watched_it!': 'Watched it!',
+  'This_was_great!': 'This was great!',
+  'Thank_you!': 'Thank you!',
+  Not_for_me_this_one: 'Not for me this one',
+} as const;
+
 export interface ReactNotificationBody {
-  /**
-     * Emoji or predefined text e.g. "Watched it!"
-     * @maxLength 20
-     */
-  reaction: string;
+  /** A fixed set of emoji/canned-phrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it. */
+  reaction: ReactNotificationBodyReaction;
 }
 
 export interface ReactNotificationResponse {

@@ -670,12 +670,8 @@ export const ReactToNotificationParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const reactToNotificationBodyReactionMax = 20;
-
-
-
 export const ReactToNotificationBody = zod.object({
-  "reaction": zod.string().max(reactToNotificationBodyReactionMax).describe('Emoji or predefined text e.g. \"Watched it!\"')
+  "reaction": zod.enum(['👍', '❤️', '😂', '🎬', '🤩', 'Watched it!', 'This was great!', 'Thank you!', 'Not for me this one']).describe('A fixed set of emoji\/canned-phrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user \"expression\" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it.\n')
 })
 
 export const ReactToNotificationResponse = zod.object({
