@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { GEMINI_MODEL } from "./geminiModel";
 
 export interface GeminiMovieMatch {
   movie_title: string;
@@ -102,7 +103,7 @@ export async function extractMoviesWithGemini(
   const ai = getClient();
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: GEMINI_MODEL,
     contents: [
       {
         role: "user",

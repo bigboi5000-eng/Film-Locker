@@ -12,6 +12,7 @@
 import type { GoogleGenAI } from "@google/genai";
 import { Type } from "@google/genai";
 import type { GeminiExtractionResult, GeminiMovieMatch } from "./geminiParser";
+import { GEMINI_MODEL } from "./geminiModel";
 
 export const MEDIA_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -105,7 +106,7 @@ export async function uploadAndAnalyzeMedia(
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODEL,
       contents: [
         {
           role: "user",

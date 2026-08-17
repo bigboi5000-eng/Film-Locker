@@ -23,6 +23,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import type { GeminiMovieMatch } from "./geminiParser";
+import { GEMINI_MODEL } from "./geminiModel";
 
 export interface GeminiRecommendationResult {
   offTopic: boolean;
@@ -141,7 +142,7 @@ export async function getRecommendations(
   const ai = getClient();
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: GEMINI_MODEL,
     contents: [
       {
         role: "user",
