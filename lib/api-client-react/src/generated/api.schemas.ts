@@ -95,6 +95,8 @@ export interface GeminiMovieMatch {
   poster_url?: string | null;
   title?: string | null;
   overview?: string | null;
+  /** Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST /movies/recommend, null everywhere else. */
+  synopsis?: string | null;
 }
 
 export interface SearchMoviesResponse {

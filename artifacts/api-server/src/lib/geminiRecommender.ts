@@ -72,8 +72,16 @@ const RESPONSE_SCHEMA = {
             type: Type.NUMBER,
             description: "Always 1.0 — these are deliberate recommendations, not fuzzy extractions.",
           },
+          synopsis: {
+            type: Type.STRING,
+            description:
+              "One short sentence (roughly 12-20 words) hooking the user on why " +
+              "this fits their request — not a plot summary or spoilers, a pitch. " +
+              "E.g. for a Notebook-similar request: 'A small-town summer romance " +
+              "that survives a war and years apart.'",
+          },
         },
-        required: ["movie_title", "release_year", "confidence_score"],
+        required: ["movie_title", "release_year", "confidence_score", "synopsis"],
       },
     },
     list_title: {
@@ -106,12 +114,21 @@ const SYSTEM_PROMPT =
   "access here, so rely on what you actually know rather than guessing at " +
   "bibliographic details you're unsure of. These results are shown to the " +
   "user as a short tappable list, not read out as prose, so always return " +
-  "up to 5 titles ranked best-fit-first — even for a request naming one " +
-  "specific reference film, suggest up to 5 similar options rather than " +
-  "just one. Fewer than 5 is fine if you genuinely can't think of that many " +
-  "good fits; never pad with weak matches just to reach 5. Exclude short " +
-  "films. TV shows are allowed since the request may ask for either. Set " +
-  "list_title to null always — it isn't used here.";
+  "up to 6 titles ranked best-fit-first. Fewer than 6 is fine if you " +
+  "genuinely can't think of that many good fits; never pad with weak " +
+  "matches just to reach 6.\n\n" +
+  "When the request names a specific reference title to be similar to, " +
+  "mix your picks rather than returning 6 near-clones: roughly the first " +
+  "2 should be the closest, most fundamentally similar matches (same core " +
+  "plot mechanics, structure, or premise), and the rest should be more " +
+  "thematically/tonally similar — same general vibe, mood, or genre feel, " +
+  "without being structurally the same story. For requests with no single " +
+  "reference title (e.g. 'a feel-good 90s comedy'), just rank all 6 by how " +
+  "well each fits the request overall.\n\n" +
+  "For every film, also write a one-sentence synopsis per the schema — a " +
+  "pitch for why it fits, not a plot summary, and never a spoiler. Exclude " +
+  "short films. TV shows are allowed since the request may ask for either. " +
+  "Set list_title to null always — it isn't used here.";
 
 /**
  * Ask Gemini for film/TV recommendations matching a natural-language query.
@@ -157,6 +174,7 @@ export async function getRecommendations(
       movie_title: m.movie_title.trim(),
       release_year: (m.release_year ?? "").trim(),
       confidence_score: 1,
+      synopsis: (m.synopsis ?? "").trim() || undefined,
     }));
 
   const list_title =

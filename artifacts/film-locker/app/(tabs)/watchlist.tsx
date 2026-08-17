@@ -107,6 +107,52 @@ function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRo
   );
 }
 
+// ── AI recommendation row — same shape as SearchResultRow, plus the
+// one-sentence synopsis Gemini writes specifically for these results ──────────
+
+interface AiResultRowProps {
+  match: GeminiMovieMatch;
+  isSaved: boolean;
+  savedMovie?: Movie;
+  onPress: (match: GeminiMovieMatch, savedMovie?: Movie) => void;
+}
+
+function AiResultRow({ match, isSaved, savedMovie, onPress }: AiResultRowProps) {
+  return (
+    <TouchableOpacity
+      style={styles.resultRow}
+      onPress={() => onPress(match, savedMovie)}
+      activeOpacity={0.75}
+    >
+      <Image
+        source={{ uri: match.poster_url ?? undefined }}
+        style={styles.resultPoster}
+        contentFit="cover"
+        transition={200}
+        placeholder={require('@/assets/images/icon.png')}
+      />
+      <View style={styles.resultInfo}>
+        <Text style={styles.resultTitle} numberOfLines={2}>
+          {match.title ?? match.movie_title}
+        </Text>
+        {match.release_year ? (
+          <Text style={styles.resultYear}>{match.release_year}</Text>
+        ) : null}
+        {match.synopsis ? (
+          <Text style={styles.resultSynopsis} numberOfLines={2}>
+            {match.synopsis}
+          </Text>
+        ) : null}
+      </View>
+      {isSaved && (
+        <View style={styles.savedBadge}>
+          <Ionicons name="bookmark" size={14} color="#FFFFFF" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
 // ── Modal selection state ─────────────────────────────────────────────────────
 
 interface ModalTarget {
@@ -190,21 +236,6 @@ export default function WatchlistScreen() {
 
   const searchResults = searchData?.movies ?? [];
 
-  // AI recommendations reuse the same row component as TMDB search results —
-  // only tmdb_id-resolved matches ever reach the sheet-less list.
-  const aiResultCards: TmdbMovieCard[] = useMemo(
-    () =>
-      aiResults.map((m) => ({
-        tmdbId: m.tmdb_id as number,
-        title: m.title ?? m.movie_title,
-        releaseYear: m.release_year,
-        posterUrl: m.poster_url ?? '',
-        overview: m.overview ?? '',
-        genres: [],
-      })),
-    [aiResults]
-  );
-
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   // Main bar submit — URL only now that AI has its own bar. Dry-run: identify
@@ -257,7 +288,7 @@ export default function WatchlistScreen() {
         });
         return;
       }
-      const matches = (result.matches ?? []).filter((m) => m.tmdb_id != null).slice(0, 5);
+      const matches = (result.matches ?? []).filter((m) => m.tmdb_id != null).slice(0, 6);
       if (matches.length === 0) {
         showToast({
           title: 'No Recommendations Found',
@@ -332,6 +363,21 @@ export default function WatchlistScreen() {
     []
   );
 
+  const openAiResultModal = useCallback(
+    (match: GeminiMovieMatch, savedMovie?: Movie) => {
+      if (match.tmdb_id == null) return;
+      setModalTarget({
+        tmdbId: match.tmdb_id,
+        title: match.title ?? match.movie_title,
+        posterUrl: match.poster_url ?? '',
+        releaseYear: match.release_year,
+        overview: match.overview ?? '',
+        savedMovie,
+      });
+    },
+    []
+  );
+
   const openSavedMovieModal = useCallback((movie: Movie) => {
     setModalTarget({
       tmdbId: movie.tmdbId,
@@ -358,6 +404,21 @@ export default function WatchlistScreen() {
       );
     },
     [savedByTmdbId, openMovieModal]
+  );
+
+  const renderAiResult = useCallback(
+    ({ item }: { item: GeminiMovieMatch }) => {
+      const saved = item.tmdb_id != null ? savedByTmdbId.get(item.tmdb_id) : undefined;
+      return (
+        <AiResultRow
+          match={item}
+          isSaved={Boolean(saved)}
+          savedMovie={saved}
+          onPress={openAiResultModal}
+        />
+      );
+    },
+    [savedByTmdbId, openAiResultModal]
   );
 
   const renderWatchlistMovie = useCallback(
@@ -504,12 +565,12 @@ export default function WatchlistScreen() {
 
       {/* ── LIST AREA ── */}
       {aiOpen ? (
-        /* AI RECOMMENDATIONS — plain tappable list, no chat, top 5 max */
-        <FlatList<TmdbMovieCard>
+        /* AI RECOMMENDATIONS — plain tappable list, no chat, top 6 max */
+        <FlatList<GeminiMovieMatch>
           key="ai-results"
-          data={aiResultCards}
-          keyExtractor={(item) => `ai-${item.tmdbId}`}
-          renderItem={renderSearchResult}
+          data={aiResults}
+          keyExtractor={(item, index) => `ai-${item.tmdb_id ?? index}`}
+          renderItem={renderAiResult}
           ListEmptyComponent={
             isRecommending ? (
               <View style={styles.searchingState}>
@@ -701,6 +762,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     color: '#111827',
+    // react-native-web never resets the browser's default focus outline on
+    // the underlying <input> — without this, focusing/typing draws a
+    // separate black ring around just the input, distinct from the
+    // intended pill border around it.
+    borderWidth: 0,
+    ...(Platform.OS === 'web' ? { outlineWidth: 0 } : null),
   },
   aiToggleBtn: {
     width: 44,
@@ -768,6 +835,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#FF8C00',
     marginTop: 3,
+  },
+  resultSynopsis: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 16,
   },
   savedBadge: {
     width: 28,

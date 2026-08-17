@@ -4,6 +4,8 @@ export interface GeminiMovieMatch {
   movie_title: string;
   release_year: string;
   confidence_score: number;
+  /** One-sentence hook — only populated by geminiRecommender.ts, absent elsewhere. */
+  synopsis?: string;
 }
 
 export interface GeminiExtractionResult {

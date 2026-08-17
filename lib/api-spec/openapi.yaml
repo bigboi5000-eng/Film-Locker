@@ -1075,6 +1075,13 @@ components:
         overview:
           type: string
           nullable: true
+        synopsis:
+          type: string
+          nullable: true
+          description: >
+            Very short (one-sentence) hook written by Gemini specifically for
+            recommend results — only populated by POST /movies/recommend,
+            null everywhere else.
       required:
         - movie_title
         - release_year

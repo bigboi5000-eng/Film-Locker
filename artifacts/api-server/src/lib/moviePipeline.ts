@@ -24,6 +24,8 @@ export interface EnrichedMatch {
   poster_url?: string | null;
   title?: string | null;
   overview?: string | null;
+  /** Carried through from the raw match — only recommend results set this. */
+  synopsis?: string | null;
 }
 
 export interface PipelineResult {

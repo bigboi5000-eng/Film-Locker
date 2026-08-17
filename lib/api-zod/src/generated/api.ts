@@ -123,7 +123,8 @@ export const AiExtractResponse = zod.object({
   "tmdb_id": zod.number().nullish(),
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
-  "overview": zod.string().nullish()
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -174,7 +175,8 @@ export const ProcessSocialLinkResponse = zod.object({
   "tmdb_id": zod.number().nullish(),
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
-  "overview": zod.string().nullish()
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -225,7 +227,8 @@ export const RecommendMoviesResponse = zod.object({
   "tmdb_id": zod.number().nullish(),
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
-  "overview": zod.string().nullish()
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
