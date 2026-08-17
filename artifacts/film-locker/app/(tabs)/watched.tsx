@@ -46,7 +46,8 @@ export default function WatchedScreen() {
 
   const handleDelete = useCallback(
     (id: number) => {
-      confirmDestructive('Remove Film', 'Remove this film from your Watched list?', 'Remove', async () => {
+      const title = allMovies.find((m) => m.id === id)?.title ?? 'this film';
+      confirmDestructive(`Would you like to remove "${title}" from your Watched list?`, 'Remove', async () => {
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
@@ -58,7 +59,7 @@ export default function WatchedScreen() {
         }
       });
     },
-    [deleteMovie, queryClient]
+    [deleteMovie, queryClient, allMovies]
   );
 
   const renderMovie = useCallback(

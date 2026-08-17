@@ -198,7 +198,8 @@ export default function WatchlistScreen() {
 
   const handleDelete = useCallback(
     (id: number) => {
-      confirmDestructive('Remove from Locker', 'Remove this film?', 'Remove', async () => {
+      const title = allMovies.find((m) => m.id === id)?.title ?? 'this film';
+      confirmDestructive(`Would you like to remove "${title}" from your watchlist?`, 'Remove', async () => {
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
@@ -210,7 +211,7 @@ export default function WatchlistScreen() {
         }
       });
     },
-    [deleteMovie, queryClient]
+    [deleteMovie, queryClient, allMovies]
   );
 
   const openMovieModal = useCallback(

@@ -200,7 +200,7 @@ export default function PlaylistScreen() {
   }, [updatePlaylist, numericId, invalidate]);
 
   const handleDelete = useCallback(() => {
-    confirmDestructive('Delete playlist', `Delete "${playlist?.name}"? This cannot be undone.`, 'Delete', async () => {
+    confirmDestructive(`Would you like to delete "${playlist?.name}"? This cannot be undone.`, 'Delete', async () => {
       try {
         await deletePlaylist({ id: numericId });
         await queryClient.invalidateQueries({ queryKey: getGetMyPlaylistsQueryKey() });
@@ -212,7 +212,7 @@ export default function PlaylistScreen() {
   }, [deletePlaylist, numericId, playlist?.name, queryClient, router]);
 
   const handleRemove = useCallback((tmdbId: number, title: string) => {
-    confirmDestructive('Remove from Playlist', `Remove "${title}" from this playlist?`, 'Remove', async () => {
+    confirmDestructive(`Would you like to remove "${title}" from this playlist?`, 'Remove', async () => {
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       try {
         await removeItem({ id: numericId, tmdbId });
