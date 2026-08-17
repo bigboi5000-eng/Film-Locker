@@ -315,7 +315,6 @@ function BulkAddPanel({
   const alsoAddToWatchlist = mode === 'both';
 
   const [newName, setNewName] = useState(initialName ?? '');
-  const [showNewInput, setShowNewInput] = useState(Boolean(initialName));
   const [addingTo, setAddingTo] = useState<number | 'watchlist' | null>(mode === 'watchlist' ? 'watchlist' : null);
   const [done, setDone] = useState(false);
 
@@ -443,63 +442,58 @@ function BulkAddPanel({
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
       <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
 
-      {/* Existing playlists */}
-      {playlists.map((pl) => (
-        <TouchableOpacity
-          key={pl.id}
-          style={ppStyles.plRow}
-          onPress={() => addAllToPlaylist(pl.id)}
-          disabled={addingTo !== null}
-          activeOpacity={0.75}
-        >
-          <View style={ppStyles.plIcon}>
-            <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
-          </View>
-          <View style={ppStyles.plInfo}>
-            <Text style={ppStyles.plName}>{pl.name}</Text>
-            <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
-          </View>
-          {addingTo === pl.id ? (
-            <ActivityIndicator size="small" color="#0066FF" />
-          ) : (
-            <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
-          )}
-        </TouchableOpacity>
-      ))}
+      {/* Existing playlists — tap to add the selected films straight in */}
+      {playlists.length > 0 && (
+        <>
+          <Text style={ppStyles.sectionLabel}>ADD TO EXISTING</Text>
+          {playlists.map((pl) => (
+            <TouchableOpacity
+              key={pl.id}
+              style={ppStyles.plRow}
+              onPress={() => addAllToPlaylist(pl.id)}
+              disabled={addingTo !== null}
+              activeOpacity={0.75}
+            >
+              <View style={ppStyles.plIcon}>
+                <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
+              </View>
+              <View style={ppStyles.plInfo}>
+                <Text style={ppStyles.plName}>{pl.name}</Text>
+                <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
+              </View>
+              {addingTo === pl.id ? (
+                <ActivityIndicator size="small" color="#0066FF" />
+              ) : (
+                <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
+              )}
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
 
-      {/* Create new */}
-      {showNewInput ? (
-        <View style={ppStyles.newRow}>
-          <TextInput
-            style={ppStyles.newInput}
-            value={newName}
-            onChangeText={setNewName}
-            placeholder="New playlist name…"
-            placeholderTextColor="#9CA3AF"
-            autoFocus
-            maxLength={100}
-            returnKeyType="done"
-            onSubmitEditing={handleCreateAndAdd}
-          />
-          <TouchableOpacity
-            style={ppStyles.newCreate}
-            onPress={handleCreateAndAdd}
-            disabled={!newName.trim() || creating || addingTo !== null}
-            activeOpacity={0.8}
-          >
-            {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
-          </TouchableOpacity>
-        </View>
-      ) : (
+      {/* Create new — always visible, prefilled from the detected list title
+          (e.g. "Best Feel Good Movies") when there is one, but always editable. */}
+      <Text style={ppStyles.sectionLabel}>{playlists.length > 0 ? 'OR CREATE NEW' : 'NEW PLAYLIST'}</Text>
+      <View style={ppStyles.newRow}>
+        <TextInput
+          style={ppStyles.newInput}
+          value={newName}
+          onChangeText={setNewName}
+          placeholder="New playlist name…"
+          placeholderTextColor="#9CA3AF"
+          maxLength={100}
+          returnKeyType="done"
+          onSubmitEditing={handleCreateAndAdd}
+        />
         <TouchableOpacity
-          style={ppStyles.newBtn}
-          onPress={() => setShowNewInput(true)}
+          style={ppStyles.newCreate}
+          onPress={handleCreateAndAdd}
+          disabled={!newName.trim() || creating || addingTo !== null}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={18} color="#0066FF" style={{ marginRight: 6 }} />
-          <Text style={ppStyles.newBtnText}>Create new playlist</Text>
+          {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
-      )}
+      </View>
     </ScrollView>
   );
 }
@@ -516,9 +510,11 @@ const ppStyles = StyleSheet.create({
   plInfo: { flex: 1 },
   plName: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
   plCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
-  newBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
-  newBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
-  newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
+  sectionLabel: {
+    fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF',
+    letterSpacing: 0.8, marginTop: 16, marginBottom: 4,
+  },
+  newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   newInput: {
     flex: 1, height: 40, paddingHorizontal: 12,
     backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB',
