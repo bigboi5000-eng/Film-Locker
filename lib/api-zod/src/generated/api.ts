@@ -204,6 +204,57 @@ export const ProcessSocialLinkResponse = zod.object({
 
 
 /**
+ * @summary Ask Gemini for film/TV recommendations from a natural-language query (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre"), enrich each with TMDB data, and optionally save to the locker. Strictly scoped to film/TV requests — Gemini is instructed to refuse anything else, surfaced as offTopic=true with no matches.
+
+ */
+export const RecommendMoviesBody = zod.object({
+  "query": zod.string().describe('Natural-language film\/TV request, e.g. \"recommend a 90 minute horror film similar to Texas Chainsaw Massacre\".\n'),
+  "dryRun": zod.boolean().optional().describe('When true, identify recommended films but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film.\n')
+})
+
+export const recommendMoviesResponseSavedItemRatingMax = 5;
+
+
+
+export const RecommendMoviesResponse = zod.object({
+  "offTopic": zod.boolean().describe('True when the query wasn\'t a film\/TV request and Gemini refused to answer it — matches will be empty in this case.\n'),
+  "matches": zod.array(zod.object({
+  "movie_title": zod.string(),
+  "release_year": zod.string(),
+  "confidence_score": zod.number(),
+  "tmdb_id": zod.number().nullish(),
+  "poster_url": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "overview": zod.string().nullish()
+}).describe('Single movie reference extracted by Gemini, with confidence score')),
+  "saved": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})),
+  "rating": zod.number().min(1).max(recommendMoviesResponseSavedItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+})),
+  "listTitle": zod.string().nullable().describe('Suggested playlist name when the recommendation is a themed set of multiple films (e.g. \"90s Feel-Good Comedies\"), null for a single recommendation.\n')
+})
+
+
+/**
  * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
 
  */

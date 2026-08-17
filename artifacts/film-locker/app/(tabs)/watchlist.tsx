@@ -21,6 +21,7 @@ import {
   useListMovies,
   useDeleteMovie,
   useProcessSocialLink,
+  useRecommendMovies,
   useSearchMovies,
   getListMoviesQueryKey,
   getSearchMoviesQueryKey,
@@ -47,6 +48,22 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
+}
+
+// ── Unified search-bar input classification ─────────────────────────────────
+// The single bar handles three inputs: a pasted URL, a plain title (live TMDB
+// search), or a natural-language recommendation request. No scheme required —
+// people paste "instagram.com/reel/…" without "https://" all the time.
+const URL_LIKE_RE = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i;
+
+function looksLikeUrl(text: string): boolean {
+  return URL_LIKE_RE.test(text.trim());
+}
+
+/** A multi-word request or a question reads as a recommendation ask, not a title fragment — skip the live TMDB dropdown so it doesn't flash "no results" mid-sentence. */
+function looksLikeSentence(text: string): boolean {
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  return wordCount > 5 || text.includes('?');
 }
 
 // ── Search result row ─────────────────────────────────────────────────────────
@@ -108,19 +125,21 @@ export default function WatchlistScreen() {
 
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
-  const [linkUrl, setLinkUrl] = useState('');
   const [filters, setFilters] = useState<FilterState>({});
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
-  const [linkMatches, setLinkMatches] = useState<GeminiMovieMatch[]>([]);
-  const [linkListTitle, setLinkListTitle] = useState<string | null>(null);
-  const [showLinkSheet, setShowLinkSheet] = useState(false);
+  const [resultMatches, setResultMatches] = useState<GeminiMovieMatch[]>([]);
+  const [resultListTitle, setResultListTitle] = useState<string | null>(null);
+  const [showResultSheet, setShowResultSheet] = useState(false);
 
   const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
-  const isSearchActive = debouncedQuery.length >= 2;
+  const isSearchActive =
+    debouncedQuery.length >= 2 && !looksLikeUrl(debouncedQuery) && !looksLikeSentence(debouncedQuery);
 
   const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies();
   const { mutateAsync: deleteMovie } = useDeleteMovie();
-  const { mutateAsync: processLink, isPending: isProcessing } = useProcessSocialLink();
+  const { mutateAsync: processLink, isPending: isProcessingLink } = useProcessSocialLink();
+  const { mutateAsync: recommend, isPending: isRecommending } = useRecommendMovies();
+  const isBusy = isProcessingLink || isRecommending;
 
   // TMDB search — only fires when query has ≥ 2 chars.
   // params.q and queryKey both derive from debouncedQuery so they stay aligned;
@@ -156,24 +175,58 @@ export default function WatchlistScreen() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const handleProcessLink = useCallback(async () => {
-    const trimmed = linkUrl.trim();
-    if (!trimmed) return;
+  // Single submit action for the unified bar — routes to whichever pipeline
+  // matches the input, then shows the same dry-run result sheet either way:
+  // individual add-to-watchlist for 1-2 films, or a playlist/watchlist/both
+  // prompt (prefilled with a detected/suggested title) for 3 or more.
+  const handleSubmit = useCallback(async () => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed || isBusy) return;
+
+    if (looksLikeUrl(trimmed)) {
+      try {
+        const result = await processLink({ data: { url: trimmed, dryRun: true } });
+        setSearchQuery('');
+        const matches = result.matches ?? [];
+        if (matches.length === 0) {
+          showToast({
+            title: 'No Films Found',
+            subtitle:
+              result.source === 'none'
+                ? 'Could not extract any titles from this link.'
+                : `Processed via ${result.source} — no recognizable titles found.`,
+            variant: 'error',
+          });
+          return;
+        }
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        setResultMatches(matches);
+        setResultListTitle(result.listTitle ?? null);
+        setShowResultSheet(true);
+      } catch {
+        Alert.alert('Error', 'Could not process the link. Please try again.');
+      }
+      return;
+    }
+
     try {
-      // Dry-run: identify films without saving, then let ShareFilmSheet
-      // decide the flow — individual add-to-watchlist for 1-2 films,
-      // or a playlist/watchlist/both prompt (prefilled with the post's
-      // detected title, e.g. "Best Feel Good Movies") for 3 or more.
-      const result = await processLink({ data: { url: trimmed, dryRun: true } });
-      setLinkUrl('');
+      const result = await recommend({ data: { query: trimmed, dryRun: true } });
+      setSearchQuery('');
+      if (result.offTopic) {
+        showToast({
+          title: 'Film & TV only',
+          subtitle: 'Try something like "a 90 minute horror film similar to Texas Chainsaw".',
+          variant: 'error',
+        });
+        return;
+      }
       const matches = result.matches ?? [];
       if (matches.length === 0) {
         showToast({
-          title: 'No Films Found',
-          subtitle:
-            result.source === 'none'
-              ? 'Could not extract any titles from this link.'
-              : `Processed via ${result.source} — no recognizable titles found.`,
+          title: 'No Recommendations Found',
+          subtitle: 'Try rephrasing your request.',
           variant: 'error',
         });
         return;
@@ -181,18 +234,18 @@ export default function WatchlistScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      setLinkMatches(matches);
-      setLinkListTitle(result.listTitle ?? null);
-      setShowLinkSheet(true);
+      setResultMatches(matches);
+      setResultListTitle(result.listTitle ?? null);
+      setShowResultSheet(true);
     } catch {
-      Alert.alert('Error', 'Could not process the link. Please try again.');
+      Alert.alert('Error', 'Could not get a recommendation. Please try again.');
     }
-  }, [linkUrl, processLink, showToast]);
+  }, [searchQuery, isBusy, processLink, recommend, showToast]);
 
-  const handleCloseLinkSheet = useCallback(() => {
-    setShowLinkSheet(false);
-    setLinkMatches([]);
-    setLinkListTitle(null);
+  const handleCloseResultSheet = useCallback(() => {
+    setShowResultSheet(false);
+    setResultMatches([]);
+    setResultListTitle(null);
     queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
   }, [queryClient]);
 
@@ -293,60 +346,57 @@ export default function WatchlistScreen() {
         </View>
       </View>
 
-      {/* Search bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search any film…"
-          placeholderTextColor="#9CA3AF"
-          style={styles.searchInput}
-          returnKeyType="search"
-          autoCorrect={false}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Paste social link — hidden while searching */}
-      {!isSearchActive && (
-        <View style={styles.linkSection}>
-          <Text style={styles.linkLabel}>PASTE A SOCIAL LINK</Text>
-          <View style={styles.linkRow}>
-            <TextInput
-              value={linkUrl}
-              onChangeText={setLinkUrl}
-              placeholder="instagram.com/reel/… or tiktok.com/…"
-              placeholderTextColor="#9CA3AF"
-              style={styles.linkInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-            />
-            <TouchableOpacity
-              style={[
-                styles.linkButton,
-                (!linkUrl.trim() || isProcessing) && styles.linkButtonDisabled,
-              ]}
-              onPress={handleProcessLink}
-              disabled={!linkUrl.trim() || isProcessing}
-              activeOpacity={0.8}
-            >
-              {isProcessing ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-              )}
+      {/* Unified bar — search a film, paste a social link, or ask for a recommendation */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Paste a URL, search a film, or ask for a recommendation…"
+            placeholderTextColor="#9CA3AF"
+            style={styles.searchInput}
+            returnKeyType="go"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onSubmitEditing={handleSubmit}
+          />
+          <Ionicons
+            name="sparkles"
+            size={14}
+            color="#9CA3AF"
+            style={{ marginRight: searchQuery.length > 0 ? 6 : 0 }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </TouchableOpacity>
-          </View>
-          {isProcessing && (
-            <Text style={styles.processingHint}>Extracting films via Gemini…</Text>
           )}
         </View>
+        <TouchableOpacity
+          style={[
+            styles.searchSubmitBtn,
+            (!searchQuery.trim() || isBusy) && styles.searchSubmitBtnDisabled,
+          ]}
+          onPress={handleSubmit}
+          disabled={!searchQuery.trim() || isBusy}
+          activeOpacity={0.8}
+        >
+          {isBusy ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Ionicons
+              name={looksLikeUrl(searchQuery.trim()) ? 'link-outline' : 'sparkles'}
+              size={17}
+              color="#FFFFFF"
+            />
+          )}
+        </TouchableOpacity>
+      </View>
+      {isBusy && (
+        <Text style={styles.processingHint}>
+          {isProcessingLink ? 'Extracting films via Gemini…' : 'Asking Gemini for a recommendation…'}
+        </Text>
       )}
 
       {/* Filter bar — only when not searching */}
@@ -433,7 +483,7 @@ export default function WatchlistScreen() {
               <Text style={styles.emptySubtitle}>
                 {Object.keys(filters).length > 0
                   ? 'Try clearing your filters'
-                  : 'Search above to find films, or paste a social link'}
+                  : 'Search, paste a social link, or ask above for a recommendation'}
               </Text>
             </View>
           }
@@ -464,12 +514,12 @@ export default function WatchlistScreen() {
         />
       )}
 
-      {/* Pasted-link results — individual add for 1-2 films, playlist/watchlist/both picker for 3+ */}
+      {/* Link/recommendation results — individual add for 1-2 films, playlist/watchlist/both picker for 3+ */}
       <ShareFilmSheet
-        visible={showLinkSheet}
-        matches={linkMatches}
-        listTitle={linkListTitle}
-        onClose={handleCloseLinkSheet}
+        visible={showResultSheet}
+        matches={resultMatches}
+        listTitle={resultListTitle}
+        onClose={handleCloseResultSheet}
         exitAppOnReturn={false}
       />
     </View>
@@ -508,13 +558,21 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFFFFF' },
 
-  // Search
-  searchContainer: {
+  // Unified search / paste-link / ask-AI bar
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: HORIZONTAL_PADDING,
+    gap: 8,
+    marginHorizontal: HORIZONTAL_PADDING,
+    marginTop: HORIZONTAL_PADDING,
+    marginBottom: 8,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
     paddingHorizontal: 12,
-    paddingVertical: 10,
     backgroundColor: '#F9FAFB',
     borderRadius: 10,
     borderWidth: 1,
@@ -527,30 +585,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
   },
-
-  // Social link
-  linkSection: { marginHorizontal: HORIZONTAL_PADDING, marginBottom: 4 },
-  linkLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#9CA3AF',
-    letterSpacing: 1.2,
-    marginBottom: 8,
-  },
-  linkRow: { flexDirection: 'row', gap: 8 },
-  linkInput: {
-    flex: 1,
-    height: 44,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: '#111827',
-  },
-  linkButton: {
+  searchSubmitBtn: {
     width: 44,
     height: 44,
     borderRadius: 10,
@@ -558,12 +593,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  linkButtonDisabled: { backgroundColor: '#93C5FD' },
+  searchSubmitBtnDisabled: { backgroundColor: '#93C5FD' },
   processingHint: {
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
     color: '#6B7280',
-    marginTop: 6,
+    marginHorizontal: HORIZONTAL_PADDING,
+    marginBottom: 8,
   },
 
   // Section label

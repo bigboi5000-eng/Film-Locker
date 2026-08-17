@@ -71,6 +71,7 @@ const heavyLimit = rateLimit({
 
 app.use("/api/movies/process-social-link", heavyLimit);
 app.use("/api/movies/ai-extract", heavyLimit);
+app.use("/api/movies/recommend", heavyLimit);
 
 app.use("/api", router);
 

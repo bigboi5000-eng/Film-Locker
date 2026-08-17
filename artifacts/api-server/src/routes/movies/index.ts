@@ -12,6 +12,8 @@ import {
   AiExtractResponse,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
+  RecommendMoviesBody,
+  RecommendMoviesResponse,
   GetMovieDetailsParams,
   GetMovieDetailsResponse,
   PatchWatchedParams,
@@ -25,8 +27,9 @@ import {
 } from "@workspace/api-zod";
 import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
-import { runMoviePipeline } from "../../lib/moviePipeline";
+import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
+import { getRecommendations } from "../../lib/geminiRecommender";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -335,6 +338,38 @@ router.post("/movies/process-social-link", requireAuth, async (req, res): Promis
   );
 
   res.json(ProcessSocialLinkResponse.parse(result));
+});
+
+// POST /movies/recommend — natural-language film/TV recommendation (dry-run or save)
+router.post("/movies/recommend", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = RecommendMoviesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dryRun = Boolean(parsed.data.dryRun);
+  req.log.info({ query: parsed.data.query, dryRun }, "recommend: start");
+
+  const { offTopic, movies, list_title } = await getRecommendations(parsed.data.query);
+
+  if (offTopic) {
+    req.log.info({ query: parsed.data.query }, "recommend: off-topic query refused");
+    res.json(RecommendMoviesResponse.parse({ offTopic: true, matches: [], saved: [], listTitle: null }));
+    return;
+  }
+
+  const { matches, saved, listTitle } = await enrichAndSaveMatches(
+    movies,
+    (data, msg) => req.log.warn(data, msg),
+    dryRun,
+    clerkUserId,
+    list_title
+  );
+
+  req.log.info({ matchCount: matches.length, saved: saved.length }, "recommend: complete");
+  res.json(RecommendMoviesResponse.parse({ offTopic: false, matches, saved, listTitle }));
 });
 
 // PATCH /movies/:id/watched — toggle watched status (ownership verified)

@@ -51,6 +51,8 @@ import type {
   ProcessSocialLinkResponse,
   ReactNotificationBody,
   ReactNotificationResponse,
+  RecommendBody,
+  RecommendResponse,
   RecommendationsResponse,
   SearchMoviesParams,
   SearchMoviesResponse,
@@ -702,6 +704,78 @@ export const useProcessSocialLink = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getProcessSocialLinkMutationOptions(options));
+    }
+
+export const getRecommendMoviesUrl = () => {
+
+
+
+
+  return `/api/movies/recommend`
+}
+
+/**
+ * @summary Ask Gemini for film/TV recommendations from a natural-language query (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre"), enrich each with TMDB data, and optionally save to the locker. Strictly scoped to film/TV requests — Gemini is instructed to refuse anything else, surfaced as offTopic=true with no matches.
+
+ */
+export const recommendMovies = async (recommendBody: RecommendBody, options?: RequestInit): Promise<RecommendResponse> => {
+
+  return customFetch<RecommendResponse>(getRecommendMoviesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recommendBody)
+  }
+);}
+
+
+
+
+export const getRecommendMoviesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendMovies>>, TError,{data: BodyType<RecommendBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recommendMovies>>, TError,{data: BodyType<RecommendBody>}, TContext> => {
+
+const mutationKey = ['recommendMovies'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recommendMovies>>, {data: BodyType<RecommendBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recommendMovies(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecommendMoviesMutationResult = NonNullable<Awaited<ReturnType<typeof recommendMovies>>>
+    export type RecommendMoviesMutationBody = BodyType<RecommendBody>
+    export type RecommendMoviesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Ask Gemini for film/TV recommendations from a natural-language query (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre"), enrich each with TMDB data, and optionally save to the locker. Strictly scoped to film/TV requests — Gemini is instructed to refuse anything else, surfaced as offTopic=true with no matches.
+
+ */
+export const useRecommendMovies = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendMovies>>, TError,{data: BodyType<RecommendBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recommendMovies>>,
+        TError,
+        {data: BodyType<RecommendBody>},
+        TContext
+      > => {
+      return useMutation(getRecommendMoviesMutationOptions(options));
     }
 
 export const getGetMovieDetailsUrl = (tmdbId: number,) => {

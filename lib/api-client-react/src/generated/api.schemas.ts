@@ -167,6 +167,22 @@ export interface ProcessSocialLinkResponse {
   listTitle: string | null;
 }
 
+export interface RecommendBody {
+  /** Natural-language film/TV request, e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre". */
+  query: string;
+  /** When true, identify recommended films but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film. */
+  dryRun?: boolean;
+}
+
+export interface RecommendResponse {
+  /** True when the query wasn't a film/TV request and Gemini refused to answer it — matches will be empty in this case. */
+  offTopic: boolean;
+  matches: GeminiMovieMatch[];
+  saved: Movie[];
+  /** Suggested playlist name when the recommendation is a themed set of multiple films (e.g. "90s Feel-Good Comedies"), null for a single recommendation. */
+  listTitle: string | null;
+}
+
 export interface PatchWatchedBody {
   isWatched: boolean;
 }
