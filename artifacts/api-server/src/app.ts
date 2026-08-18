@@ -82,7 +82,15 @@ app.use("/api", router);
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) { next(err); return; }
   req.log.error({ err }, "unhandled error");
-  res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error." });
+  // Drizzle wraps the real Postgres error (e.g. "column ... does not exist")
+  // in DrizzleQueryError.cause — surface that instead of the generic
+  // "Failed query: ..." wrapper message, which has no diagnostic value on its own.
+  const cause = err instanceof Error ? err.cause : undefined;
+  const message =
+    (cause instanceof Error ? cause.message : undefined) ??
+    (err instanceof Error ? err.message : undefined) ??
+    "Internal server error.";
+  res.status(500).json({ error: message });
 });
 
 export default app;
