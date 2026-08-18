@@ -16,6 +16,7 @@ const SyncUserBody = z.object({
 const UpdateMeBody = z.object({
   username: z.string().min(2).max(30).optional(),
   displayInitials: z.string().max(5).nullable().optional(),
+  isPrivate: z.boolean().optional(),
 });
 
 // ── POST /users/sync ──────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ router.post("/users/sync", requireAuth, async (req, res): Promise<void> => {
     email: row.email,
     username: row.username,
     displayInitials: row.displayInitials,
+    isPrivate: row.isPrivate,
     avatarUrl: row.avatarUrl,
   });
 });
@@ -70,6 +72,7 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
       email: usersTable.email,
       username: usersTable.username,
       displayInitials: usersTable.displayInitials,
+      isPrivate: usersTable.isPrivate,
       avatarUrl: usersTable.avatarUrl,
     })
     .from(usersTable)
@@ -109,6 +112,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     email: row.email,
     username: row.username,
     displayInitials: row.displayInitials,
+    isPrivate: row.isPrivate,
     avatarUrl: row.avatarUrl,
   });
 });
@@ -135,6 +139,7 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
       clerkId: usersTable.clerkId,
       username: usersTable.username,
       displayInitials: usersTable.displayInitials,
+      isPrivate: usersTable.isPrivate,
       avatarUrl: usersTable.avatarUrl,
       email: usersTable.email,
     })
@@ -150,7 +155,7 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
   // Exclude self, and never expose another user's email address in the response
   const users = rows
     .filter((r) => r.clerkId !== clerkUserId)
-    .map(({ clerkId, username, displayInitials, avatarUrl }) => ({ clerkId, username, displayInitials, avatarUrl }));
+    .map(({ clerkId, username, displayInitials, isPrivate, avatarUrl }) => ({ clerkId, username, displayInitials, isPrivate, avatarUrl }));
 
   res.json({ users });
 });

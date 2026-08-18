@@ -670,7 +670,9 @@ paths:
     post:
       operationId: followUser
       tags: [users]
-      summary: Follow another user
+      summary: >
+        Follow another user. Accepted immediately if they're public; creates
+        a pending follow request if they're private.
       requestBody:
         required: true
         content:
@@ -679,7 +681,11 @@ paths:
               $ref: "#/components/schemas/FollowBody"
       responses:
         "201":
-          description: Followed
+          description: Followed or requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
         "400":
           description: Bad request
         "401":
@@ -691,7 +697,7 @@ paths:
     delete:
       operationId: unfollowUser
       tags: [users]
-      summary: Unfollow a user
+      summary: Unfollow a user, or cancel an outgoing follow request you sent them
       parameters:
         - name: userId
           in: path
@@ -700,7 +706,47 @@ paths:
             type: string
       responses:
         "204":
-          description: Unfollowed
+          description: Unfollowed / request cancelled
+        "401":
+          description: Unauthorized
+
+  /follows/{userId}/accept:
+    patch:
+      operationId: acceptFollowRequest
+      tags: [users]
+      summary: Accept an incoming follow request from userId
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
+        "401":
+          description: Unauthorized
+        "404":
+          description: No pending request from this user
+
+  /follows/{userId}/request:
+    delete:
+      operationId: declineFollowRequest
+      tags: [users]
+      summary: Decline an incoming pending follow request from userId
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Request declined
         "401":
           description: Unauthorized
 
@@ -1654,12 +1700,19 @@ components:
           nullable: true
           maxLength: 5
           description: Optional short display initials shown instead of username-derived ones
+        isPrivate:
+          type: boolean
+          description: >
+            Private accounts require an accepted follow request before they
+            can be followed, recommended to, messaged, or have their
+            comments seen by the requester.
         avatarUrl:
           type: string
           nullable: true
       required:
         - clerkId
         - email
+        - isPrivate
 
     PublicUserProfile:
       type: object
@@ -1674,11 +1727,14 @@ components:
           type: string
           nullable: true
           maxLength: 5
+        isPrivate:
+          type: boolean
         avatarUrl:
           type: string
           nullable: true
       required:
         - clerkId
+        - isPrivate
 
     SyncUserBody:
       type: object
@@ -1707,6 +1763,12 @@ components:
           nullable: true
           maxLength: 5
           description: Optional — set null/empty to clear and fall back to username-derived initials
+        isPrivate:
+          type: boolean
+          description: >
+            Switch between a public account (anyone can follow instantly)
+            and a private one (follows need your approval). Existing
+            followers are unaffected either way.
 
     SearchUsersResponse:
       type: object
@@ -1727,6 +1789,21 @@ components:
       required:
         - followeeId
 
+    FollowResponse:
+      type: object
+      properties:
+        followerId:
+          type: string
+        followeeId:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted]
+      required:
+        - followerId
+        - followeeId
+        - status
+
     FollowsResponse:
       type: object
       properties:
@@ -1734,15 +1811,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PublicUserProfile"
-          description: Users that the authenticated user follows
+          description: Users the authenticated user follows (accepted only)
         followers:
           type: array
           items:
             $ref: "#/components/schemas/PublicUserProfile"
-          description: Users that follow the authenticated user
+          description: Users that follow the authenticated user (accepted only)
+        incomingRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+          description: Pending follow requests sent TO the authenticated user, awaiting their accept/decline
+        outgoingRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+          description: Pending follow requests the authenticated user has sent, awaiting the other person's approval
       required:
         - following
         - followers
+        - incomingRequests
+        - outgoingRequests
 
     UpdatePushTokenBody:
       type: object

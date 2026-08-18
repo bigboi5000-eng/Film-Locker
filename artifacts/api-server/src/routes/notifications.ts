@@ -24,7 +24,9 @@ const router: IRouter = Router();
 router.get("/notifications/users", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
 
-  // Join follows → users to return only people this caller follows
+  // Join follows → users to return only people this caller actively follows
+  // (an accepted relationship — a still-pending request to a private user
+  // doesn't grant permission to recommend films to them yet).
   const users = await db
     .select({
       clerkId: usersTable.clerkId,
@@ -34,7 +36,7 @@ router.get("/notifications/users", requireAuth, async (req, res): Promise<void> 
     })
     .from(followsTable)
     .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
-    .where(eq(followsTable.followerId, clerkUserId))
+    .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.status, "accepted")))
     .orderBy(usersTable.username);
 
   res.json(GetNotificationUsersResponse.parse({ users }));
@@ -102,14 +104,16 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Enforce follow relationship — caller must follow the recipient
+  // Enforce follow relationship — caller must have an accepted follow on the
+  // recipient (a still-pending request to a private user isn't enough yet)
   const [followRow] = await db
     .select({ id: followsTable.id })
     .from(followsTable)
     .where(
       and(
         eq(followsTable.followerId, clerkUserId),
-        eq(followsTable.followeeId, toUserId)
+        eq(followsTable.followeeId, toUserId),
+        eq(followsTable.status, "accepted")
       )
     );
 
@@ -241,9 +245,12 @@ async function canMessage(userA: string, userB: string): Promise<boolean> {
     .select({ id: followsTable.id })
     .from(followsTable)
     .where(
-      or(
-        and(eq(followsTable.followerId, userA), eq(followsTable.followeeId, userB)),
-        and(eq(followsTable.followerId, userB), eq(followsTable.followeeId, userA))
+      and(
+        eq(followsTable.status, "accepted"),
+        or(
+          and(eq(followsTable.followerId, userA), eq(followsTable.followeeId, userB)),
+          and(eq(followsTable.followerId, userB), eq(followsTable.followeeId, userA))
+        )
       )
     );
   return Boolean(followRow);

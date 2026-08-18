@@ -31,6 +31,7 @@ import type {
   FilmCommunityScore,
   FilmNotification,
   FollowBody,
+  FollowResponse,
   FollowsResponse,
   GetFilmCommentsParams,
   HealthStatus,
@@ -2499,11 +2500,12 @@ export const getFollowUserUrl = () => {
 }
 
 /**
- * @summary Follow another user
- */
-export const followUser = async (followBody: FollowBody, options?: RequestInit): Promise<void> => {
+ * @summary Follow another user. Accepted immediately if they're public; creates a pending follow request if they're private.
 
-  return customFetch<void>(getFollowUserUrl(),
+ */
+export const followUser = async (followBody: FollowBody, options?: RequestInit): Promise<FollowResponse> => {
+
+  return customFetch<FollowResponse>(getFollowUserUrl(),
   {
     ...options,
     method: 'POST',
@@ -2547,7 +2549,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type FollowUserMutationError = ErrorType<void>
 
     /**
- * @summary Follow another user
+ * @summary Follow another user. Accepted immediately if they're public; creates a pending follow request if they're private.
+
  */
 export const useFollowUser = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof followUser>>, TError,{data: BodyType<FollowBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -2569,7 +2572,7 @@ export const getUnfollowUserUrl = (userId: string,) => {
 }
 
 /**
- * @summary Unfollow a user
+ * @summary Unfollow a user, or cancel an outgoing follow request you sent them
  */
 export const unfollowUser = async (userId: string, options?: RequestInit): Promise<void> => {
 
@@ -2617,7 +2620,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UnfollowUserMutationError = ErrorType<void>
 
     /**
- * @summary Unfollow a user
+ * @summary Unfollow a user, or cancel an outgoing follow request you sent them
  */
 export const useUnfollowUser = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unfollowUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -2628,6 +2631,146 @@ export const useUnfollowUser = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUnfollowUserMutationOptions(options));
+    }
+
+export const getAcceptFollowRequestUrl = (userId: string,) => {
+
+
+
+
+  return `/api/follows/${userId}/accept`
+}
+
+/**
+ * @summary Accept an incoming follow request from userId
+ */
+export const acceptFollowRequest = async (userId: string, options?: RequestInit): Promise<FollowResponse> => {
+
+  return customFetch<FollowResponse>(getAcceptFollowRequestUrl(userId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getAcceptFollowRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptFollowRequest>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['acceptFollowRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptFollowRequest>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  acceptFollowRequest(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptFollowRequestMutationResult = NonNullable<Awaited<ReturnType<typeof acceptFollowRequest>>>
+
+    export type AcceptFollowRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Accept an incoming follow request from userId
+ */
+export const useAcceptFollowRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptFollowRequest>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getAcceptFollowRequestMutationOptions(options));
+    }
+
+export const getDeclineFollowRequestUrl = (userId: string,) => {
+
+
+
+
+  return `/api/follows/${userId}/request`
+}
+
+/**
+ * @summary Decline an incoming pending follow request from userId
+ */
+export const declineFollowRequest = async (userId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeclineFollowRequestUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeclineFollowRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof declineFollowRequest>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['declineFollowRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof declineFollowRequest>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  declineFollowRequest(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeclineFollowRequestMutationResult = NonNullable<Awaited<ReturnType<typeof declineFollowRequest>>>
+
+    export type DeclineFollowRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Decline an incoming pending follow request from userId
+ */
+export const useDeclineFollowRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof declineFollowRequest>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getDeclineFollowRequestMutationOptions(options));
     }
 
 export const getGetMyPlaylistsUrl = () => {

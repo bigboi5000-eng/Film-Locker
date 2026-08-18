@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, eq, avg, count, desc } from "drizzle-orm";
+import { and, eq, avg, count, desc, inArray } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
-import { db, filmCommunityRatingsTable, filmCommentsTable, usersTable } from "@workspace/db";
+import { db, filmCommunityRatingsTable, filmCommentsTable, usersTable, followsTable } from "@workspace/db";
 import {
   GetFilmCommunityScoreParams,
   GetFilmCommunityScoreResponse,
@@ -149,6 +149,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
       updatedAt: filmCommentsTable.updatedAt,
       username: usersTable.username,
       avatarUrl: usersTable.avatarUrl,
+      isPrivate: usersTable.isPrivate,
     })
     .from(filmCommentsTable)
     .leftJoin(usersTable, eq(filmCommentsTable.userId, usersTable.clerkId))
@@ -160,17 +161,41 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
   const hasMore = rows.length > PAGE_SIZE;
   const pageRows = rows.slice(0, PAGE_SIZE);
 
-  const comments = pageRows.map((r) => ({
-    id: r.id,
-    tmdbId: r.tmdbId,
-    userId: r.userId,
-    username: r.username ?? null,
-    avatarUrl: r.avatarUrl ?? null,
-    body: r.body,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    isOwn: clerkUserId ? r.userId === clerkUserId : false,
-  }));
+  // Private authors' comments are followers-only — resolve which of this
+  // page's private authors the viewer has an accepted follow on.
+  const privateAuthorIds = [
+    ...new Set(pageRows.filter((r) => r.isPrivate && r.userId !== clerkUserId).map((r) => r.userId)),
+  ];
+  let followedPrivateAuthorIds = new Set<string>();
+  if (clerkUserId && privateAuthorIds.length > 0) {
+    const accepted = await db
+      .select({ followeeId: followsTable.followeeId })
+      .from(followsTable)
+      .where(
+        and(
+          eq(followsTable.followerId, clerkUserId),
+          eq(followsTable.status, "accepted"),
+          inArray(followsTable.followeeId, privateAuthorIds)
+        )
+      );
+    followedPrivateAuthorIds = new Set(accepted.map((a) => a.followeeId));
+  }
+
+  const comments = pageRows
+    .filter(
+      (r) => !r.isPrivate || r.userId === clerkUserId || followedPrivateAuthorIds.has(r.userId)
+    )
+    .map((r) => ({
+      id: r.id,
+      tmdbId: r.tmdbId,
+      userId: r.userId,
+      username: r.username ?? null,
+      avatarUrl: r.avatarUrl ?? null,
+      body: r.body,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      isOwn: clerkUserId ? r.userId === clerkUserId : false,
+    }));
 
   res.json(GetFilmCommentsResponse.parse({ comments, page, hasMore }));
 });

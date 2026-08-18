@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Alert, ScrollView, ActivityIndicator, Platform,
+  Alert, ScrollView, ActivityIndicator, Platform, Switch,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,6 +88,20 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Could not update username. Try a different one.');
     }
   }, [usernameInput, updateMe, queryClient]);
+
+  const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+
+  const handleTogglePrivacy = useCallback(async (next: boolean) => {
+    setTogglingPrivacy(true);
+    try {
+      await updateMe({ data: { isPrivate: next } });
+      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    } catch {
+      Alert.alert('Error', 'Could not update account visibility.');
+    } finally {
+      setTogglingPrivacy(false);
+    }
+  }, [updateMe, queryClient]);
 
   const handleStartEditInitials = useCallback(() => {
     setInitialsInput(profile?.displayInitials ?? '');
@@ -248,12 +262,28 @@ export default function ProfileScreen() {
         {/* Privacy */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Privacy</Text>
-          <Row
-            icon="lock-closed-outline"
-            label="Account visibility"
-            value="Public"
-            onPress={() => Alert.alert('Coming soon', 'Private accounts are coming in a future update.')}
-          />
+          <View style={styles.privacyRow}>
+            <View style={styles.rowIcon}>
+              <Ionicons name="lock-closed-outline" size={18} color="#6B7280" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Private account</Text>
+              <Text style={styles.rowValue}>
+                {profile?.isPrivate
+                  ? 'Follows need your approval; comments are followers-only'
+                  : 'Anyone can follow you and see your comments'}
+              </Text>
+            </View>
+            {togglingPrivacy ? (
+              <ActivityIndicator size="small" color="#0066FF" />
+            ) : (
+              <Switch
+                value={Boolean(profile?.isPrivate)}
+                onValueChange={handleTogglePrivacy}
+                trackColor={{ true: '#0066FF' }}
+              />
+            )}
+          </View>
         </View>
 
         {/* Danger zone */}
@@ -300,6 +330,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 13,
     borderTopWidth: 1, borderTopColor: '#F3F4F6',
+  },
+  privacyRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 13,
   },
   rowIcon: {
     width: 32, height: 32, borderRadius: 8,

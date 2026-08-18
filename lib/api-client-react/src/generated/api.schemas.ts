@@ -382,6 +382,8 @@ export interface UserProfile {
      * @maxLength 5
      */
   displayInitials?: string | null;
+  /** Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester. */
+  isPrivate: boolean;
   avatarUrl?: string | null;
 }
 
@@ -393,6 +395,7 @@ export interface PublicUserProfile {
   username?: string | null;
   /** @maxLength 5 */
   displayInitials?: string | null;
+  isPrivate: boolean;
   avatarUrl?: string | null;
 }
 
@@ -413,6 +416,8 @@ export interface UpdateMeBody {
      * @maxLength 5
      */
   displayInitials?: string | null;
+  /** Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way. */
+  isPrivate?: boolean;
 }
 
 export interface SearchUsersResponse {
@@ -424,11 +429,29 @@ export interface FollowBody {
   followeeId: string;
 }
 
+export type FollowResponseStatus = typeof FollowResponseStatus[keyof typeof FollowResponseStatus];
+
+
+export const FollowResponseStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+} as const;
+
+export interface FollowResponse {
+  followerId: string;
+  followeeId: string;
+  status: FollowResponseStatus;
+}
+
 export interface FollowsResponse {
-  /** Users that the authenticated user follows */
+  /** Users the authenticated user follows (accepted only) */
   following: PublicUserProfile[];
-  /** Users that follow the authenticated user */
+  /** Users that follow the authenticated user (accepted only) */
   followers: PublicUserProfile[];
+  /** Pending follow requests sent TO the authenticated user, awaiting their accept/decline */
+  incomingRequests: PublicUserProfile[];
+  /** Pending follow requests the authenticated user has sent, awaiting the other person's approval */
+  outgoingRequests: PublicUserProfile[];
 }
 
 export interface UpdatePushTokenBody {

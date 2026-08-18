@@ -746,6 +746,7 @@ export const SyncUserResponse = zod.object({
   "email": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(syncUserResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
+  "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -762,6 +763,7 @@ export const GetMeResponse = zod.object({
   "email": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(getMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
+  "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -778,7 +780,8 @@ export const updateMeBodyDisplayInitialsMax = 5;
 
 export const UpdateMeBody = zod.object({
   "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional(),
-  "displayInitials": zod.string().max(updateMeBodyDisplayInitialsMax).nullish().describe('Optional — set null\/empty to clear and fall back to username-derived initials')
+  "displayInitials": zod.string().max(updateMeBodyDisplayInitialsMax).nullish().describe('Optional — set null\/empty to clear and fall back to username-derived initials'),
+  "isPrivate": zod.boolean().optional().describe('Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way.\n')
 })
 
 export const updateMeResponseDisplayInitialsMax = 5;
@@ -790,6 +793,7 @@ export const UpdateMeResponse = zod.object({
   "email": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(updateMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
+  "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -814,6 +818,7 @@ export const SearchUsersResponse = zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(searchUsersResponseUsersItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
   "avatarUrl": zod.string().nullish()
 }).describe('Another user\'s public profile — never includes their email address.'))
 })
@@ -826,6 +831,10 @@ export const getFollowsResponseFollowingItemDisplayInitialsMax = 5;
 
 export const getFollowsResponseFollowersItemDisplayInitialsMax = 5;
 
+export const getFollowsResponseIncomingRequestsItemDisplayInitialsMax = 5;
+
+export const getFollowsResponseOutgoingRequestsItemDisplayInitialsMax = 5;
+
 
 
 export const GetFollowsResponse = zod.object({
@@ -833,35 +842,80 @@ export const GetFollowsResponse = zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(getFollowsResponseFollowingItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
   "avatarUrl": zod.string().nullish()
-}).describe('Another user\'s public profile — never includes their email address.')).describe('Users that the authenticated user follows'),
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Users the authenticated user follows (accepted only)'),
   "followers": zod.array(zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(getFollowsResponseFollowersItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
   "avatarUrl": zod.string().nullish()
-}).describe('Another user\'s public profile — never includes their email address.')).describe('Users that follow the authenticated user')
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Users that follow the authenticated user (accepted only)'),
+  "incomingRequests": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseIncomingRequestsItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Pending follow requests sent TO the authenticated user, awaiting their accept\/decline'),
+  "outgoingRequests": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseOutgoingRequestsItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Pending follow requests the authenticated user has sent, awaiting the other person\'s approval')
 })
 
 
 /**
- * @summary Follow another user
+ * @summary Follow another user. Accepted immediately if they're public; creates a pending follow request if they're private.
+
  */
 export const FollowUserBody = zod.object({
   "followeeId": zod.string().describe('Clerk user ID of the user to follow')
 })
 
-export const FollowUserResponse = zod.void()
+export const FollowUserResponse = zod.object({
+  "followerId": zod.string(),
+  "followeeId": zod.string(),
+  "status": zod.enum(['pending', 'accepted'])
+})
 
 
 /**
- * @summary Unfollow a user
+ * @summary Unfollow a user, or cancel an outgoing follow request you sent them
  */
 export const UnfollowUserParams = zod.object({
   "userId": zod.coerce.string()
 })
 
 export const UnfollowUserResponse = zod.void()
+
+
+/**
+ * @summary Accept an incoming follow request from userId
+ */
+export const AcceptFollowRequestParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const AcceptFollowRequestResponse = zod.object({
+  "followerId": zod.string(),
+  "followeeId": zod.string(),
+  "status": zod.enum(['pending', 'accepted'])
+})
+
+
+/**
+ * @summary Decline an incoming pending follow request from userId
+ */
+export const DeclineFollowRequestParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const DeclineFollowRequestResponse = zod.void()
 
 
 /**
