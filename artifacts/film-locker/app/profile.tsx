@@ -14,6 +14,7 @@ import {
   useUpdateMe,
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
+import { confirmDestructive } from '@/lib/confirm';
 
 function Row({
   icon, label, value, danger, onPress,
@@ -87,38 +88,24 @@ export default function ProfileScreen() {
   }, [usernameInput, updateMe, queryClient]);
 
   const handleSignOut = useCallback(() => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)/sign-in');
-        },
-      },
-    ]);
+    confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
+      await signOut();
+      router.replace('/(auth)/sign-in');
+    });
   }, [signOut, router]);
 
   const handleDeleteAccount = useCallback(() => {
-    Alert.alert(
-      'Delete account',
+    confirmDestructive(
       'This permanently deletes your Film Locker account, watchlist, and all social data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clerkUser?.delete();
-              router.replace('/(auth)/sign-in');
-            } catch {
-              Alert.alert('Error', 'Could not delete your account. Please contact support.');
-            }
-          },
-        },
-      ]
+      'Delete',
+      async () => {
+        try {
+          await clerkUser?.delete();
+          router.replace('/(auth)/sign-in');
+        } catch {
+          Alert.alert('Error', 'Could not delete your account. Please contact support.');
+        }
+      }
     );
   }, [clerkUser, router]);
 

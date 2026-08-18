@@ -43,6 +43,7 @@ import {
   type FilmComment,
   type NotificationUser,
 } from '@workspace/api-client-react';
+import { confirmDestructive } from '@/lib/confirm';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
@@ -366,21 +367,14 @@ function CommunitySection({
 
   const handleDeleteComment = useCallback(
     async (id: number) => {
-      Alert.alert('Delete comment', 'Remove this comment?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteComment({ tmdbId, id });
-              await resetComments();
-            } catch {
-              Alert.alert('Error', 'Could not delete comment.');
-            }
-          },
-        },
-      ]);
+      confirmDestructive('Remove this comment?', 'Delete', async () => {
+        try {
+          await deleteComment({ tmdbId, id });
+          await resetComments();
+        } catch {
+          Alert.alert('Error', 'Could not delete comment.');
+        }
+      });
     },
     [deleteComment, tmdbId, resetComments]
   );
