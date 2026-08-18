@@ -508,42 +508,13 @@ paths:
         "404":
           description: Notification not found
 
-  /notifications/{id}/react:
-    patch:
-      operationId: reactToNotification
-      tags: [notifications]
-      summary: Set an emoji or text reaction on a received notification
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ReactNotificationBody"
-      responses:
-        "200":
-          description: Reaction saved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReactNotificationResponse"
-        "400":
-          description: Bad request
-        "401":
-          description: Unauthorized
-        "404":
-          description: Notification not found
-
   /notifications/thread/{userId}:
     get:
       operationId: getNotificationThread
       tags: [notifications]
-      summary: All recommendations from a specific user to the authenticated user
+      summary: >
+        Merged chronological chat feed with a specific user — recommendations
+        sent either way plus reactions/messages, newest last
       parameters:
         - name: userId
           in: path
@@ -552,13 +523,50 @@ paths:
             type: string
       responses:
         "200":
-          description: Thread of notifications from this user
+          description: Feed of recommendations and messages with this user
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/NotificationThreadResponse"
         "401":
           description: Unauthorized
+
+  /notifications/thread/{userId}/messages:
+    post:
+      operationId: sendConversationMessage
+      tags: [notifications]
+      summary: >
+        Send a reaction/message to a user from the fixed vocabulary — either
+        a reply to a specific film recommendation (replyToNotificationId) or
+        a standalone message. Allowed regardless of whether a recommendation
+        exists, as long as a follow relationship exists in either direction.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendConversationMessageBody"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationFeedItem"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "403":
+          description: No relationship with this user
+        "404":
+          description: User or replied-to notification not found
 
   /users/sync:
     post:
@@ -1417,6 +1425,9 @@ components:
           type: string
           nullable: true
           description: Display username of the sender
+        fromDisplayInitials:
+          type: string
+          nullable: true
         fromAvatarUrl:
           type: string
           nullable: true
@@ -1491,6 +1502,9 @@ components:
         username:
           type: string
           nullable: true
+        displayInitials:
+          type: string
+          nullable: true
         avatarUrl:
           type: string
           nullable: true
@@ -1507,66 +1521,110 @@ components:
       required:
         - users
 
-    ReactNotificationBody:
-      type: object
-      properties:
-        reaction:
-          type: string
-          enum:
-            - "❤️"
-            - "😂"
-            - "😍"
-            - "😭"
-            - "🤪"
-            - "🤓"
-            - "🤯"
-            - "👍"
-            - "🤌"
-            - "👎"
-            - "Watched it!"
-            - "Fool of a Took!"
-            - "Prestige Worldwide"
-            - "I miss your whispering eye"
-            - "Aim for the bushes"
-            - "Read a f***ing book"
-            - "I'll be back"
-            - "Why so serious?"
-            - "You can't handle the truth!"
-            - "May the Force be with you"
-            - "Here's looking at you, kid"
-            - "You shall not pass!"
-            - "I am Groot"
-            - "Say hello to my little friend!"
-            - "Life is like a box of chocolates"
-            - "To infinity and beyond!"
-            - "Nobody puts Baby in a corner"
-            - "Great Scott!"
-            - "This was great!"
-            - "Thank you!"
-            - "Not for me this one"
-          description: >
-            A fixed set of emoji + movie-catchphrase reactions — deliberately
-            not a freeform string. There is no messaging feature in this app
-            and this is the only user-to-user "expression" endpoint, so the
-            enum is enforced here (not just left to the client UI) to
-            guarantee free text can never reach another user through it.
-      required:
-        - reaction
+    ConversationMessageContent:
+      type: string
+      enum:
+        - "❤️"
+        - "😂"
+        - "😍"
+        - "😭"
+        - "🤪"
+        - "🤓"
+        - "🤯"
+        - "👍"
+        - "🤌"
+        - "👎"
+        - "Watched it!"
+        - "Fool of a Took!"
+        - "Prestige Worldwide"
+        - "I miss your whispering eye"
+        - "Aim for the bushes"
+        - "Read a f***ing book"
+        - "I'll be back"
+        - "Why so serious?"
+        - "You can't handle the truth!"
+        - "May the Force be with you"
+        - "Here's looking at you, kid"
+        - "You shall not pass!"
+        - "I am Groot"
+        - "Say hello to my little friend!"
+        - "Life is like a box of chocolates"
+        - "To infinity and beyond!"
+        - "Nobody puts Baby in a corner"
+        - "Great Scott!"
+        - "What did you think?"
+        - "Have you watched it yet?"
+        - "This was great!"
+        - "Thank you!"
+        - "Not for me this one"
+      description: >
+        A fixed set of emoji + movie-catchphrases + canned questions —
+        deliberately not a freeform string. There is no freeform messaging in
+        this app; this enum is enforced server-side (not just left to the
+        client UI) so free text can never reach another user through it.
 
-    ReactNotificationResponse:
+    SendConversationMessageBody:
       type: object
       properties:
+        content:
+          $ref: "#/components/schemas/ConversationMessageContent"
+        replyToNotificationId:
+          type: integer
+          nullable: true
+          description: >
+            Targets a specific film recommendation (per-film React button or
+            swipe-to-reply). Omit or set null for a standalone message.
+      required:
+        - content
+
+    ConversationFeedItem:
+      type: object
+      description: >
+        One entry in a merged, chronological chat feed between two users —
+        either a film recommendation or a reaction/message, distinguished by
+        "type".
+      properties:
+        type:
+          type: string
+          enum: [recommendation, message]
         id:
           type: integer
-        reaction:
+        fromUserId:
           type: string
-          nullable: true
-        reactedAt:
+        toUserId:
+          type: string
+        createdAt:
           type: string
           format: date-time
+        tmdbId:
+          type: integer
           nullable: true
+        filmTitle:
+          type: string
+          nullable: true
+        posterUrl:
+          type: string
+          nullable: true
+        isRead:
+          type: boolean
+          nullable: true
+        content:
+          type: string
+          nullable: true
+          description: Present when type is "message" — the canned phrase/emoji sent
+        replyToNotificationId:
+          type: integer
+          nullable: true
+        replyToFilmTitle:
+          type: string
+          nullable: true
+          description: Denormalized title of the film this message replies to, if any
       required:
+        - type
         - id
+        - fromUserId
+        - toUserId
+        - createdAt
 
     NotificationThreadResponse:
       type: object
@@ -1574,12 +1632,12 @@ components:
         sender:
           $ref: "#/components/schemas/NotificationUser"
           nullable: true
-        notifications:
+        feed:
           type: array
           items:
-            $ref: "#/components/schemas/FilmNotification"
+            $ref: "#/components/schemas/ConversationFeedItem"
       required:
-        - notifications
+        - feed
 
     UserProfile:
       type: object
@@ -1591,12 +1649,36 @@ components:
         username:
           type: string
           nullable: true
+        displayInitials:
+          type: string
+          nullable: true
+          maxLength: 5
+          description: Optional short display initials shown instead of username-derived ones
         avatarUrl:
           type: string
           nullable: true
       required:
         - clerkId
         - email
+
+    PublicUserProfile:
+      type: object
+      description: Another user's public profile — never includes their email address.
+      properties:
+        clerkId:
+          type: string
+        username:
+          type: string
+          nullable: true
+        displayInitials:
+          type: string
+          nullable: true
+          maxLength: 5
+        avatarUrl:
+          type: string
+          nullable: true
+      required:
+        - clerkId
 
     SyncUserBody:
       type: object
@@ -1620,6 +1702,11 @@ components:
           type: string
           minLength: 2
           maxLength: 30
+        displayInitials:
+          type: string
+          nullable: true
+          maxLength: 5
+          description: Optional — set null/empty to clear and fall back to username-derived initials
 
     SearchUsersResponse:
       type: object
@@ -1627,7 +1714,7 @@ components:
         users:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
+            $ref: "#/components/schemas/PublicUserProfile"
       required:
         - users
 
@@ -1646,12 +1733,12 @@ components:
         following:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
+            $ref: "#/components/schemas/PublicUserProfile"
           description: Users that the authenticated user follows
         followers:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
+            $ref: "#/components/schemas/PublicUserProfile"
           description: Users that follow the authenticated user
       required:
         - following

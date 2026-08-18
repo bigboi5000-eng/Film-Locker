@@ -24,6 +24,7 @@ import type {
   AddPlaylistItemBody,
   AiExtractBody,
   AiExtractResponse,
+  ConversationFeedItem,
   CreatePlaylistBody,
   FilmComment,
   FilmCommentsResponse,
@@ -49,8 +50,6 @@ import type {
   PostCommentBody,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
-  ReactNotificationBody,
-  ReactNotificationResponse,
   RecommendBody,
   RecommendResponse,
   RecommendationsResponse,
@@ -59,6 +58,7 @@ import type {
   SearchPublicPlaylistsParams,
   SearchUsersParams,
   SearchUsersResponse,
+  SendConversationMessageBody,
   SendNotificationBody,
   SetCommunityRatingBody,
   SyncUserBody,
@@ -1960,77 +1960,6 @@ export const useMarkNotificationRead = <TError = ErrorType<void>,
       return useMutation(getMarkNotificationReadMutationOptions(options));
     }
 
-export const getReactToNotificationUrl = (id: number,) => {
-
-
-
-
-  return `/api/notifications/${id}/react`
-}
-
-/**
- * @summary Set an emoji or text reaction on a received notification
- */
-export const reactToNotification = async (id: number,
-    reactNotificationBody: ReactNotificationBody, options?: RequestInit): Promise<ReactNotificationResponse> => {
-
-  return customFetch<ReactNotificationResponse>(getReactToNotificationUrl(id),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(reactNotificationBody)
-  }
-);}
-
-
-
-
-export const getReactToNotificationMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reactToNotification>>, TError,{id: number;data: BodyType<ReactNotificationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof reactToNotification>>, TError,{id: number;data: BodyType<ReactNotificationBody>}, TContext> => {
-
-const mutationKey = ['reactToNotification'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reactToNotification>>, {id: number;data: BodyType<ReactNotificationBody>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  reactToNotification(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ReactToNotificationMutationResult = NonNullable<Awaited<ReturnType<typeof reactToNotification>>>
-    export type ReactToNotificationMutationBody = BodyType<ReactNotificationBody>
-    export type ReactToNotificationMutationError = ErrorType<void>
-
-    /**
- * @summary Set an emoji or text reaction on a received notification
- */
-export const useReactToNotification = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reactToNotification>>, TError,{id: number;data: BodyType<ReactNotificationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof reactToNotification>>,
-        TError,
-        {id: number;data: BodyType<ReactNotificationBody>},
-        TContext
-      > => {
-      return useMutation(getReactToNotificationMutationOptions(options));
-    }
-
 export const getGetNotificationThreadUrl = (userId: string,) => {
 
 
@@ -2040,7 +1969,8 @@ export const getGetNotificationThreadUrl = (userId: string,) => {
 }
 
 /**
- * @summary All recommendations from a specific user to the authenticated user
+ * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
+
  */
 export const getNotificationThread = async (userId: string, options?: RequestInit): Promise<NotificationThreadResponse> => {
 
@@ -2087,7 +2017,8 @@ export type GetNotificationThreadQueryError = ErrorType<void>
 
 
 /**
- * @summary All recommendations from a specific user to the authenticated user
+ * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
+
  */
 
 export function useGetNotificationThread<TData = Awaited<ReturnType<typeof getNotificationThread>>, TError = ErrorType<void>>(
@@ -2107,6 +2038,79 @@ export function useGetNotificationThread<TData = Awaited<ReturnType<typeof getNo
 
 
 
+
+export const getSendConversationMessageUrl = (userId: string,) => {
+
+
+
+
+  return `/api/notifications/thread/${userId}/messages`
+}
+
+/**
+ * @summary Send a reaction/message to a user from the fixed vocabulary — either a reply to a specific film recommendation (replyToNotificationId) or a standalone message. Allowed regardless of whether a recommendation exists, as long as a follow relationship exists in either direction.
+
+ */
+export const sendConversationMessage = async (userId: string,
+    sendConversationMessageBody: SendConversationMessageBody, options?: RequestInit): Promise<ConversationFeedItem> => {
+
+  return customFetch<ConversationFeedItem>(getSendConversationMessageUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendConversationMessageBody)
+  }
+);}
+
+
+
+
+export const getSendConversationMessageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendConversationMessage>>, TError,{userId: string;data: BodyType<SendConversationMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendConversationMessage>>, TError,{userId: string;data: BodyType<SendConversationMessageBody>}, TContext> => {
+
+const mutationKey = ['sendConversationMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendConversationMessage>>, {userId: string;data: BodyType<SendConversationMessageBody>}> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  sendConversationMessage(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendConversationMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendConversationMessage>>>
+    export type SendConversationMessageMutationBody = BodyType<SendConversationMessageBody>
+    export type SendConversationMessageMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a reaction/message to a user from the fixed vocabulary — either a reply to a specific film recommendation (replyToNotificationId) or a standalone message. Allowed regardless of whether a recommendation exists, as long as a follow relationship exists in either direction.
+
+ */
+export const useSendConversationMessage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendConversationMessage>>, TError,{userId: string;data: BodyType<SendConversationMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendConversationMessage>>,
+        TError,
+        {userId: string;data: BodyType<SendConversationMessageBody>},
+        TContext
+      > => {
+      return useMutation(getSendConversationMessageMutationOptions(options));
+    }
 
 export const getSyncUserUrl = () => {
 

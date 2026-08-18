@@ -61,11 +61,13 @@ export default function ProfileScreen() {
 
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
+  const [editingInitials, setEditingInitials] = useState(false);
+  const [initialsInput, setInitialsInput] = useState('');
 
   const displayName = profile?.username ?? clerkUser?.username ?? clerkUser?.firstName ?? 'You';
   const email = profile?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? '';
   const avatarUrl = clerkUser?.imageUrl;
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const initials = (profile?.displayInitials || displayName).slice(0, 5).toUpperCase();
 
   const handleStartEditUsername = useCallback(() => {
     setUsernameInput(profile?.username ?? '');
@@ -86,6 +88,22 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Could not update username. Try a different one.');
     }
   }, [usernameInput, updateMe, queryClient]);
+
+  const handleStartEditInitials = useCallback(() => {
+    setInitialsInput(profile?.displayInitials ?? '');
+    setEditingInitials(true);
+  }, [profile?.displayInitials]);
+
+  const handleSaveInitials = useCallback(async () => {
+    const trimmed = initialsInput.trim().toUpperCase();
+    try {
+      await updateMe({ data: { displayInitials: trimmed.length > 0 ? trimmed : null } });
+      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      setEditingInitials(false);
+    } catch {
+      Alert.alert('Error', 'Could not update display initials.');
+    }
+  }, [initialsInput, updateMe, queryClient]);
 
   const handleSignOut = useCallback(() => {
     confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
@@ -179,6 +197,48 @@ export default function ProfileScreen() {
               label="Username"
               value={profile?.username ?? '(not set)'}
               onPress={handleStartEditUsername}
+            />
+          )}
+
+          {editingInitials ? (
+            <View style={styles.editRow}>
+              <TextInput
+                style={styles.textInput}
+                value={initialsInput}
+                onChangeText={(t) => setInitialsInput(t.slice(0, 5))}
+                placeholder="e.g. JPLT"
+                placeholderTextColor="#9CA3AF"
+                autoFocus
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={5}
+              />
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleSaveInitials}
+                disabled={saving}
+                activeOpacity={0.8}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setEditingInitials(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Row
+              icon="text-outline"
+              label="Display Initials (Optional)"
+              value={profile?.displayInitials ?? 'Derived from username'}
+              onPress={handleStartEditInitials}
             />
           )}
 

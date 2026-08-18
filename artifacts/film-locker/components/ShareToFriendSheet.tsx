@@ -91,7 +91,7 @@ export function ShareToFriendSheet({
   }
 
   function UserRow({ user }: { user: NotificationUser }) {
-    const initials = (user.username ?? '?').slice(0, 2).toUpperCase();
+    const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
     const alreadySent = sentTo.has(user.clerkId);
     const sending = sendingTo === user.clerkId;
 
@@ -101,7 +101,7 @@ export function ShareToFriendSheet({
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
+            <Text style={styles.avatarInitials} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
         <Text style={styles.username}>{user.username ?? 'Unknown'}</Text>

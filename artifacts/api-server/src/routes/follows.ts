@@ -19,8 +19,8 @@ router.get("/follows", requireAuth, async (req, res): Promise<void> => {
       .select({
         clerkId: usersTable.clerkId,
         username: usersTable.username,
+        displayInitials: usersTable.displayInitials,
         avatarUrl: usersTable.avatarUrl,
-        email: usersTable.email,
       })
       .from(followsTable)
       .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
@@ -30,8 +30,8 @@ router.get("/follows", requireAuth, async (req, res): Promise<void> => {
       .select({
         clerkId: usersTable.clerkId,
         username: usersTable.username,
+        displayInitials: usersTable.displayInitials,
         avatarUrl: usersTable.avatarUrl,
-        email: usersTable.email,
       })
       .from(followsTable)
       .innerJoin(usersTable, eq(followsTable.followerId, usersTable.clerkId))

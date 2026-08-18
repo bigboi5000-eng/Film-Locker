@@ -4,6 +4,7 @@ export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   clerkId: text("clerk_id").notNull().unique(),
   username: text("username").unique(), // nullable — collected in social phase
+  displayInitials: text("display_initials"), // nullable — optional 5-char override shown instead of username-derived initials
   email: text("email").notNull(),
   avatarUrl: text("avatar_url"),
   expoPushToken: text("expo_push_token"), // nullable — set when user grants push permission

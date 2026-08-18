@@ -16,7 +16,7 @@ import {
   useUnfollowUser,
   getGetFollowsQueryKey,
   getGetNotificationUsersQueryKey,
-  type UserProfile,
+  type PublicUserProfile,
 } from '@workspace/api-client-react';
 
 export default function PeopleScreen() {
@@ -49,7 +49,7 @@ export default function PeopleScreen() {
     await queryClient.invalidateQueries({ queryKey: getGetNotificationUsersQueryKey() });
   }, [queryClient]);
 
-  const handleFollow = useCallback(async (user: UserProfile) => {
+  const handleFollow = useCallback(async (user: PublicUserProfile) => {
     setActionUserId(user.clerkId);
     try {
       await followUser({ data: { followeeId: user.clerkId } });
@@ -61,7 +61,7 @@ export default function PeopleScreen() {
     }
   }, [followUser, invalidate]);
 
-  const handleUnfollow = useCallback(async (user: UserProfile) => {
+  const handleUnfollow = useCallback(async (user: PublicUserProfile) => {
     setActionUserId(user.clerkId);
     try {
       await unfollowUser({ userId: user.clerkId });
@@ -73,8 +73,8 @@ export default function PeopleScreen() {
     }
   }, [unfollowUser, invalidate]);
 
-  function UserRow({ user, isFollowing }: { user: UserProfile; isFollowing: boolean }) {
-    const initials = (user.username ?? user.email).slice(0, 2).toUpperCase();
+  function UserRow({ user, isFollowing }: { user: PublicUserProfile; isFollowing: boolean }) {
+    const initials = (user.displayInitials || user.username || '??').slice(0, 5).toUpperCase();
     const busy = actionUserId === user.clerkId;
     return (
       <View style={styles.userRow}>
@@ -82,12 +82,11 @@ export default function PeopleScreen() {
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
         <View style={styles.userInfo}>
-          <Text style={styles.username}>{user.username ?? user.email}</Text>
-          {user.username && <Text style={styles.email}>{user.email}</Text>}
+          <Text style={styles.username}>{user.username ?? 'Unnamed user'}</Text>
         </View>
         {busy ? (
           <ActivityIndicator size="small" color="#0066FF" style={{ marginLeft: 12 }} />

@@ -588,6 +588,7 @@ export const GetNotificationsResponse = zod.object({
   "id": zod.number(),
   "fromUserId": zod.string().describe('Clerk user ID of the sender'),
   "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromDisplayInitials": zod.string().nullish(),
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
@@ -616,6 +617,7 @@ export const SendNotificationResponse = zod.object({
   "id": zod.number(),
   "fromUserId": zod.string().describe('Clerk user ID of the sender'),
   "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromDisplayInitials": zod.string().nullish(),
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
@@ -635,6 +637,7 @@ export const GetNotificationUsersResponse = zod.object({
   "users": zod.array(zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
   "avatarUrl": zod.string().nullish()
 }))
 })
@@ -651,6 +654,7 @@ export const MarkNotificationReadResponse = zod.object({
   "id": zod.number(),
   "fromUserId": zod.string().describe('Clerk user ID of the sender'),
   "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromDisplayInitials": zod.string().nullish(),
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
@@ -664,25 +668,8 @@ export const MarkNotificationReadResponse = zod.object({
 
 
 /**
- * @summary Set an emoji or text reaction on a received notification
- */
-export const ReactToNotificationParams = zod.object({
-  "id": zod.coerce.number()
-})
+ * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
 
-export const ReactToNotificationBody = zod.object({
-  "reaction": zod.enum(['❤️', '😂', '😍', '😭', '🤪', '🤓', '🤯', '👍', '🤌', '👎', 'Watched it!', 'Fool of a Took!', 'Prestige Worldwide', 'I miss your whispering eye', 'Aim for the bushes', 'Read a f***ing book', 'I\'ll be back', 'Why so serious?', 'You can\'t handle the truth!', 'May the Force be with you', 'Here\'s looking at you, kid', 'You shall not pass!', 'I am Groot', 'Say hello to my little friend!', 'Life is like a box of chocolates', 'To infinity and beyond!', 'Nobody puts Baby in a corner', 'Great Scott!', 'This was great!', 'Thank you!', 'Not for me this one']).describe('A fixed set of emoji + movie-catchphrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user \"expression\" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it.\n')
-})
-
-export const ReactToNotificationResponse = zod.object({
-  "id": zod.number(),
-  "reaction": zod.string().nullish(),
-  "reactedAt": zod.coerce.date().nullish()
-})
-
-
-/**
- * @summary All recommendations from a specific user to the authenticated user
  */
 export const GetNotificationThreadParams = zod.object({
   "userId": zod.coerce.string()
@@ -692,23 +679,53 @@ export const GetNotificationThreadResponse = zod.object({
   "sender": zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
   "avatarUrl": zod.string().nullish()
 }).nullish(),
-  "notifications": zod.array(zod.object({
+  "feed": zod.array(zod.object({
+  "type": zod.enum(['recommendation', 'message']),
   "id": zod.number(),
-  "fromUserId": zod.string().describe('Clerk user ID of the sender'),
-  "fromUsername": zod.string().nullish().describe('Display username of the sender'),
-  "fromAvatarUrl": zod.string().nullish(),
-  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
-  "tmdbId": zod.number(),
-  "filmTitle": zod.string(),
-  "posterUrl": zod.string(),
-  "isRead": zod.boolean(),
-  "reaction": zod.string().nullish().describe('Emoji or \"Watched it!\" set by the recipient'),
-  "reactedAt": zod.coerce.date().nullish(),
-  "createdAt": zod.coerce.date()
-}))
+  "fromUserId": zod.string(),
+  "toUserId": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "tmdbId": zod.number().nullish(),
+  "filmTitle": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "isRead": zod.boolean().nullish(),
+  "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
+  "replyToNotificationId": zod.number().nullish(),
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
+}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n'))
 })
+
+
+/**
+ * @summary Send a reaction/message to a user from the fixed vocabulary — either a reply to a specific film recommendation (replyToNotificationId) or a standalone message. Allowed regardless of whether a recommendation exists, as long as a follow relationship exists in either direction.
+
+ */
+export const SendConversationMessageParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const SendConversationMessageBody = zod.object({
+  "content": zod.enum(['❤️', '😂', '😍', '😭', '🤪', '🤓', '🤯', '👍', '🤌', '👎', 'Watched it!', 'Fool of a Took!', 'Prestige Worldwide', 'I miss your whispering eye', 'Aim for the bushes', 'Read a f***ing book', 'I\'ll be back', 'Why so serious?', 'You can\'t handle the truth!', 'May the Force be with you', 'Here\'s looking at you, kid', 'You shall not pass!', 'I am Groot', 'Say hello to my little friend!', 'Life is like a box of chocolates', 'To infinity and beyond!', 'Nobody puts Baby in a corner', 'Great Scott!', 'What did you think?', 'Have you watched it yet?', 'This was great!', 'Thank you!', 'Not for me this one']).describe('A fixed set of emoji + movie-catchphrases + canned questions — deliberately not a freeform string. There is no freeform messaging in this app; this enum is enforced server-side (not just left to the client UI) so free text can never reach another user through it.\n'),
+  "replyToNotificationId": zod.number().nullish().describe('Targets a specific film recommendation (per-film React button or swipe-to-reply). Omit or set null for a standalone message.\n')
+})
+
+export const SendConversationMessageResponse = zod.object({
+  "type": zod.enum(['recommendation', 'message']),
+  "id": zod.number(),
+  "fromUserId": zod.string(),
+  "toUserId": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "tmdbId": zod.number().nullish(),
+  "filmTitle": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "isRead": zod.boolean().nullish(),
+  "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
+  "replyToNotificationId": zod.number().nullish(),
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
+}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n')
 
 
 /**
@@ -720,10 +737,15 @@ export const SyncUserBody = zod.object({
   "username": zod.string().nullish()
 })
 
+export const syncUserResponseDisplayInitialsMax = 5;
+
+
+
 export const SyncUserResponse = zod.object({
   "clerkId": zod.string(),
   "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(syncUserResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -731,10 +753,15 @@ export const SyncUserResponse = zod.object({
 /**
  * @summary Get the authenticated user's own profile
  */
+export const getMeResponseDisplayInitialsMax = 5;
+
+
+
 export const GetMeResponse = zod.object({
   "clerkId": zod.string(),
   "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -745,16 +772,24 @@ export const GetMeResponse = zod.object({
 export const updateMeBodyUsernameMin = 2;
 export const updateMeBodyUsernameMax = 30;
 
+export const updateMeBodyDisplayInitialsMax = 5;
+
 
 
 export const UpdateMeBody = zod.object({
-  "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional()
+  "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional(),
+  "displayInitials": zod.string().max(updateMeBodyDisplayInitialsMax).nullish().describe('Optional — set null\/empty to clear and fall back to username-derived initials')
 })
+
+export const updateMeResponseDisplayInitialsMax = 5;
+
+
 
 export const UpdateMeResponse = zod.object({
   "clerkId": zod.string(),
   "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(updateMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -770,32 +805,42 @@ export const SearchUsersQueryParams = zod.object({
   "q": zod.coerce.string().min(searchUsersQueryQMin)
 })
 
+export const searchUsersResponseUsersItemDisplayInitialsMax = 5;
+
+
+
 export const SearchUsersResponse = zod.object({
   "users": zod.array(zod.object({
   "clerkId": zod.string(),
-  "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(searchUsersResponseUsersItemDisplayInitialsMax).nullish(),
   "avatarUrl": zod.string().nullish()
-}))
+}).describe('Another user\'s public profile — never includes their email address.'))
 })
 
 
 /**
  * @summary Get the authenticated user's following and follower lists
  */
+export const getFollowsResponseFollowingItemDisplayInitialsMax = 5;
+
+export const getFollowsResponseFollowersItemDisplayInitialsMax = 5;
+
+
+
 export const GetFollowsResponse = zod.object({
   "following": zod.array(zod.object({
   "clerkId": zod.string(),
-  "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseFollowingItemDisplayInitialsMax).nullish(),
   "avatarUrl": zod.string().nullish()
-})).describe('Users that the authenticated user follows'),
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Users that the authenticated user follows'),
   "followers": zod.array(zod.object({
   "clerkId": zod.string(),
-  "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseFollowersItemDisplayInitialsMax).nullish(),
   "avatarUrl": zod.string().nullish()
-})).describe('Users that follow the authenticated user')
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Users that follow the authenticated user')
 })
 
 

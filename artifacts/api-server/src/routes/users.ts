@@ -15,6 +15,7 @@ const SyncUserBody = z.object({
 
 const UpdateMeBody = z.object({
   username: z.string().min(2).max(30).optional(),
+  displayInitials: z.string().max(5).nullable().optional(),
 });
 
 // ── POST /users/sync ──────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ router.post("/users/sync", requireAuth, async (req, res): Promise<void> => {
     clerkId: row.clerkId,
     email: row.email,
     username: row.username,
+    displayInitials: row.displayInitials,
     avatarUrl: row.avatarUrl,
   });
 });
@@ -67,6 +69,7 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
       clerkId: usersTable.clerkId,
       email: usersTable.email,
       username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
       avatarUrl: usersTable.avatarUrl,
     })
     .from(usersTable)
@@ -105,12 +108,15 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     clerkId: row.clerkId,
     email: row.email,
     username: row.username,
+    displayInitials: row.displayInitials,
     avatarUrl: row.avatarUrl,
   });
 });
 
 // ── GET /users/search?q= ──────────────────────────────────────────────────────
-// Search users by username or email (partial match, case-insensitive).
+// Search users by username or email (partial match, case-insensitive) — the
+// response never includes another user's email address, only their public
+// profile fields.
 // Never returns the calling user themselves.
 
 router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
@@ -128,6 +134,7 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     .select({
       clerkId: usersTable.clerkId,
       username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
       avatarUrl: usersTable.avatarUrl,
       email: usersTable.email,
     })
@@ -140,10 +147,12 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     )
     .limit(20);
 
-  // Exclude self
-  const filtered = rows.filter((r) => r.clerkId !== clerkUserId);
+  // Exclude self, and never expose another user's email address in the response
+  const users = rows
+    .filter((r) => r.clerkId !== clerkUserId)
+    .map(({ clerkId, username, displayInitials, avatarUrl }) => ({ clerkId, username, displayInitials, avatarUrl }));
 
-  res.json({ users: filtered });
+  res.json({ users });
 });
 
 // ── PUT /users/push-token ─────────────────────────────────────────────────────

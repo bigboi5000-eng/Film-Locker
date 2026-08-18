@@ -27,6 +27,7 @@ function formatRelative(date: Date): string {
 interface ConversationGroup {
   fromUserId: string;
   fromUsername: string | null;
+  fromDisplayInitials: string | null;
   fromAvatarUrl: string | null;
   latest: FilmNotification;
   allPosters: string[];
@@ -49,6 +50,7 @@ function groupNotifications(notifications: FilmNotification[]): ConversationGrou
       map.set(n.fromUserId, {
         fromUserId: n.fromUserId,
         fromUsername: n.fromUsername ?? null,
+        fromDisplayInitials: n.fromDisplayInitials ?? null,
         fromAvatarUrl: n.fromAvatarUrl ?? null,
         latest: n,
         allPosters: [n.posterUrl],
@@ -61,7 +63,7 @@ function groupNotifications(notifications: FilmNotification[]): ConversationGrou
 }
 
 function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress: () => void }) {
-  const initials = (group.fromUsername ?? '?').slice(0, 2).toUpperCase();
+  const initials = (group.fromDisplayInitials || group.fromUsername || '?').slice(0, 5).toUpperCase();
   const previews = group.allPosters.slice(0, 3);
 
   return (
@@ -72,7 +74,7 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
           <Image source={{ uri: group.fromAvatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
         {group.unreadCount > 0 && (
@@ -85,7 +87,7 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.contentHeader}>
-          <Text style={[styles.username, group.unreadCount > 0 && styles.usernameUnread]}>
+          <Text style={[styles.username, group.unreadCount > 0 && styles.usernameUnread]} numberOfLines={1}>
             {group.fromUsername ?? 'Unknown'}
           </Text>
           <Text style={styles.time}>{formatRelative(group.latestAt)}</Text>

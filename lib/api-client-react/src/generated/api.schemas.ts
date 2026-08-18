@@ -254,6 +254,7 @@ export interface FilmNotification {
   fromUserId: string;
   /** Display username of the sender */
   fromUsername?: string | null;
+  fromDisplayInitials?: string | null;
   fromAvatarUrl?: string | null;
   /** Clerk user ID of the recipient */
   toUserId: string;
@@ -283,6 +284,7 @@ export interface SendNotificationBody {
 export interface NotificationUser {
   clerkId: string;
   username?: string | null;
+  displayInitials?: string | null;
   avatarUrl?: string | null;
 }
 
@@ -291,12 +293,12 @@ export interface NotificationUsersResponse {
 }
 
 /**
- * A fixed set of emoji + movie-catchphrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it.
+ * A fixed set of emoji + movie-catchphrases + canned questions — deliberately not a freeform string. There is no freeform messaging in this app; this enum is enforced server-side (not just left to the client UI) so free text can never reach another user through it.
  */
-export type ReactNotificationBodyReaction = typeof ReactNotificationBodyReaction[keyof typeof ReactNotificationBodyReaction];
+export type ConversationMessageContent = typeof ConversationMessageContent[keyof typeof ConversationMessageContent];
 
 
-export const ReactNotificationBodyReaction = {
+export const ConversationMessageContent = {
   '❤️': '❤️',
   '😂': '😂',
   '😍': '😍',
@@ -325,31 +327,72 @@ export const ReactNotificationBodyReaction = {
   'To_infinity_and_beyond!': 'To infinity and beyond!',
   Nobody_puts_Baby_in_a_corner: 'Nobody puts Baby in a corner',
   'Great_Scott!': 'Great Scott!',
+  'What_did_you_think?': 'What did you think?',
+  'Have_you_watched_it_yet?': 'Have you watched it yet?',
   'This_was_great!': 'This was great!',
   'Thank_you!': 'Thank you!',
   Not_for_me_this_one: 'Not for me this one',
 } as const;
 
-export interface ReactNotificationBody {
-  /** A fixed set of emoji + movie-catchphrase reactions — deliberately not a freeform string. There is no messaging feature in this app and this is the only user-to-user "expression" endpoint, so the enum is enforced here (not just left to the client UI) to guarantee free text can never reach another user through it. */
-  reaction: ReactNotificationBodyReaction;
+export interface SendConversationMessageBody {
+  content: ConversationMessageContent;
+  /** Targets a specific film recommendation (per-film React button or swipe-to-reply). Omit or set null for a standalone message. */
+  replyToNotificationId?: number | null;
 }
 
-export interface ReactNotificationResponse {
+export type ConversationFeedItemType = typeof ConversationFeedItemType[keyof typeof ConversationFeedItemType];
+
+
+export const ConversationFeedItemType = {
+  recommendation: 'recommendation',
+  message: 'message',
+} as const;
+
+/**
+ * One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction/message, distinguished by "type".
+ */
+export interface ConversationFeedItem {
+  type: ConversationFeedItemType;
   id: number;
-  reaction?: string | null;
-  reactedAt?: string | null;
+  fromUserId: string;
+  toUserId: string;
+  createdAt: string;
+  tmdbId?: number | null;
+  filmTitle?: string | null;
+  posterUrl?: string | null;
+  isRead?: boolean | null;
+  /** Present when type is "message" — the canned phrase/emoji sent */
+  content?: string | null;
+  replyToNotificationId?: number | null;
+  /** Denormalized title of the film this message replies to, if any */
+  replyToFilmTitle?: string | null;
 }
 
 export interface NotificationThreadResponse {
   sender?: NotificationUser | null;
-  notifications: FilmNotification[];
+  feed: ConversationFeedItem[];
 }
 
 export interface UserProfile {
   clerkId: string;
   email: string;
   username?: string | null;
+  /**
+     * Optional short display initials shown instead of username-derived ones
+     * @maxLength 5
+     */
+  displayInitials?: string | null;
+  avatarUrl?: string | null;
+}
+
+/**
+ * Another user's public profile — never includes their email address.
+ */
+export interface PublicUserProfile {
+  clerkId: string;
+  username?: string | null;
+  /** @maxLength 5 */
+  displayInitials?: string | null;
   avatarUrl?: string | null;
 }
 
@@ -365,10 +408,15 @@ export interface UpdateMeBody {
      * @maxLength 30
      */
   username?: string;
+  /**
+     * Optional — set null/empty to clear and fall back to username-derived initials
+     * @maxLength 5
+     */
+  displayInitials?: string | null;
 }
 
 export interface SearchUsersResponse {
-  users: UserProfile[];
+  users: PublicUserProfile[];
 }
 
 export interface FollowBody {
@@ -378,9 +426,9 @@ export interface FollowBody {
 
 export interface FollowsResponse {
   /** Users that the authenticated user follows */
-  following: UserProfile[];
+  following: PublicUserProfile[];
   /** Users that follow the authenticated user */
-  followers: UserProfile[];
+  followers: PublicUserProfile[];
 }
 
 export interface UpdatePushTokenBody {

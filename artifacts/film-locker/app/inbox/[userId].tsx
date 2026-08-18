@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, Platform, Modal, ScrollView,
@@ -9,16 +9,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { Swipeable } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@clerk/expo';
 import {
   useGetNotificationThread,
-  useReactToNotification,
+  useSendConversationMessage,
   useAddMovie,
   getGetNotificationThreadQueryKey,
   getGetNotificationsQueryKey,
   getListMoviesQueryKey,
-  type FilmNotification,
-  type ReactNotificationBodyReaction,
+  type ConversationFeedItem,
+  type ConversationMessageContent,
 } from '@workspace/api-client-react';
 
 // Top row — ordered by how likely each is to be someone's go-to reaction to
@@ -30,11 +32,12 @@ const LAST_EMOJI_STORAGE_KEY = 'film-locker:lastReactionEmoji';
 
 const WATCHED_IT = 'Watched it!';
 
-// "Letter keys" — movie catchphrases instead of letters, laid out as
-// horizontally-scrolling keyboard rows. Matches the fixed enum enforced
-// server-side by ReactToNotificationBody — there's no way to send free text
-// through this endpoint even via a direct API call, so this list IS the
-// entire vocabulary two users can exchange here.
+// "Letter keys" — movie catchphrases (plus a couple of plain conversation
+// starters) instead of letters, laid out as horizontally-scrolling keyboard
+// rows. Matches the fixed enum enforced server-side by
+// SendConversationMessageBody — there's no way to send free text through
+// this endpoint even via a direct API call, so this list IS the entire
+// vocabulary two users can exchange here.
 const QUOTE_KEYS = [
   WATCHED_IT,
   'Fool of a Took!',
@@ -54,6 +57,8 @@ const QUOTE_KEYS = [
   'To infinity and beyond!',
   'Nobody puts Baby in a corner',
   'Great Scott!',
+  'What did you think?',
+  'Have you watched it yet?',
   'This was great!',
   'Thank you!',
   'Not for me this one',
@@ -80,24 +85,22 @@ function formatRelative(date: Date): string {
   return date.toLocaleDateString();
 }
 
-// ── Reaction "keyboard" — emoji top row + horizontally-scrolling rows of
+// ── Message composer — emoji top row + horizontally-scrolling rows of
 // movie-catchphrase keys, styled to read as an actual keyboard popup rather
-// than a row of chat-style pills. Opens as a bottom sheet from a "React"
-// trigger on each film row instead of being permanently inline, since the
-// full set (10 emoji + 21 phrases) is too much to show inside every card. ──
+// than a row of chat-style pills. Opens as a bottom sheet either from the
+// bottom "Send a message" bar (standalone) or from a specific film's React
+// button / swipe-to-reply gesture (targeted — replyTarget is set). ──
 
-function ReactionKeyboardSheet({
+function MessageComposerSheet({
   visible,
-  filmTitle,
-  currentReaction,
+  replyTarget,
   onSelect,
   onClose,
   disabled,
 }: {
   visible: boolean;
-  filmTitle: string | null;
-  currentReaction: string | null | undefined;
-  onSelect: (r: ReactNotificationBodyReaction) => void;
+  replyTarget: { id: number; filmTitle: string } | null;
+  onSelect: (content: ConversationMessageContent) => void;
   onClose: () => void;
   disabled?: boolean;
 }) {
@@ -132,7 +135,7 @@ function ReactionKeyboardSheet({
 
           <View style={kStyles.header}>
             <Text style={kStyles.headerTitle} numberOfLines={1}>
-              {filmTitle ? `React to "${filmTitle}"` : 'React'}
+              {replyTarget ? `Reply to "${replyTarget.filmTitle}"` : 'New message'}
             </Text>
             <TouchableOpacity onPress={onClose} style={kStyles.closeBtn} hitSlop={8}>
               <Ionicons name="close" size={20} color="#6B7280" />
@@ -155,11 +158,7 @@ function ReactionKeyboardSheet({
                 activeOpacity={0.6}
                 style={kStyles.emojiKey}
               >
-                <Text
-                  style={[kStyles.emojiText, currentReaction === emoji && kStyles.emojiTextSelected]}
-                >
-                  {emoji}
-                </Text>
+                <Text style={kStyles.emojiText}>{emoji}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -174,12 +173,11 @@ function ReactionKeyboardSheet({
               contentContainerStyle={kStyles.quoteRow}
             >
               {row.map((phrase) => {
-                const selected = currentReaction === phrase;
                 const isWatched = phrase === WATCHED_IT;
                 return (
                   <TouchableOpacity
                     key={phrase}
-                    style={[kStyles.quoteKey, selected && kStyles.quoteKeySelected]}
+                    style={kStyles.quoteKey}
                     onPress={() => onSelect(phrase)}
                     disabled={disabled}
                     activeOpacity={0.7}
@@ -188,13 +186,11 @@ function ReactionKeyboardSheet({
                       <Ionicons
                         name="checkmark-circle"
                         size={13}
-                        color={selected ? '#FFFFFF' : '#059669'}
+                        color="#059669"
                         style={{ marginRight: 4 }}
                       />
                     )}
-                    <Text style={[kStyles.quoteText, selected && kStyles.quoteTextSelected]}>
-                      {phrase}
-                    </Text>
+                    <Text style={kStyles.quoteText}>{phrase}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -234,7 +230,6 @@ const kStyles = StyleSheet.create({
   },
   emojiKey: { padding: 6, borderRadius: 10 },
   emojiText: { fontSize: 28 },
-  emojiTextSelected: { opacity: 0.5 },
 
   // Catchphrase rows — each phrase gets a white key-cap (unlike single-glyph
   // keys, multi-word phrases need a visible boundary to read as one "key").
@@ -247,58 +242,117 @@ const kStyles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 1,
     elevation: 1,
   },
-  quoteKeySelected: { backgroundColor: '#0066FF' },
   quoteText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#111827' },
-  quoteTextSelected: { color: '#FFFFFF' },
 });
 
-function FilmRow({
+// ── Recommendation card — a film shared in the thread, from either side.
+// Wrapped in a Swipeable by the caller so swiping it opens the composer
+// targeted at this specific film ("swipe to reply"). The per-film React
+// button is the non-gesture alternative that does the same thing. ──
+
+function RecommendationCard({
   item,
-  onOpenReactionSheet,
+  isMine,
+  onOpenReply,
   onAddToWatchlist,
 }: {
-  item: FilmNotification;
-  onOpenReactionSheet: (item: FilmNotification) => void;
-  onAddToWatchlist: (item: FilmNotification) => void;
+  item: ConversationFeedItem;
+  isMine: boolean;
+  onOpenReply: (item: ConversationFeedItem) => void;
+  onAddToWatchlist: (item: ConversationFeedItem) => void;
 }) {
-  const hasReacted = Boolean(item.reaction);
-
   return (
     <View style={styles.filmCard}>
-      <Image source={{ uri: item.posterUrl }} style={styles.poster} contentFit="cover" transition={200} />
+      <Image source={{ uri: item.posterUrl! }} style={styles.poster} contentFit="cover" transition={200} />
       <View style={styles.filmInfo}>
+        <Text style={styles.filmMeta}>{isMine ? 'You recommended' : 'Recommended'}</Text>
         <Text style={styles.filmTitle}>{item.filmTitle}</Text>
         <Text style={styles.time}>{formatRelative(new Date(item.createdAt))}</Text>
 
         <View style={styles.actionRow}>
-          {/* Add to Watchlist */}
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => onAddToWatchlist(item)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="bookmark-outline" size={13} color="#FFF" style={{ marginRight: 4 }} />
-            <Text style={styles.addBtnText}>Add to Watchlist</Text>
-          </TouchableOpacity>
+          {!isMine && (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => onAddToWatchlist(item)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="bookmark-outline" size={13} color="#FFF" style={{ marginRight: 4 }} />
+              <Text style={styles.addBtnText}>Add to Watchlist</Text>
+            </TouchableOpacity>
+          )}
 
-          {/* Opens the reaction keyboard — shows the current pick, or a prompt */}
+          {/* Opens the composer targeted at this film — same result as
+              swiping the card. */}
           <TouchableOpacity
-            style={[styles.reactBtn, hasReacted && styles.reactBtnActive]}
-            onPress={() => onOpenReactionSheet(item)}
+            style={styles.reactBtn}
+            onPress={() => onOpenReply(item)}
             activeOpacity={0.8}
           >
-            {hasReacted ? (
-              <Text style={styles.reactBtnText} numberOfLines={1}>{item.reaction}</Text>
-            ) : (
-              <>
-                <Ionicons name="happy-outline" size={14} color="#6B7280" style={{ marginRight: 4 }} />
-                <Text style={styles.reactBtnPromptText}>React</Text>
-              </>
-            )}
+            <Ionicons name="happy-outline" size={14} color="#6B7280" style={{ marginRight: 4 }} />
+            <Text style={styles.reactBtnPromptText}>React</Text>
           </TouchableOpacity>
         </View>
       </View>
     </View>
+  );
+}
+
+// ── Chat bubble — a reaction/message, right-aligned + blue when sent by the
+// viewer, left-aligned + grey otherwise. Shows a quoted reply preview above
+// the text when it targets a specific film. ──
+
+function MessageBubble({ item, isMine }: { item: ConversationFeedItem; isMine: boolean }) {
+  return (
+    <View style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
+      <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+        {item.replyToFilmTitle && (
+          <View style={styles.replyPreview}>
+            <Ionicons name="arrow-undo" size={11} color={isMine ? '#DBEAFE' : '#6B7280'} />
+            <Text
+              style={[styles.replyPreviewText, isMine && styles.replyPreviewTextMine]}
+              numberOfLines={1}
+            >
+              {item.replyToFilmTitle}
+            </Text>
+          </View>
+        )}
+        <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]}>{item.content}</Text>
+      </View>
+      <Text style={styles.bubbleTime}>{formatRelative(new Date(item.createdAt))}</Text>
+    </View>
+  );
+}
+
+// ── Wraps a recommendation card so swiping it right opens the composer
+// pre-targeted at that film ("swipe to reply"). ──
+
+function SwipeToReplyRow({
+  onReply,
+  children,
+}: {
+  onReply: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<Swipeable>(null);
+
+  return (
+    <Swipeable
+      ref={ref}
+      leftThreshold={36}
+      overshootLeft={false}
+      renderLeftActions={() => (
+        <View style={styles.swipeReplyHint}>
+          <Ionicons name="arrow-undo" size={20} color="#0066FF" />
+        </View>
+      )}
+      onSwipeableWillOpen={() => {
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onReply();
+        ref.current?.close();
+      }}
+    >
+      {children}
+    </Swipeable>
   );
 }
 
@@ -307,52 +361,69 @@ export default function InboxThreadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { userId: myClerkId } = useAuth();
 
-  const [reactingId, setReactingId] = useState<number | null>(null);
-  const [reactionTarget, setReactionTarget] = useState<FilmNotification | null>(null);
+  const [sending, setSending] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<{ id: number; filmTitle: string } | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const { data, isLoading } = useGetNotificationThread(userId!, {
     query: { queryKey: getGetNotificationThreadQueryKey(userId!), enabled: !!userId },
   });
 
-  const { mutateAsync: reactTo } = useReactToNotification();
+  const { mutateAsync: sendMessage } = useSendConversationMessage();
   const { mutateAsync: addMovie } = useAddMovie();
 
-  const notifications = data?.notifications ?? [];
+  const feed = data?.feed ?? [];
+  const feedDesc = [...feed].reverse(); // inverted FlatList wants newest-first
   const sender = data?.sender;
   const displayName = sender?.username ?? username ?? 'User';
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const initials = (sender?.displayInitials || displayName).slice(0, 5).toUpperCase();
+  const recommendationCount = feed.filter((f) => f.type === 'recommendation').length;
 
-  const handleSelectReaction = useCallback(
-    async (reaction: ReactNotificationBodyReaction) => {
-      if (!reactionTarget) return;
-      const id = reactionTarget.id;
+  const openReplyTo = useCallback((item: ConversationFeedItem) => {
+    setReplyTarget({ id: item.id, filmTitle: item.filmTitle ?? '' });
+    setComposerOpen(true);
+  }, []);
+
+  const openStandalone = useCallback(() => {
+    setReplyTarget(null);
+    setComposerOpen(true);
+  }, []);
+
+  const handleSelect = useCallback(
+    async (content: ConversationMessageContent) => {
+      if (!userId) return;
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setReactingId(id);
+      setSending(true);
       try {
-        await reactTo({ id, data: { reaction } });
-        await queryClient.invalidateQueries({ queryKey: getGetNotificationThreadQueryKey(userId!) });
+        await sendMessage({
+          userId,
+          data: { content, replyToNotificationId: replyTarget?.id ?? null },
+        });
+        await queryClient.invalidateQueries({ queryKey: getGetNotificationThreadQueryKey(userId) });
         await queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
-        setReactionTarget(null);
+        setComposerOpen(false);
+        setReplyTarget(null);
       } catch {
-        Alert.alert('Error', 'Could not save your reaction.');
+        Alert.alert('Error', 'Could not send that.');
       } finally {
-        setReactingId(null);
+        setSending(false);
       }
     },
-    [reactTo, queryClient, userId, reactionTarget]
+    [sendMessage, queryClient, userId, replyTarget]
   );
 
   const handleAddToWatchlist = useCallback(
-    async (item: FilmNotification) => {
+    async (item: ConversationFeedItem) => {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       try {
         await addMovie({
           data: {
-            tmdbId: item.tmdbId,
-            title: item.filmTitle,
+            tmdbId: item.tmdbId!,
+            title: item.filmTitle!,
             releaseYear: '',
-            posterUrl: item.posterUrl,
+            posterUrl: item.posterUrl!,
             overview: '',
           },
         });
@@ -381,12 +452,12 @@ export default function InboxThreadScreen() {
             <Image source={{ uri: sender.avatarUrl }} style={styles.headerAvatar} contentFit="cover" />
           ) : (
             <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
-              <Text style={styles.headerAvatarText}>{initials}</Text>
+              <Text style={styles.headerAvatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
             </View>
           )}
           <View>
             <Text style={styles.headerName}>{displayName}</Text>
-            <Text style={styles.headerSub}>{notifications.length} recommendation{notifications.length !== 1 ? 's' : ''}</Text>
+            <Text style={styles.headerSub}>{recommendationCount} recommendation{recommendationCount !== 1 ? 's' : ''}</Text>
           </View>
         </View>
       </View>
@@ -397,37 +468,54 @@ export default function InboxThreadScreen() {
         </View>
       ) : (
         <FlatList
-          data={notifications}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <FilmRow
-              item={item}
-              onOpenReactionSheet={setReactionTarget}
-              onAddToWatchlist={handleAddToWatchlist}
-            />
-          )}
+          data={feedDesc}
+          inverted
+          keyExtractor={(item) => `${item.type}-${item.id}`}
+          renderItem={({ item }) => {
+            const isMine = item.fromUserId === myClerkId;
+            if (item.type === 'recommendation') {
+              return (
+                <SwipeToReplyRow onReply={() => openReplyTo(item)}>
+                  <RecommendationCard
+                    item={item}
+                    isMine={isMine}
+                    onOpenReply={openReplyTo}
+                    onAddToWatchlist={handleAddToWatchlist}
+                  />
+                </SwipeToReplyRow>
+              );
+            }
+            return <MessageBubble item={item} isMine={isMine} />;
+          }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="film-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyText}>No recommendations from this person yet.</Text>
+              <Text style={styles.emptyText}>No messages with this person yet. Say hi below.</Text>
             </View>
           }
           contentContainerStyle={
-            notifications.length === 0
+            feedDesc.length === 0
               ? { flex: 1 }
-              : { padding: 16, gap: 16, paddingBottom: insets.bottom + 24 }
+              : { padding: 16, gap: 12 }
           }
-          ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />}
         />
       )}
 
-      <ReactionKeyboardSheet
-        visible={reactionTarget !== null}
-        filmTitle={reactionTarget?.filmTitle ?? null}
-        currentReaction={reactionTarget?.reaction}
-        onSelect={handleSelectReaction}
-        onClose={() => setReactionTarget(null)}
-        disabled={reactingId !== null}
+      {/* Standalone composer bar — lets either person send a canned
+          message even when no recommendation exists between them yet. */}
+      <View style={[styles.composerBar, { paddingBottom: insets.bottom + 10 }]}>
+        <TouchableOpacity style={styles.composerBtn} onPress={openStandalone} activeOpacity={0.8}>
+          <Ionicons name="happy-outline" size={16} color="#6B7280" style={{ marginRight: 8 }} />
+          <Text style={styles.composerBtnText}>Send a message…</Text>
+        </TouchableOpacity>
+      </View>
+
+      <MessageComposerSheet
+        visible={composerOpen}
+        replyTarget={replyTarget}
+        onSelect={handleSelect}
+        onClose={() => { setComposerOpen(false); setReplyTarget(null); }}
+        disabled={sending}
       />
     </View>
   );
@@ -445,7 +533,7 @@ const styles = StyleSheet.create({
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   headerAvatar: { width: 38, height: 38, borderRadius: 19 },
   headerAvatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  headerAvatarText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  headerAvatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
   headerName: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
   headerSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
 
@@ -457,6 +545,7 @@ const styles = StyleSheet.create({
   },
   poster: { width: 80, height: 120, borderRadius: 8, flexShrink: 0 },
   filmInfo: { flex: 1 },
+  filmMeta: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
   filmTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827', marginBottom: 4 },
   time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginBottom: 10 },
 
@@ -470,14 +559,47 @@ const styles = StyleSheet.create({
 
   reactBtn: {
     flexDirection: 'row', alignItems: 'center',
-    maxWidth: 150,
     backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
   },
-  reactBtnActive: { backgroundColor: '#EFF6FF', borderColor: '#0066FF' },
   reactBtnPromptText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#6B7280' },
-  reactBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
 
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  swipeReplyHint: {
+    width: 64, alignItems: 'center', justifyContent: 'center',
+  },
+
+  bubbleRow: { maxWidth: '78%' },
+  bubbleRowMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  bubbleRowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  bubble: {
+    borderRadius: 16,
+    paddingHorizontal: 14, paddingVertical: 9,
+  },
+  bubbleMine: { backgroundColor: '#0066FF', borderBottomRightRadius: 4 },
+  bubbleTheirs: { backgroundColor: '#F1F3F6', borderBottomLeftRadius: 4 },
+  bubbleText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
+  bubbleTextMine: { color: '#FFFFFF' },
+  bubbleTime: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 3, marginHorizontal: 4 },
+
+  replyPreview: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    marginBottom: 4, opacity: 0.85,
+  },
+  replyPreviewText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: '#6B7280', flexShrink: 1 },
+  replyPreviewTextMine: { color: '#DBEAFE' },
+
+  composerBar: {
+    paddingHorizontal: 16, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  composerBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  composerBtnText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, transform: [{ scaleY: -1 }] },
   emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center' },
 });
