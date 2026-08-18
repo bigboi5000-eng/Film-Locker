@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Alert, ScrollView, ActivityIndicator, Platform, Switch,
+  ScrollView, ActivityIndicator, Platform, Switch,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,14 @@ import {
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
+import { useToast } from '@/components/ToastProvider';
+
+function errorMessage(err: unknown): string | undefined {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') {
+    return (err as any).message;
+  }
+  return undefined;
+}
 
 function Row({
   icon, label, value, danger, onPress,
@@ -58,6 +66,7 @@ export default function ProfileScreen() {
   });
 
   const { mutateAsync: updateMe, isPending: saving } = useUpdateMe();
+  const { showToast } = useToast();
 
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
@@ -77,17 +86,17 @@ export default function ProfileScreen() {
   const handleSaveUsername = useCallback(async () => {
     const trimmed = usernameInput.trim();
     if (!trimmed || trimmed.length < 2) {
-      Alert.alert('Too short', 'Username must be at least 2 characters.');
+      showToast({ title: 'Too short', subtitle: 'Username must be at least 2 characters.', variant: 'error' });
       return;
     }
     try {
       await updateMe({ data: { username: trimmed } });
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       setEditingUsername(false);
-    } catch {
-      Alert.alert('Error', 'Could not update username. Try a different one.');
+    } catch (err) {
+      showToast({ title: 'Could not update username', subtitle: errorMessage(err) ?? 'Try a different one.', variant: 'error' });
     }
-  }, [usernameInput, updateMe, queryClient]);
+  }, [usernameInput, updateMe, queryClient, showToast]);
 
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
 
@@ -96,12 +105,12 @@ export default function ProfileScreen() {
     try {
       await updateMe({ data: { isPrivate: next } });
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-    } catch {
-      Alert.alert('Error', 'Could not update account visibility.');
+    } catch (err) {
+      showToast({ title: 'Could not update account visibility', subtitle: errorMessage(err), variant: 'error' });
     } finally {
       setTogglingPrivacy(false);
     }
-  }, [updateMe, queryClient]);
+  }, [updateMe, queryClient, showToast]);
 
   const handleStartEditInitials = useCallback(() => {
     setInitialsInput(profile?.displayInitials ?? '');
@@ -114,10 +123,10 @@ export default function ProfileScreen() {
       await updateMe({ data: { displayInitials: trimmed.length > 0 ? trimmed : null } });
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       setEditingInitials(false);
-    } catch {
-      Alert.alert('Error', 'Could not update display initials.');
+    } catch (err) {
+      showToast({ title: 'Could not update display initials', subtitle: errorMessage(err), variant: 'error' });
     }
-  }, [initialsInput, updateMe, queryClient]);
+  }, [initialsInput, updateMe, queryClient, showToast]);
 
   const handleSignOut = useCallback(() => {
     confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
@@ -134,12 +143,12 @@ export default function ProfileScreen() {
         try {
           await clerkUser?.delete();
           router.replace('/(auth)/sign-in');
-        } catch {
-          Alert.alert('Error', 'Could not delete your account. Please contact support.');
+        } catch (err) {
+          showToast({ title: 'Could not delete your account', subtitle: errorMessage(err) ?? 'Please contact support.', variant: 'error' });
         }
       }
     );
-  }, [clerkUser, router]);
+  }, [clerkUser, router, showToast]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
