@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, Platform, Modal, ScrollView,
+  ActivityIndicator, Alert, Platform, ScrollView, Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -87,22 +87,25 @@ function formatRelative(date: Date): string {
 
 // ── Message composer — emoji top row + horizontally-scrolling rows of
 // movie-catchphrase keys, styled to read as an actual keyboard popup rather
-// than a row of chat-style pills. Opens as a bottom sheet either from the
-// bottom "Send a message" bar (standalone) or from a specific film's React
-// button / swipe-to-reply gesture (targeted — replyTarget is set). ──
+// than a row of chat-style pills. Rendered inline (not a Modal) inside an
+// Animated.View the screen animates open/closed, so — like a real keyboard
+// appearing — the chat feed above it shrinks to make room instead of being
+// covered, and whatever you're about to send stays visible. Opens either
+// from the bottom "Send a message" bar (standalone) or from a specific
+// film's React button / swipe-to-reply gesture (targeted — replyTarget set). ──
 
-function MessageComposerSheet({
-  visible,
+function ComposerPanel({
   replyTarget,
   onSelect,
   onClose,
   disabled,
+  bottomInset,
 }: {
-  visible: boolean;
   replyTarget: { id: number; filmTitle: string } | null;
   onSelect: (content: ConversationMessageContent) => void;
   onClose: () => void;
   disabled?: boolean;
+  bottomInset: number;
 }) {
   // Personalisation only — which emoji sits first — so it's a device-local
   // preference, not something worth round-tripping to the server for.
@@ -127,93 +130,84 @@ function MessageComposerSheet({
   }, [onSelect]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={kStyles.overlay}>
-        <TouchableOpacity style={kStyles.backdrop} onPress={onClose} activeOpacity={1} />
-        <View style={kStyles.sheet}>
-          <View style={kStyles.handle} />
+    <View style={kStyles.sheet}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        contentContainerStyle={{ paddingBottom: bottomInset + 12 }}
+      >
+        <View style={kStyles.header}>
+          <Text style={kStyles.headerTitle} numberOfLines={1}>
+            {replyTarget ? `Reply to "${replyTarget.filmTitle}"` : 'New message'}
+          </Text>
+          <TouchableOpacity onPress={onClose} style={kStyles.closeBtn} hitSlop={8}>
+            <Ionicons name="close" size={20} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
 
-          <View style={kStyles.header}>
-            <Text style={kStyles.headerTitle} numberOfLines={1}>
-              {replyTarget ? `Reply to "${replyTarget.filmTitle}"` : 'New message'}
-            </Text>
-            <TouchableOpacity onPress={onClose} style={kStyles.closeBtn} hitSlop={8}>
-              <Ionicons name="close" size={20} color="#6B7280" />
+        {/* Emoji row — the keyboard's top row. Scrollable, and reordered so
+            whichever emoji you used last sits first — easy to get back to
+            your go-to reaction without hunting for it. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={kStyles.emojiRow}
+        >
+          {orderedEmojis.map((emoji) => (
+            <TouchableOpacity
+              key={emoji}
+              onPress={() => handleEmojiPress(emoji)}
+              disabled={disabled}
+              activeOpacity={0.6}
+              style={kStyles.emojiKey}
+            >
+              <Text style={kStyles.emojiText}>{emoji}</Text>
             </TouchableOpacity>
-          </View>
+          ))}
+        </ScrollView>
 
-          {/* Emoji row — the keyboard's top row. Scrollable, and reordered so
-              whichever emoji you used last sits first — easy to get back to
-              your go-to reaction without hunting for it. */}
+        {/* Catchphrase "keys" — where the letters would be, one horizontally
+            scrolling row per keyboard row */}
+        {QUOTE_ROWS.map((row, rowIndex) => (
           <ScrollView
+            key={rowIndex}
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={kStyles.emojiRow}
+            contentContainerStyle={kStyles.quoteRow}
           >
-            {orderedEmojis.map((emoji) => (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => handleEmojiPress(emoji)}
-                disabled={disabled}
-                activeOpacity={0.6}
-                style={kStyles.emojiKey}
-              >
-                <Text style={kStyles.emojiText}>{emoji}</Text>
-              </TouchableOpacity>
-            ))}
+            {row.map((phrase) => {
+              const isWatched = phrase === WATCHED_IT;
+              return (
+                <TouchableOpacity
+                  key={phrase}
+                  style={kStyles.quoteKey}
+                  onPress={() => onSelect(phrase)}
+                  disabled={disabled}
+                  activeOpacity={0.7}
+                >
+                  {isWatched && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={13}
+                      color="#059669"
+                      style={{ marginRight: 4 }}
+                    />
+                  )}
+                  <Text style={kStyles.quoteText}>{phrase}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
-
-          {/* Catchphrase "keys" — where the letters would be, one horizontally
-              scrolling row per keyboard row */}
-          {QUOTE_ROWS.map((row, rowIndex) => (
-            <ScrollView
-              key={rowIndex}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={kStyles.quoteRow}
-            >
-              {row.map((phrase) => {
-                const isWatched = phrase === WATCHED_IT;
-                return (
-                  <TouchableOpacity
-                    key={phrase}
-                    style={kStyles.quoteKey}
-                    onPress={() => onSelect(phrase)}
-                    disabled={disabled}
-                    activeOpacity={0.7}
-                  >
-                    {isWatched && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={13}
-                        color="#059669"
-                        style={{ marginRight: 4 }}
-                      />
-                    )}
-                    <Text style={kStyles.quoteText}>{phrase}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ))}
-        </View>
-      </View>
-    </Modal>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 const kStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
+    flex: 1,
     backgroundColor: '#F1F3F6', // keyboard-body grey, not white
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-  },
-  handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#D1D5DB', alignSelf: 'center', marginTop: 10, marginBottom: 4,
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -367,6 +361,20 @@ export default function InboxThreadScreen() {
   const [replyTarget, setReplyTarget] = useState<{ id: number; filmTitle: string } | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
 
+  // Animates the panel's height open/closed, like a real keyboard sliding
+  // up — the chat feed above it (flex: 1) shrinks to make room rather than
+  // the panel covering it, so whatever's being sent stays visible.
+  const composerHeight = useRef(new Animated.Value(0)).current;
+  const COMPOSER_OPEN_HEIGHT = 300;
+
+  useEffect(() => {
+    Animated.timing(composerHeight, {
+      toValue: composerOpen ? COMPOSER_OPEN_HEIGHT + insets.bottom : 0,
+      duration: 220,
+      useNativeDriver: false, // height isn't supported by the native driver
+    }).start();
+  }, [composerOpen, insets.bottom, composerHeight]);
+
   const { data, isLoading } = useGetNotificationThread(userId!, {
     query: { queryKey: getGetNotificationThreadQueryKey(userId!), enabled: !!userId },
   });
@@ -503,20 +511,24 @@ export default function InboxThreadScreen() {
 
       {/* Standalone composer bar — lets either person send a canned
           message even when no recommendation exists between them yet. */}
-      <View style={[styles.composerBar, { paddingBottom: insets.bottom + 10 }]}>
+      <View style={[styles.composerBar, { paddingBottom: composerOpen ? 10 : insets.bottom + 10 }]}>
         <TouchableOpacity style={styles.composerBtn} onPress={openStandalone} activeOpacity={0.8}>
           <Ionicons name="happy-outline" size={16} color="#6B7280" style={{ marginRight: 8 }} />
           <Text style={styles.composerBtnText}>Send a message…</Text>
         </TouchableOpacity>
       </View>
 
-      <MessageComposerSheet
-        visible={composerOpen}
-        replyTarget={replyTarget}
-        onSelect={handleSelect}
-        onClose={() => { setComposerOpen(false); setReplyTarget(null); }}
-        disabled={sending}
-      />
+      {/* Grows open beneath the bar, pushing the chat feed above it up —
+          the "keyboard" panel itself. */}
+      <Animated.View style={{ height: composerHeight, overflow: 'hidden' }}>
+        <ComposerPanel
+          replyTarget={replyTarget}
+          onSelect={handleSelect}
+          onClose={() => { setComposerOpen(false); setReplyTarget(null); }}
+          disabled={sending}
+          bottomInset={insets.bottom}
+        />
+      </Animated.View>
     </View>
   );
 }
