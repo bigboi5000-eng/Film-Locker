@@ -37,6 +37,7 @@ import {
 } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
+import { webInputReset } from '@/lib/webInputReset';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -519,6 +520,7 @@ const ppStyles = StyleSheet.create({
     flex: 1, height: 40, paddingHorizontal: 12,
     backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB',
     fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   newCreate: { backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
   newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },

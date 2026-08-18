@@ -16,6 +16,7 @@ import {
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
 import { useToast } from '@/components/ToastProvider';
+import { webInputReset } from '@/lib/webInputReset';
 
 function errorMessage(err: unknown): string | undefined {
   if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') {
@@ -365,6 +366,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', borderRadius: 8,
     borderWidth: 1, borderColor: '#E5E7EB',
     fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   saveBtn: {
     backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 10,

@@ -25,7 +25,7 @@ import {
   SearchMoviesResponse,
   GetRecommendationsResponse,
 } from "@workspace/api-zod";
-import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations } from "../../lib/tmdb";
+import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations, enrichCandidates, type TmdbCandidate } from "../../lib/tmdb";
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
@@ -39,7 +39,7 @@ const router: IRouter = Router();
 // GET /movies/trending
 router.get("/movies/trending", async (req, res): Promise<void> => {
   try {
-    const movies = await fetchTrending();
+    const movies = await enrichCandidates(await fetchTrending());
     res.json(GetTrendingResponse.parse({ movies }));
   } catch (err) {
     req.log.error({ err }, "trending: TMDB fetch failed");
@@ -50,7 +50,7 @@ router.get("/movies/trending", async (req, res): Promise<void> => {
 // GET /movies/new-releases
 router.get("/movies/new-releases", async (req, res): Promise<void> => {
   try {
-    const movies = await fetchNowPlaying();
+    const movies = await enrichCandidates(await fetchNowPlaying());
     res.json(GetNewReleasesResponse.parse({ movies }));
   } catch (err) {
     req.log.error({ err }, "new-releases: TMDB fetch failed");
@@ -166,13 +166,7 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
     );
 
     const seen = new Set<number>();
-    const recommendations: Array<{
-      tmdbId: number;
-      title: string;
-      releaseYear: string;
-      posterUrl: string;
-      overview: string;
-    }> = [];
+    const recommendations: TmdbCandidate[] = [];
 
     for (const result of results) {
       if (result.status === "rejected") continue;
@@ -184,7 +178,8 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
       }
     }
 
-    res.json(GetRecommendationsResponse.parse({ movies: recommendations.slice(0, 20) }));
+    const enriched = await enrichCandidates(recommendations.slice(0, 20));
+    res.json(GetRecommendationsResponse.parse({ movies: enriched }));
   } catch (err) {
     req.log.error({ err }, "recommendations: failed");
     res.status(502).json({ error: "Could not fetch recommendations" });

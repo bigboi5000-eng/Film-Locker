@@ -1035,6 +1035,19 @@ components:
           items:
             type: string
           description: Genre names mapped from TMDB genre_ids
+        language:
+          type: string
+          description: Full display name of the original language (free on the TMDB list response)
+        director:
+          type: string
+        cast:
+          type: array
+          items:
+            type: string
+        watchProviders:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
       required:
         - tmdbId
         - title

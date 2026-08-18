@@ -24,6 +24,7 @@ import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { confirmDestructive } from '@/lib/confirm';
+import { webInputReset } from '@/lib/webInputReset';
 
 function EditSheet({
   visible,
@@ -126,6 +127,7 @@ const editStyles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
     marginBottom: 16, backgroundColor: '#F9FAFB',
+    ...webInputReset,
   },
   inputMultiline: { height: 80, textAlignVertical: 'top' },
   toggleRow: {

@@ -25,6 +25,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { webInputReset } from '@/lib/webInputReset';
 import {
   useGetNotificationUsers,
   getGetNotificationUsersQueryKey,
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8,
     borderWidth: 1, borderColor: '#E5E7EB',
   },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827' },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827', ...webInputReset },
 
   list: { flex: 1 },
 

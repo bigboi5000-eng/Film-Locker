@@ -23,6 +23,7 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { webInputReset } from '@/lib/webInputReset';
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -285,6 +286,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     height: '100%',
+    ...webInputReset,
   },
 
   // Sort chips

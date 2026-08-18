@@ -15,6 +15,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { webInputReset } from '@/lib/webInputReset';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -272,6 +273,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     marginBottom: 14,
+    ...webInputReset,
   },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 46 },

@@ -55,6 +55,10 @@ export interface TmdbCandidate {
   posterUrl: string;
   overview: string;
   genres: string[];
+  language?: string;
+  director?: string;
+  cast?: string[];
+  watchProviders?: WatchProvider[];
 }
 
 export interface TmdbMovieDetails extends TmdbCandidate {
@@ -93,6 +97,16 @@ export function getReleaseYear(releaseDate: string): string {
   return releaseDate.split("-")[0] ?? "";
 }
 
+/** Full language name via Intl when possible, falling back to the raw ISO code. */
+function languageName(langCode: string | undefined): string | undefined {
+  if (!langCode) return undefined;
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(langCode) ?? langCode;
+  } catch {
+    return langCode; // Intl not available in this runtime
+  }
+}
+
 function movieToCandidate(m: TmdbMovie): TmdbCandidate {
   return {
     tmdbId: m.id,
@@ -101,7 +115,76 @@ function movieToCandidate(m: TmdbMovie): TmdbCandidate {
     posterUrl: getPosterUrl(m.poster_path),
     overview: m.overview ?? "",
     genres: (m.genre_ids ?? []).map((id) => TMDB_GENRE_MAP[id]).filter(Boolean) as string[],
+    language: languageName(m.original_language),
   };
+}
+
+/**
+ * Fills in director/cast/watchProviders for a list of candidates (genre and
+ * language are already free on the list response — see movieToCandidate).
+ * Used for discovery lists (trending, new releases, recommendations) so the
+ * Director/Actor/Streaming filters on those screens have real options
+ * instead of always showing "No data yet". Runs one credits + one
+ * watch-providers request per movie, all in parallel; a single movie's
+ * failure just leaves that movie's fields empty rather than failing the list.
+ */
+export async function enrichCandidates(candidates: TmdbCandidate[]): Promise<TmdbCandidate[]> {
+  const apiKey = getApiKey();
+  const okJson = async <T>(res: Response): Promise<T> => {
+    if (!res.ok) throw new Error(`TMDB ${res.url} → ${res.status} ${res.statusText}`);
+    return res.json() as Promise<T>;
+  };
+
+  return Promise.all(
+    candidates.map(async (c) => {
+      const [creditsResult, providersResult] = await Promise.allSettled([
+        fetch(`${TMDB_BASE}/movie/${c.tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
+          okJson<TmdbCredits>(r)
+        ),
+        fetch(`${TMDB_BASE}/movie/${c.tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
+          okJson<TmdbProvidersResponse>(r)
+        ),
+      ]);
+
+      let director: string | undefined;
+      let cast: string[] | undefined;
+      if (creditsResult.status === "fulfilled") {
+        director = creditsResult.value.crew.find((cr) => cr.job === "Director")?.name;
+        cast = creditsResult.value.cast
+          .sort((a, b) => a.order - b.order)
+          .slice(0, 10)
+          .map((cr) => cr.name);
+      }
+
+      let watchProviders: WatchProvider[] | undefined;
+      if (providersResult.status === "fulfilled") {
+        const us = providersResult.value.results?.US;
+        const juswatchLink = us?.link;
+        type TypedEntry = TmdbProviderEntry & { _type: WatchProvider["type"] };
+        const raw: TypedEntry[] = [
+          ...(us?.flatrate ?? []).map((p) => ({ ...p, _type: "flatrate" as const })),
+          ...(us?.rent ?? []).map((p) => ({ ...p, _type: "rent" as const })),
+          ...(us?.buy ?? []).map((p) => ({ ...p, _type: "buy" as const })),
+        ];
+        const seen = new Set<number>();
+        watchProviders = raw
+          .filter((p) => {
+            if (seen.has(p.provider_id)) return false;
+            seen.add(p.provider_id);
+            return true;
+          })
+          .map((p) => ({
+            provider_id: p.provider_id,
+            provider_name: p.provider_name,
+            logo_url: getPosterUrl(p.logo_path),
+            type: p._type,
+            ...(juswatchLink ? { link: juswatchLink } : {}),
+          }));
+      }
+
+      return { ...c, director, cast, watchProviders };
+    })
+  );
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────

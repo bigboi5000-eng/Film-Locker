@@ -33,6 +33,7 @@ import {
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { webInputReset } from '@/lib/webInputReset';
 
 const CARD_W = 120;
 const CARD_H = 180;
@@ -181,6 +182,7 @@ const cpStyles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 16, fontFamily: 'Inter_400Regular', color: '#111827',
     marginBottom: 16, backgroundColor: '#F9FAFB',
+    ...webInputReset,
   },
   toggleRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

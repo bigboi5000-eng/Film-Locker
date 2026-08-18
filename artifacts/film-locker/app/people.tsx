@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { webInputReset } from '@/lib/webInputReset';
 import {
   useSearchUsers,
   getSearchUsersQueryKey,
@@ -229,6 +230,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1, paddingVertical: 12,
     fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   clearBtn: { padding: 4 },
 

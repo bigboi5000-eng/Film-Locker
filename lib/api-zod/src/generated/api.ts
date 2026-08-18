@@ -28,7 +28,17 @@ export const GetRecommendationsResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -43,7 +53,17 @@ export const GetTrendingResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -58,7 +78,17 @@ export const GetNewReleasesResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -80,7 +110,17 @@ export const SearchMoviesResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 

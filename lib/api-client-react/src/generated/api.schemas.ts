@@ -61,6 +61,11 @@ export interface TmdbMovieCard {
   overview: string;
   /** Genre names mapped from TMDB genre_ids */
   genres: string[];
+  /** Full display name of the original language (free on the TMDB list response) */
+  language?: string;
+  director?: string;
+  cast?: string[];
+  watchProviders?: WatchProvider[];
 }
 
 export interface TmdbMovieDetailsResponse {

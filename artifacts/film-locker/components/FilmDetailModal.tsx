@@ -44,6 +44,7 @@ import {
   type NotificationUser,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
+import { webInputReset } from '@/lib/webInputReset';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
@@ -552,6 +553,7 @@ const communityStyles = StyleSheet.create({
     color: '#111827',
     minHeight: 60,
     maxHeight: 120,
+    ...webInputReset,
   },
   composeFooter: {
     flexDirection: 'row',
