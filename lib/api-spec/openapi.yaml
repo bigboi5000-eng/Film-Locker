@@ -628,6 +628,19 @@ paths:
           description: Bad request
         "401":
           description: Unauthorized
+    delete:
+      operationId: deleteMe
+      tags: [users]
+      summary: >
+        Permanently delete the authenticated user's Film Locker data — their
+        locker, comments, ratings, notifications, messages, follows,
+        playlists, and feedback. Call this before deleting the Clerk
+        identity itself; it does not touch Clerk.
+      responses:
+        "204":
+          description: Account data deleted
+        "401":
+          description: Unauthorized
 
   /users/search:
     get:

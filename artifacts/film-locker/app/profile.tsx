@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, ActivityIndicator, Platform, Switch,
+  ScrollView, ActivityIndicator, Platform, Switch, Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import {
   useGetMe,
   useUpdateMe,
   useSubmitFeedback,
+  useDeleteMe,
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
@@ -25,6 +26,12 @@ function errorMessage(err: unknown): string | undefined {
   }
   return undefined;
 }
+
+// Stable production domain — same one eas.json points builds at, so these
+// links work from any build (dev, preview, or production) without depending
+// on whichever host is proxying the app's own API calls right now.
+const PRIVACY_URL = 'https://film-locker.replit.app/privacy';
+const TERMS_URL = 'https://film-locker.replit.app/terms';
 
 function Row({
   icon, label, value, danger, onPress,
@@ -152,12 +159,19 @@ export default function ProfileScreen() {
     });
   }, [signOut, router]);
 
+  const { mutateAsync: deleteMe } = useDeleteMe();
+
   const handleDeleteAccount = useCallback(() => {
     confirmDestructive(
       'This permanently deletes your Film Locker account, watchlist, and all social data. This cannot be undone.',
       'Delete',
       async () => {
         try {
+          // Delete our own data first, while the session is still valid —
+          // then remove the Clerk identity itself. If the first step fails,
+          // we deliberately don't delete the Clerk account, so the two
+          // never drift out of sync.
+          await deleteMe();
           await clerkUser?.delete();
           router.replace('/(auth)/sign-in');
         } catch (err) {
@@ -165,7 +179,7 @@ export default function ProfileScreen() {
         }
       }
     );
-  }, [clerkUser, router, showToast]);
+  }, [deleteMe, clerkUser, router, showToast]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -310,6 +324,13 @@ export default function ProfileScreen() {
               />
             )}
           </View>
+        </View>
+
+        {/* Legal */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Legal</Text>
+          <Row icon="document-text-outline" label="Privacy Policy" onPress={() => Linking.openURL(PRIVACY_URL)} />
+          <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL(TERMS_URL)} />
         </View>
 
         {/* Feedback */}

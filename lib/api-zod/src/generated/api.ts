@@ -847,6 +847,13 @@ export const UpdateMeResponse = zod.object({
 
 
 /**
+ * @summary Permanently delete the authenticated user's Film Locker data — their locker, comments, ratings, notifications, messages, follows, playlists, and feedback. Call this before deleting the Clerk identity itself; it does not touch Clerk.
+
+ */
+export const DeleteMeResponse = zod.void()
+
+
+/**
  * @summary Search users by username or email
  */
 export const searchUsersQueryQMin = 2;

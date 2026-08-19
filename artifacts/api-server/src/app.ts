@@ -11,8 +11,19 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { privacyPolicyHtml, termsOfServiceHtml } from "./lib/legalContent";
 
 const app: Express = express();
+
+// Public legal pages — deliberately outside /api and unauthenticated, so
+// they're plain reachable URLs (e.g. for the App Store Connect privacy
+// policy field) as well as links from inside the app.
+app.get("/privacy", (_req, res) => {
+  res.type("html").send(privacyPolicyHtml());
+});
+app.get("/terms", (_req, res) => {
+  res.type("html").send(termsOfServiceHtml());
+});
 
 // Structured request logging
 app.use(
