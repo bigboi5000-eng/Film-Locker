@@ -14,7 +14,8 @@
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.filmlocker.app"
     },
     "android": {
       "backgroundColor": "#FFFFFF",

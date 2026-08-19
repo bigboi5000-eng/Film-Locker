@@ -4,9 +4,11 @@
   },
   "build": {
     "preview": {
+      "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
+      "ios": {},
       "env": {
         "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
       }
@@ -15,6 +17,7 @@
       "android": {
         "buildType": "app-bundle"
       },
+      "ios": {},
       "env": {
         "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
       }
