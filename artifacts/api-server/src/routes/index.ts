@@ -6,6 +6,7 @@ import notificationsRouter from "./notifications";
 import usersRouter from "./users";
 import followsRouter from "./follows";
 import playlistsRouter from "./playlists";
+import feedbackRouter from "./feedback";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(notificationsRouter);
 router.use(usersRouter);
 router.use(followsRouter);
 router.use(playlistsRouter);
+router.use(feedbackRouter);
 
 export default router;

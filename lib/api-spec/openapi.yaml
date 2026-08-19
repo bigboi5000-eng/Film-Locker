@@ -750,6 +750,31 @@ paths:
         "401":
           description: Unauthorized
 
+  /feedback:
+    post:
+      operationId: submitFeedback
+      tags: [users]
+      summary: >
+        Send feedback from the account management page. Always saved to the
+        database first; a notification email is best-effort on top of that.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFeedbackBody"
+      responses:
+        "201":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitFeedbackResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
   /playlists:
     get:
       operationId: getMyPlaylists
@@ -1877,6 +1902,28 @@ components:
         - followers
         - incomingRequests
         - outgoingRequests
+
+    SubmitFeedbackBody:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      required:
+        - message
+
+    SubmitFeedbackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - createdAt
 
     UpdatePushTokenBody:
       type: object

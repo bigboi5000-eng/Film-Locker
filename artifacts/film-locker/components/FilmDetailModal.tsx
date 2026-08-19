@@ -1047,6 +1047,10 @@ export function FilmDetailModal({
                 </View>
               )}
 
+              {/* ── Community Section — Film Locker's own aggregated ratings
+                  and comments, right alongside the TMDB reviews above ── */}
+              <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
+
               {/* Divider */}
               <View style={styles.divider} />
 
@@ -1131,9 +1135,6 @@ export function FilmDetailModal({
                   <Text style={styles.actionButtonRecommendText}>Recommend to…</Text>
                 </TouchableOpacity>
               )}
-
-              {/* ── Community Section ── */}
-              <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
 
             </View>
           </ScrollView>

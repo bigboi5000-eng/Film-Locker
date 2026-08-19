@@ -474,6 +474,19 @@ export interface FollowsResponse {
   outgoingRequests: PublicUserProfile[];
 }
 
+export interface SubmitFeedbackBody {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  message: string;
+}
+
+export interface SubmitFeedbackResponse {
+  id: number;
+  createdAt: string;
+}
+
 export interface UpdatePushTokenBody {
   /** Expo push token for the device */
   expoPushToken: string;

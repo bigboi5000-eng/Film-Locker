@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetMe,
   useUpdateMe,
+  useSubmitFeedback,
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
@@ -128,6 +129,21 @@ export default function ProfileScreen() {
       showToast({ title: 'Could not update display initials', subtitle: errorMessage(err), variant: 'error' });
     }
   }, [initialsInput, updateMe, queryClient, showToast]);
+
+  const [feedbackText, setFeedbackText] = useState('');
+  const { mutateAsync: submitFeedback, isPending: sendingFeedback } = useSubmitFeedback();
+
+  const handleSendFeedback = useCallback(async () => {
+    const trimmed = feedbackText.trim();
+    if (!trimmed) return;
+    try {
+      await submitFeedback({ data: { message: trimmed } });
+      setFeedbackText('');
+      showToast({ title: 'Thanks for the feedback!', subtitle: 'We read every one.', variant: 'success' });
+    } catch (err) {
+      showToast({ title: 'Could not send feedback', subtitle: errorMessage(err), variant: 'error' });
+    }
+  }, [feedbackText, submitFeedback, showToast]);
 
   const handleSignOut = useCallback(() => {
     confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
@@ -296,6 +312,41 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Feedback */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Feedback</Text>
+          <View style={styles.feedbackBody}>
+            <Text style={styles.feedbackHint}>
+              Spot a bug, or have an idea for the app? Let us know below.
+            </Text>
+            <TextInput
+              style={styles.feedbackInput}
+              value={feedbackText}
+              onChangeText={(t) => setFeedbackText(t.slice(0, 2000))}
+              placeholder="What's working, what's not, what you'd like to see…"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              maxLength={2000}
+              textAlignVertical="top"
+            />
+            <View style={styles.feedbackFooter}>
+              <Text style={styles.feedbackCharCount}>{feedbackText.length}/2000</Text>
+              <TouchableOpacity
+                style={[styles.saveBtn, (!feedbackText.trim() || sendingFeedback) && styles.saveBtnDisabled]}
+                onPress={handleSendFeedback}
+                disabled={!feedbackText.trim() || sendingFeedback}
+                activeOpacity={0.8}
+              >
+                {sendingFeedback ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
         {/* Danger zone */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Account actions</Text>
@@ -372,6 +423,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 10,
     borderRadius: 8, minWidth: 56, alignItems: 'center',
   },
+  saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
   cancelBtn: { padding: 8 },
+
+  feedbackBody: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16 },
+  feedbackHint: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 10, lineHeight: 18 },
+  feedbackInput: {
+    minHeight: 90, maxHeight: 160, paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#F9FAFB', borderRadius: 8,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
+  },
+  feedbackFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  feedbackCharCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
 });

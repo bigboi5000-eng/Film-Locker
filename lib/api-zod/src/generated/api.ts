@@ -967,6 +967,24 @@ export const DeclineFollowRequestResponse = zod.void()
 
 
 /**
+ * @summary Send feedback from the account management page. Always saved to the database first; a notification email is best-effort on top of that.
+
+ */
+export const submitFeedbackBodyMessageMax = 2000;
+
+
+
+export const SubmitFeedbackBody = zod.object({
+  "message": zod.string().min(1).max(submitFeedbackBodyMessageMax)
+})
+
+export const SubmitFeedbackResponse = zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Get the authenticated user's playlists
  */
 export const GetMyPlaylistsResponse = zod.object({
