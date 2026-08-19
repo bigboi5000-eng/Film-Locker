@@ -324,6 +324,11 @@ export default function ProfileScreen() {
               />
             )}
           </View>
+          <Row
+            icon="ban-outline"
+            label="Blocked users"
+            onPress={() => router.push('/blocked-users')}
+          />
         </View>
 
         {/* Legal */}

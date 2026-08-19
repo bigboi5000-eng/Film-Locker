@@ -9,12 +9,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { webInputReset } from '@/lib/webInputReset';
+import { confirmDestructive } from '@/lib/confirm';
+import { useToast } from '@/components/ToastProvider';
 import {
   useSearchUsers,
   getSearchUsersQueryKey,
   useGetFollows,
   useFollowUser,
   useUnfollowUser,
+  useBlockUser,
   getGetFollowsQueryKey,
   getGetNotificationUsersQueryKey,
   type PublicUserProfile,
@@ -42,6 +45,8 @@ export default function PeopleScreen() {
   const { data: followsData, isLoading: followsLoading } = useGetFollows();
   const { mutateAsync: followUser } = useFollowUser();
   const { mutateAsync: unfollowUser } = useUnfollowUser();
+  const { mutateAsync: blockUser } = useBlockUser();
+  const { showToast } = useToast();
 
   const followingIds = new Set((followsData?.following ?? []).map((u) => u.clerkId));
   const pendingOutgoingIds = new Set((followsData?.outgoingRequests ?? []).map((u) => u.clerkId));
@@ -81,11 +86,36 @@ export default function PeopleScreen() {
     }
   }, [unfollowUser, invalidate]);
 
+  const handleBlock = useCallback((user: PublicUserProfile) => {
+    const name = user.username ?? 'this user';
+    confirmDestructive(
+      `Block ${name}? They won't be able to follow, message, or see your comments, and you won't see theirs.`,
+      'Block',
+      async () => {
+        setActionUserId(user.clerkId);
+        try {
+          await blockUser({ data: { blockedId: user.clerkId } });
+          await invalidate();
+          showToast({ title: `Blocked ${name}`, variant: 'success' });
+        } catch {
+          showToast({ title: 'Could not block this user', variant: 'error' });
+        } finally {
+          setActionUserId(null);
+        }
+      }
+    );
+  }, [blockUser, invalidate, showToast]);
+
   function UserRow({ user, state }: { user: PublicUserProfile; state: 'none' | 'pending' | 'accepted' }) {
     const initials = (user.displayInitials || user.username || '??').slice(0, 5).toUpperCase();
     const busy = actionUserId === user.clerkId;
     return (
-      <View style={styles.userRow}>
+      <TouchableOpacity
+        style={styles.userRow}
+        onLongPress={() => handleBlock(user)}
+        delayLongPress={400}
+        activeOpacity={1}
+      >
         {user.avatarUrl ? (
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
@@ -114,7 +144,7 @@ export default function PeopleScreen() {
             <Text style={styles.followBtnText}>{user.isPrivate ? 'Request' : 'Follow'}</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     );
   }
 

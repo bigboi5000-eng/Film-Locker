@@ -992,6 +992,68 @@ export const SubmitFeedbackResponse = zod.object({
 
 
 /**
+ * @summary List users the authenticated user has blocked
+ */
+export const getBlocksResponseBlockedItemDisplayInitialsMax = 5;
+
+
+
+export const GetBlocksResponse = zod.object({
+  "blocked": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getBlocksResponseBlockedItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.'))
+})
+
+
+/**
+ * @summary Block a user. Also removes any existing follow relationship between the two people, in either direction (including a still-pending request).
+
+ */
+export const BlockUserBody = zod.object({
+  "blockedId": zod.string().describe('Clerk user ID of the user to block')
+})
+
+export const BlockUserResponse = zod.object({
+  "blockerId": zod.string(),
+  "blockedId": zod.string()
+})
+
+
+/**
+ * @summary Unblock a user
+ */
+export const UnblockUserParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const UnblockUserResponse = zod.void()
+
+
+/**
+ * @summary Report a user, optionally about a specific comment. Always saved to the database first; a notification email is best-effort on top of that — there's no in-app moderation queue yet.
+
+ */
+export const submitReportBodyReasonMax = 1000;
+
+
+
+export const SubmitReportBody = zod.object({
+  "reportedUserId": zod.string().describe('Clerk user ID of the user being reported'),
+  "reason": zod.string().min(1).max(submitReportBodyReasonMax),
+  "commentId": zod.number().nullish().describe('If reporting a specific comment')
+})
+
+export const SubmitReportResponse = zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Get the authenticated user's playlists
  */
 export const GetMyPlaylistsResponse = zod.object({

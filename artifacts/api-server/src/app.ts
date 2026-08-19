@@ -93,9 +93,21 @@ app.use("/api", router);
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) { next(err); return; }
   req.log.error({ err }, "unhandled error");
-  // Drizzle wraps the real Postgres error (e.g. "column ... does not exist")
-  // in DrizzleQueryError.cause — surface that instead of the generic
-  // "Failed query: ..." wrapper message, which has no diagnostic value on its own.
+
+  // The real reason (e.g. "column ... does not exist") is always logged
+  // server-side above. Whether it's also returned to the client depends on
+  // environment: in production that would hand a stranger a look at our
+  // schema/internals on every crash, so only the generic message goes out;
+  // outside production (where we're the ones hitting it) the detail is
+  // worth seeing without digging through logs.
+  if (process.env.NODE_ENV === "production") {
+    res.status(500).json({ error: "Internal server error." });
+    return;
+  }
+
+  // Drizzle wraps the real Postgres error in DrizzleQueryError.cause —
+  // surface that instead of the generic "Failed query: ..." wrapper
+  // message, which has no diagnostic value on its own.
   const cause = err instanceof Error ? err.cause : undefined;
   const message =
     (cause instanceof Error ? cause.message : undefined) ??

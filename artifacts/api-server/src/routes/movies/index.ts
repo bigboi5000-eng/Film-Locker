@@ -26,6 +26,14 @@ import {
   GetRecommendationsResponse,
 } from "@workspace/api-zod";
 import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations, enrichCandidates, type TmdbCandidate } from "../../lib/tmdb";
+import { cached } from "../../lib/cache";
+
+// Trending/new-releases are identical for every user, and each load fans out
+// to ~40 extra TMDB requests via enrichCandidates (credits + watch-providers
+// per movie) — cache the enriched result so concurrent/repeat page loads
+// don't re-fetch. Recommendations is per-user and lower-volume, so it's left
+// uncached for now.
+const DISCOVERY_CACHE_TTL_MS = 20 * 60 * 1000;
 import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
@@ -39,7 +47,9 @@ const router: IRouter = Router();
 // GET /movies/trending
 router.get("/movies/trending", async (req, res): Promise<void> => {
   try {
-    const movies = await enrichCandidates(await fetchTrending());
+    const movies = await cached("trending", DISCOVERY_CACHE_TTL_MS, async () =>
+      enrichCandidates(await fetchTrending())
+    );
     res.json(GetTrendingResponse.parse({ movies }));
   } catch (err) {
     req.log.error({ err }, "trending: TMDB fetch failed");
@@ -50,7 +60,9 @@ router.get("/movies/trending", async (req, res): Promise<void> => {
 // GET /movies/new-releases
 router.get("/movies/new-releases", async (req, res): Promise<void> => {
   try {
-    const movies = await enrichCandidates(await fetchNowPlaying());
+    const movies = await cached("new-releases", DISCOVERY_CACHE_TTL_MS, async () =>
+      enrichCandidates(await fetchNowPlaying())
+    );
     res.json(GetNewReleasesResponse.parse({ movies }));
   } catch (err) {
     req.log.error({ err }, "new-releases: TMDB fetch failed");

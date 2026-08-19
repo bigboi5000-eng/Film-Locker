@@ -1,23 +1,21 @@
 import { logger } from "./logger";
 
-const FEEDBACK_RECIPIENT = "jakepltanner@gmail.com";
+const RECIPIENT = "jakepltanner@gmail.com";
 
 /**
- * Best-effort email notification via Resend's REST API (no SDK needed — it's
- * one POST request). Requires RESEND_API_KEY. Without a verified sending
- * domain, Resend only allows sending FROM its shared onboarding@resend.dev
- * address TO the email that owns the Resend account — which is exactly this
+ * Sends one email via Resend's REST API (no SDK needed — it's one POST
+ * request). Requires RESEND_API_KEY. Without a verified sending domain,
+ * Resend only allows sending FROM its shared onboarding@resend.dev address
+ * TO the email that owns the Resend account — which is exactly this
  * recipient, so no domain purchase/verification is needed to get this
- * working. Never throws — feedback is already saved to the database before
- * this runs, so an email failure here should never fail the request.
+ * working. Never throws — the caller has already saved whatever this
+ * notifies about to the database, so an email failure here should never
+ * fail the request.
  */
-export async function sendFeedbackEmail(opts: {
-  fromUserEmail: string;
-  message: string;
-}): Promise<void> {
+async function sendEmail(opts: { subject: string; text: string; replyTo?: string }): Promise<void> {
   const apiKey = process.env["RESEND_API_KEY"];
   if (!apiKey) {
-    logger.warn("RESEND_API_KEY not set — feedback saved but no email sent");
+    logger.warn({ subject: opts.subject }, "RESEND_API_KEY not set — saved but no email sent");
     return;
   }
 
@@ -30,17 +28,44 @@ export async function sendFeedbackEmail(opts: {
       },
       body: JSON.stringify({
         from: "Film Locker <onboarding@resend.dev>",
-        to: [FEEDBACK_RECIPIENT],
-        reply_to: opts.fromUserEmail,
-        subject: `Film Locker feedback from ${opts.fromUserEmail}`,
-        text: opts.message,
+        to: [RECIPIENT],
+        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        subject: opts.subject,
+        text: opts.text,
       }),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      logger.error({ status: res.status, body }, "Resend feedback email failed");
+      logger.error({ status: res.status, body }, "Resend email failed");
     }
   } catch (err) {
-    logger.error({ err }, "Resend feedback email request failed");
+    logger.error({ err }, "Resend email request failed");
   }
+}
+
+export function sendFeedbackEmail(opts: { fromUserEmail: string; message: string }): Promise<void> {
+  return sendEmail({
+    subject: `Film Locker feedback from ${opts.fromUserEmail}`,
+    text: opts.message,
+    replyTo: opts.fromUserEmail,
+  });
+}
+
+export function sendReportEmail(opts: {
+  reporterEmail: string;
+  reportedUserEmail: string;
+  reason: string;
+  commentSnapshot?: string | null;
+}): Promise<void> {
+  const lines = [
+    `Reported user: ${opts.reportedUserEmail}`,
+    `Reported by: ${opts.reporterEmail}`,
+    `Reason: ${opts.reason}`,
+    ...(opts.commentSnapshot ? [`Reported comment: "${opts.commentSnapshot}"`] : []),
+  ];
+  return sendEmail({
+    subject: `Film Locker report: ${opts.reportedUserEmail}`,
+    text: lines.join("\n"),
+    replyTo: opts.reporterEmail,
+  });
 }

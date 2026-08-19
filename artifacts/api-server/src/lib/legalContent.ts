@@ -75,15 +75,19 @@ export function privacyPolicyHtml(): string {
       <strong>private</strong>, people need your approval to follow you, and
       only approved followers can see your comments, send you film
       recommendations, or message you. Your email address is never shown to
-      other users under any setting.
+      other users under any setting. You can block anyone at any time, which
+      immediately removes any follow relationship between you and prevents
+      them from following, messaging, or seeing your comments going forward.
     </p>
 
     <h2>Data retention & deletion</h2>
     <p>
       You can permanently delete your account at any time from Account
       Management in the app. Doing so removes your locker, ratings,
-      comments, follows, messages, and feedback from our database
-      immediately — this cannot be undone.
+      comments, follows, blocks, messages, and feedback from our database
+      immediately — this cannot be undone. One exception: if someone has
+      reported you, we retain that report as a safety record even if your
+      account is later deleted.
     </p>
 
     <h2>Children's privacy</h2>
@@ -144,11 +148,12 @@ export function termsOfServiceHtml(): string {
       <li>Use the feedback form for anything other than genuine feedback.</li>
     </ul>
     <p>
-      We don't yet have in-app blocking or reporting tools — if someone is
-      abusing the app, please email us at
-      <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and we'll
-      act on it directly. We may suspend or remove any account that
-      violates these terms.
+      You can block anyone directly from the app, and report a user or a
+      specific comment for us to review. We don't yet have an in-app
+      moderation queue — reports come straight to us — but you can also
+      always reach us at
+      <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>. We may
+      suspend or remove any account that violates these terms.
     </p>
 
     <h2>Your content</h2>

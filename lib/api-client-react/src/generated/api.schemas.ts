@@ -487,6 +487,37 @@ export interface SubmitFeedbackResponse {
   createdAt: string;
 }
 
+export interface BlockUserBody {
+  /** Clerk user ID of the user to block */
+  blockedId: string;
+}
+
+export interface BlockUserResponse {
+  blockerId: string;
+  blockedId: string;
+}
+
+export interface GetBlocksResponse {
+  blocked: PublicUserProfile[];
+}
+
+export interface SubmitReportBody {
+  /** Clerk user ID of the user being reported */
+  reportedUserId: string;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
+  /** If reporting a specific comment */
+  commentId?: number | null;
+}
+
+export interface SubmitReportResponse {
+  id: number;
+  createdAt: string;
+}
+
 export interface UpdatePushTokenBody {
   /** Expo push token for the device */
   expoPushToken: string;

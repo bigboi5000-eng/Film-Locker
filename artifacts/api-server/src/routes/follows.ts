@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, followsTable, usersTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { isBlockedEitherWay } from "../lib/blocks";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -80,6 +81,11 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
 
   if (followeeId === clerkUserId) {
     res.status(400).json({ error: "You cannot follow yourself." });
+    return;
+  }
+
+  if (await isBlockedEitherWay(clerkUserId, followeeId)) {
+    res.status(403).json({ error: "You can't follow this user." });
     return;
   }
 

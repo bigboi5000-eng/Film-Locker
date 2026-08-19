@@ -11,6 +11,7 @@ import {
   SendConversationMessageBody,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { isBlockedEitherWay } from "../lib/blocks";
 import { Expo } from "expo-server-sdk";
 
 const expo = new Expo();
@@ -101,6 +102,14 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   // Cannot recommend to yourself
   if (toUserId === clerkUserId) {
     res.status(400).json({ error: "Cannot send a recommendation to yourself." });
+    return;
+  }
+
+  // Blocking already removes any follow between the two (see POST /blocks),
+  // so this is belt-and-suspenders on top of the follow check below — kept
+  // explicit so this endpoint doesn't silently depend on that side effect.
+  if (await isBlockedEitherWay(clerkUserId, toUserId)) {
+    res.status(403).json({ error: "You can't send a recommendation to this user." });
     return;
   }
 
@@ -241,6 +250,8 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
 // existing recommendation between the two) that permits messaging? ──────────
 
 async function canMessage(userA: string, userB: string): Promise<boolean> {
+  if (await isBlockedEitherWay(userA, userB)) return false;
+
   const [followRow] = await db
     .select({ id: followsTable.id })
     .from(followsTable)

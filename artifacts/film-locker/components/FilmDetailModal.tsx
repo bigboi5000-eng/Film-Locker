@@ -34,8 +34,11 @@ import {
   useGetNotificationUsers,
   getGetNotificationUsersQueryKey,
   useSendNotification,
+  useBlockUser,
+  useSubmitReport,
   getGetFilmCommunityScoreQueryKey,
   getGetFilmCommentsQueryKey,
+  getGetFollowsQueryKey,
   getListMoviesQueryKey,
   type Movie,
   type TmdbMovieCard,
@@ -45,6 +48,7 @@ import {
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
+import { useToast } from '@/components/ToastProvider';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
@@ -226,9 +230,11 @@ function CommunityStars({ value }: { value: number | null | undefined }) {
 function CommentRow({
   comment,
   onDelete,
+  onReport,
 }: {
   comment: FilmComment;
   onDelete: (id: number) => void;
+  onReport: (comment: FilmComment) => void;
 }) {
   const initials = (comment.username ?? comment.userId.slice(0, 2)).slice(0, 2).toUpperCase();
   const timeAgo = formatRelative(new Date(comment.createdAt));
@@ -255,13 +261,21 @@ function CommentRow({
             {comment.username ?? 'Anonymous'}
           </Text>
           <Text style={commentStyles.time}>{timeAgo}</Text>
-          {comment.isOwn && (
+          {comment.isOwn ? (
             <TouchableOpacity
               onPress={() => onDelete(comment.id)}
               hitSlop={10}
               style={commentStyles.deleteBtn}
             >
               <Ionicons name="trash-outline" size={14} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => onReport(comment)}
+              hitSlop={10}
+              style={commentStyles.deleteBtn}
+            >
+              <Ionicons name="flag-outline" size={14} color="#9CA3AF" />
             </TouchableOpacity>
           )}
         </View>
@@ -270,6 +284,99 @@ function CommentRow({
     </View>
   );
 }
+
+// ── Report sheet — lets you report a comment/user with an optional reason,
+// or block the user outright. No in-app moderation queue yet; a report is
+// emailed to the developer best-effort and always saved server-side. ──
+
+function ReportSheet({
+  visible,
+  targetUsername,
+  onSubmit,
+  onBlock,
+  onClose,
+  submitting,
+}: {
+  visible: boolean;
+  targetUsername: string;
+  onSubmit: (reason: string) => void;
+  onBlock: () => void;
+  onClose: () => void;
+  submitting: boolean;
+}) {
+  const [reason, setReason] = useState('');
+
+  const handleClose = useCallback(() => {
+    setReason('');
+    onClose();
+  }, [onClose]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <View style={reportStyles.overlay}>
+        <TouchableOpacity style={reportStyles.backdrop} onPress={handleClose} activeOpacity={1} />
+        <View style={reportStyles.sheet}>
+          <View style={reportStyles.handle} />
+          <Text style={reportStyles.title}>Report {targetUsername}</Text>
+          <TextInput
+            style={reportStyles.input}
+            value={reason}
+            onChangeText={(t) => setReason(t.slice(0, 1000))}
+            placeholder="What's wrong with this? (required)"
+            placeholderTextColor="#9CA3AF"
+            multiline
+            maxLength={1000}
+            textAlignVertical="top"
+          />
+          <TouchableOpacity
+            style={[reportStyles.submitBtn, (!reason.trim() || submitting) && reportStyles.btnDisabled]}
+            onPress={() => onSubmit(reason.trim())}
+            disabled={!reason.trim() || submitting}
+            activeOpacity={0.85}
+          >
+            {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={reportStyles.blockBtn} onPress={onBlock} activeOpacity={0.85}>
+            <Text style={reportStyles.blockBtnText}>Block {targetUsername}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleClose} style={reportStyles.cancelBtn} activeOpacity={0.7}>
+            <Text style={reportStyles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const reportStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
+  title: { fontSize: 17, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 12 },
+  input: {
+    minHeight: 80, maxHeight: 140, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontFamily: 'Inter_400Regular',
+    color: '#111827', backgroundColor: '#F9FAFB', marginBottom: 12,
+    ...webInputReset,
+  },
+  submitBtn: {
+    backgroundColor: '#0066FF', borderRadius: 10, paddingVertical: 13,
+    alignItems: 'center', marginBottom: 10,
+  },
+  btnDisabled: { opacity: 0.5 },
+  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  blockBtn: {
+    borderRadius: 10, paddingVertical: 13, alignItems: 'center',
+    borderWidth: 1, borderColor: '#FCA5A5', marginBottom: 10,
+  },
+  blockBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#DC2626' },
+  cancelBtn: { alignItems: 'center', paddingVertical: 8 },
+  cancelBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+});
 
 function formatRelative(date: Date): string {
   const now = Date.now();
@@ -306,16 +413,20 @@ function CommunitySection({
   isLoggedIn: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [commentText, setCommentText] = useState('');
   const [page, setPage] = useState(1);
   // Accumulated comments across all loaded pages
   const [allComments, setAllComments] = useState<FilmComment[]>([]);
+  const [reportTarget, setReportTarget] = useState<FilmComment | null>(null);
 
   const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId);
   const { data: commentsData, isLoading: commentsLoading } = useGetFilmComments(tmdbId, { page });
   const { mutateAsync: submitRating, isPending: ratingPending } = useSetFilmCommunityRating();
   const { mutateAsync: postComment, isPending: commentPending } = usePostFilmComment();
   const { mutateAsync: deleteComment } = useDeleteFilmComment();
+  const { mutateAsync: submitReport, isPending: reportPending } = useSubmitReport();
+  const { mutateAsync: blockUser } = useBlockUser();
 
   // Append newly fetched page into accumulated list (dedup by id)
   React.useEffect(() => {
@@ -379,6 +490,42 @@ function CommunitySection({
     },
     [deleteComment, tmdbId, resetComments]
   );
+
+  const handleSubmitReport = useCallback(
+    async (reason: string) => {
+      if (!reportTarget || !reason.trim()) return;
+      try {
+        await submitReport({
+          data: { reportedUserId: reportTarget.userId, reason, commentId: reportTarget.id },
+        });
+        setReportTarget(null);
+        showToast({ title: 'Report submitted', subtitle: "Thanks for flagging it — we'll take a look.", variant: 'success' });
+      } catch {
+        showToast({ title: 'Could not submit report', variant: 'error' });
+      }
+    },
+    [reportTarget, submitReport, showToast]
+  );
+
+  const handleBlockFromReport = useCallback(() => {
+    if (!reportTarget) return;
+    const username = reportTarget.username ?? 'this user';
+    confirmDestructive(
+      `Block ${username}? They won't be able to follow, message, or see your comments, and you won't see theirs.`,
+      'Block',
+      async () => {
+        try {
+          await blockUser({ data: { blockedId: reportTarget.userId } });
+          setReportTarget(null);
+          await resetComments();
+          await queryClient.invalidateQueries({ queryKey: getGetFollowsQueryKey() });
+          showToast({ title: `Blocked ${username}`, variant: 'success' });
+        } catch {
+          showToast({ title: 'Could not block this user', variant: 'error' });
+        }
+      }
+    );
+  }, [reportTarget, blockUser, resetComments, queryClient, showToast]);
 
   const userRating = score?.userRating ?? null;
   const average = score?.average ?? null;
@@ -481,7 +628,7 @@ function CommunitySection({
       ) : (
         <>
           {comments.map((c) => (
-            <CommentRow key={c.id} comment={c} onDelete={handleDeleteComment} />
+            <CommentRow key={c.id} comment={c} onDelete={handleDeleteComment} onReport={setReportTarget} />
           ))}
           {hasMore && (
             <TouchableOpacity
@@ -493,6 +640,15 @@ function CommunitySection({
           )}
         </>
       )}
+
+      <ReportSheet
+        visible={reportTarget !== null}
+        targetUsername={reportTarget?.username ?? 'this user'}
+        onSubmit={handleSubmitReport}
+        onBlock={handleBlockFromReport}
+        onClose={() => setReportTarget(null)}
+        submitting={reportPending}
+      />
     </View>
   );
 }

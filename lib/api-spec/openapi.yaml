@@ -788,6 +788,88 @@ paths:
         "401":
           description: Unauthorized
 
+  /blocks:
+    get:
+      operationId: getBlocks
+      tags: [users]
+      summary: List users the authenticated user has blocked
+      responses:
+        "200":
+          description: Blocked users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetBlocksResponse"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: blockUser
+      tags: [users]
+      summary: >
+        Block a user. Also removes any existing follow relationship between
+        the two people, in either direction (including a still-pending
+        request).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockUserBody"
+      responses:
+        "201":
+          description: Blocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockUserResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /blocks/{userId}:
+    delete:
+      operationId: unblockUser
+      tags: [users]
+      summary: Unblock a user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Unblocked
+        "401":
+          description: Unauthorized
+
+  /reports:
+    post:
+      operationId: submitReport
+      tags: [users]
+      summary: >
+        Report a user, optionally about a specific comment. Always saved to
+        the database first; a notification email is best-effort on top of
+        that — there's no in-app moderation queue yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitReportBody"
+      responses:
+        "201":
+          description: Report recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitReportResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
   /playlists:
     get:
       operationId: getMyPlaylists
@@ -1927,6 +2009,66 @@ components:
         - message
 
     SubmitFeedbackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - createdAt
+
+    BlockUserBody:
+      type: object
+      properties:
+        blockedId:
+          type: string
+          description: Clerk user ID of the user to block
+      required:
+        - blockedId
+
+    BlockUserResponse:
+      type: object
+      properties:
+        blockerId:
+          type: string
+        blockedId:
+          type: string
+      required:
+        - blockerId
+        - blockedId
+
+    GetBlocksResponse:
+      type: object
+      properties:
+        blocked:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+      required:
+        - blocked
+
+    SubmitReportBody:
+      type: object
+      properties:
+        reportedUserId:
+          type: string
+          description: Clerk user ID of the user being reported
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        commentId:
+          type: integer
+          nullable: true
+          description: If reporting a specific comment
+      required:
+        - reportedUserId
+        - reason
+
+    SubmitReportResponse:
       type: object
       properties:
         id:

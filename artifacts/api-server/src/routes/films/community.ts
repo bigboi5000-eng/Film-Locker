@@ -17,6 +17,7 @@ import {
   DeleteFilmCommentParams,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
+import { getMutualBlockSet } from "../../lib/blocks";
 
 const router: IRouter = Router();
 
@@ -181,7 +182,12 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
     followedPrivateAuthorIds = new Set(accepted.map((a) => a.followeeId));
   }
 
+  // Comments from anyone in a block relationship with the viewer (either
+  // direction) are hidden regardless of the author's privacy setting.
+  const blockedIds = clerkUserId ? await getMutualBlockSet(clerkUserId) : new Set<string>();
+
   const comments = pageRows
+    .filter((r) => !blockedIds.has(r.userId))
     .filter(
       (r) => !r.isPrivate || r.userId === clerkUserId || followedPrivateAuthorIds.has(r.userId)
     )

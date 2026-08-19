@@ -11,6 +11,8 @@ import {
   filmCommunityRatingsTable,
   playlistsTable,
   feedbackTable,
+  blocksTable,
+  reportsTable,
 } from "@workspace/db";
 import { UpdatePushTokenBody } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
@@ -164,6 +166,18 @@ router.delete("/users/me", requireAuth, async (req, res): Promise<void> => {
           eq(followsTable.followeeId, clerkUserId)
         )
       );
+    await tx
+      .delete(blocksTable)
+      .where(
+        or(
+          eq(blocksTable.blockerId, clerkUserId),
+          eq(blocksTable.blockedId, clerkUserId)
+        )
+      );
+    // Reports you filed are yours to delete. Reports filed about you are
+    // retained as a safety record — deleting your account shouldn't erase
+    // evidence someone else submitted about your conduct.
+    await tx.delete(reportsTable).where(eq(reportsTable.reporterId, clerkUserId));
     await tx.delete(filmCommentsTable).where(eq(filmCommentsTable.userId, clerkUserId));
     await tx.delete(filmCommunityRatingsTable).where(eq(filmCommunityRatingsTable.userId, clerkUserId));
     await tx.delete(playlistsTable).where(eq(playlistsTable.userId, clerkUserId));

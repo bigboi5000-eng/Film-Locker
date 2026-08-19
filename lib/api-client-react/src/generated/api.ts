@@ -24,6 +24,8 @@ import type {
   AddPlaylistItemBody,
   AiExtractBody,
   AiExtractResponse,
+  BlockUserBody,
+  BlockUserResponse,
   ConversationFeedItem,
   CreatePlaylistBody,
   FilmComment,
@@ -33,6 +35,7 @@ import type {
   FollowBody,
   FollowResponse,
   FollowsResponse,
+  GetBlocksResponse,
   GetFilmCommentsParams,
   HealthStatus,
   ListMoviesResponse,
@@ -64,6 +67,8 @@ import type {
   SetCommunityRatingBody,
   SubmitFeedbackBody,
   SubmitFeedbackResponse,
+  SubmitReportBody,
+  SubmitReportResponse,
   SyncUserBody,
   TmdbMovieDetailsResponse,
   TrendingResponse,
@@ -2917,6 +2922,297 @@ export const useSubmitFeedback = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getSubmitFeedbackMutationOptions(options));
+    }
+
+export const getGetBlocksUrl = () => {
+
+
+
+
+  return `/api/blocks`
+}
+
+/**
+ * @summary List users the authenticated user has blocked
+ */
+export const getBlocks = async ( options?: RequestInit): Promise<GetBlocksResponse> => {
+
+  return customFetch<GetBlocksResponse>(getGetBlocksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBlocksQueryKey = () => {
+    return [
+    `/api/blocks`
+    ] as const;
+    }
+
+
+export const getGetBlocksQueryOptions = <TData = Awaited<ReturnType<typeof getBlocks>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBlocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBlocksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBlocks>>> = ({ signal }) => getBlocks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBlocks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBlocksQueryResult = NonNullable<Awaited<ReturnType<typeof getBlocks>>>
+export type GetBlocksQueryError = ErrorType<void>
+
+
+/**
+ * @summary List users the authenticated user has blocked
+ */
+
+export function useGetBlocks<TData = Awaited<ReturnType<typeof getBlocks>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBlocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBlocksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getBlockUserUrl = () => {
+
+
+
+
+  return `/api/blocks`
+}
+
+/**
+ * @summary Block a user. Also removes any existing follow relationship between the two people, in either direction (including a still-pending request).
+
+ */
+export const blockUser = async (blockUserBody: BlockUserBody, options?: RequestInit): Promise<BlockUserResponse> => {
+
+  return customFetch<BlockUserResponse>(getBlockUserUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(blockUserBody)
+  }
+);}
+
+
+
+
+export const getBlockUserMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof blockUser>>, TError,{data: BodyType<BlockUserBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof blockUser>>, TError,{data: BodyType<BlockUserBody>}, TContext> => {
+
+const mutationKey = ['blockUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof blockUser>>, {data: BodyType<BlockUserBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  blockUser(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BlockUserMutationResult = NonNullable<Awaited<ReturnType<typeof blockUser>>>
+    export type BlockUserMutationBody = BodyType<BlockUserBody>
+    export type BlockUserMutationError = ErrorType<void>
+
+    /**
+ * @summary Block a user. Also removes any existing follow relationship between the two people, in either direction (including a still-pending request).
+
+ */
+export const useBlockUser = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof blockUser>>, TError,{data: BodyType<BlockUserBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof blockUser>>,
+        TError,
+        {data: BodyType<BlockUserBody>},
+        TContext
+      > => {
+      return useMutation(getBlockUserMutationOptions(options));
+    }
+
+export const getUnblockUserUrl = (userId: string,) => {
+
+
+
+
+  return `/api/blocks/${userId}`
+}
+
+/**
+ * @summary Unblock a user
+ */
+export const unblockUser = async (userId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUnblockUserUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getUnblockUserMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unblockUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unblockUser>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['unblockUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unblockUser>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  unblockUser(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnblockUserMutationResult = NonNullable<Awaited<ReturnType<typeof unblockUser>>>
+
+    export type UnblockUserMutationError = ErrorType<void>
+
+    /**
+ * @summary Unblock a user
+ */
+export const useUnblockUser = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unblockUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unblockUser>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getUnblockUserMutationOptions(options));
+    }
+
+export const getSubmitReportUrl = () => {
+
+
+
+
+  return `/api/reports`
+}
+
+/**
+ * @summary Report a user, optionally about a specific comment. Always saved to the database first; a notification email is best-effort on top of that — there's no in-app moderation queue yet.
+
+ */
+export const submitReport = async (submitReportBody: SubmitReportBody, options?: RequestInit): Promise<SubmitReportResponse> => {
+
+  return customFetch<SubmitReportResponse>(getSubmitReportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(submitReportBody)
+  }
+);}
+
+
+
+
+export const getSubmitReportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitReport>>, TError,{data: BodyType<SubmitReportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitReport>>, TError,{data: BodyType<SubmitReportBody>}, TContext> => {
+
+const mutationKey = ['submitReport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitReport>>, {data: BodyType<SubmitReportBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitReport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitReportMutationResult = NonNullable<Awaited<ReturnType<typeof submitReport>>>
+    export type SubmitReportMutationBody = BodyType<SubmitReportBody>
+    export type SubmitReportMutationError = ErrorType<void>
+
+    /**
+ * @summary Report a user, optionally about a specific comment. Always saved to the database first; a notification email is best-effort on top of that — there's no in-app moderation queue yet.
+
+ */
+export const useSubmitReport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitReport>>, TError,{data: BodyType<SubmitReportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitReport>>,
+        TError,
+        {data: BodyType<SubmitReportBody>},
+        TContext
+      > => {
+      return useMutation(getSubmitReportMutationOptions(options));
     }
 
 export const getGetMyPlaylistsUrl = () => {
