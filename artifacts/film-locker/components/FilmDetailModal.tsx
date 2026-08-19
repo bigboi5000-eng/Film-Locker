@@ -845,6 +845,7 @@ export function FilmDetailModal({
   const displayLanguage = details?.language ?? '';
   const displayProviders = details?.watchProviders ?? [];
   const displayOverview = details?.overview || overview;
+  const displayReviews = details?.reviews ?? [];
 
   const handleRating = useCallback(
     async (n: number) => {
@@ -1019,6 +1020,33 @@ export function FilmDetailModal({
                 </View>
               ) : null}
 
+              {/* Reviews — TMDB's own user-written reviews (not IMDb or
+                  Rotten Tomatoes, which TMDB has no access to) */}
+              {displayReviews.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Reviews</Text>
+                  {displayReviews.map((review) => (
+                    <View key={review.id} style={reviewStyles.card}>
+                      <View style={reviewStyles.header}>
+                        <Text style={reviewStyles.author} numberOfLines={1}>{review.author}</Text>
+                        {review.rating != null && (
+                          <View style={reviewStyles.ratingBadge}>
+                            <Ionicons name="star" size={11} color="#F59E0B" />
+                            <Text style={reviewStyles.ratingText}>{review.rating}/10</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={reviewStyles.content} numberOfLines={6}>
+                        {review.content}
+                      </Text>
+                      <TouchableOpacity onPress={() => Linking.openURL(review.url)} activeOpacity={0.7}>
+                        <Text style={reviewStyles.readMore}>Read full review on TMDB</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* Divider */}
               <View style={styles.divider} />
 
@@ -1123,6 +1151,22 @@ export function FilmDetailModal({
     </Modal>
   );
 }
+
+const reviewStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#F9FAFB', borderRadius: 12, borderWidth: 1, borderColor: '#F3F4F6',
+    padding: 14, marginBottom: 10,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  author: { flex: 1, fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827', marginRight: 8 },
+  ratingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+  },
+  ratingText: { fontSize: 11, fontFamily: 'Inter_700Bold', color: '#92400E' },
+  content: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#374151', lineHeight: 19, marginBottom: 6 },
+  readMore: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },

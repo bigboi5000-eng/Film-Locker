@@ -48,6 +48,28 @@ interface TmdbProvidersResponse {
   };
 }
 
+interface TmdbReviewEntry {
+  id: string;
+  author: string;
+  author_details: { name?: string; rating?: number | null };
+  content: string;
+  created_at: string;
+  url: string;
+}
+
+interface TmdbReviewsResponse {
+  results: TmdbReviewEntry[];
+}
+
+export interface TmdbReview {
+  id: string;
+  author: string;
+  rating: number | null;
+  content: string;
+  createdAt: string;
+  url: string;
+}
+
 export interface TmdbCandidate {
   tmdbId: number;
   title: string;
@@ -67,6 +89,7 @@ export interface TmdbMovieDetails extends TmdbCandidate {
   genres: string[];
   language: string;
   watchProviders: WatchProvider[];
+  reviews: TmdbReview[];
 }
 
 // ── Genre map (stable TMDB list — no API call needed) ─────────────────────────
@@ -226,7 +249,7 @@ export async function fetchMovieDetails(
     return res.json() as Promise<T>;
   };
 
-  const [detailsResult, creditsResult, providersResult] =
+  const [detailsResult, creditsResult, providersResult, reviewsResult] =
     await Promise.allSettled([
       fetch(`${TMDB_BASE}/movie/${tmdbId}?api_key=${apiKey}&language=en-US`).then((r) =>
         okJson<TmdbMovieDetail>(r)
@@ -236,6 +259,9 @@ export async function fetchMovieDetails(
       ),
       fetch(`${TMDB_BASE}/movie/${tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
         okJson<TmdbProvidersResponse>(r)
+      ),
+      fetch(`${TMDB_BASE}/movie/${tmdbId}/reviews?api_key=${apiKey}&language=en-US`).then((r) =>
+        okJson<TmdbReviewsResponse>(r)
       ),
     ]);
 
@@ -302,6 +328,25 @@ export async function fetchMovieDetails(
       }));
   }
 
+  // TMDB's own user-written reviews — not IMDb or Rotten Tomatoes (TMDB has
+  // no access to either). Coverage is thin for most films, so this can
+  // legitimately come back empty. Longest/most-substantive reviews first,
+  // capped at 5 so one very chatty reviewer doesn't dominate the section.
+  let reviews: TmdbReview[] = [];
+  if (reviewsResult.status === "fulfilled") {
+    reviews = reviewsResult.value.results
+      .map((r) => ({
+        id: r.id,
+        author: r.author_details?.name || r.author,
+        rating: r.author_details?.rating ?? null,
+        content: r.content,
+        createdAt: r.created_at,
+        url: r.url,
+      }))
+      .sort((a, b) => b.content.length - a.content.length)
+      .slice(0, 5);
+  }
+
   return {
     tmdbId: details.id,
     title: details.title,
@@ -313,6 +358,7 @@ export async function fetchMovieDetails(
     genres,
     language,
     watchProviders,
+    reviews,
   };
 }
 

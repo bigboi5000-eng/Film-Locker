@@ -68,6 +68,20 @@ export interface TmdbMovieCard {
   watchProviders?: WatchProvider[];
 }
 
+/**
+ * A user-written text review from TMDB's own review system (not IMDb or Rotten Tomatoes — TMDB doesn't have access to either).
+ */
+export interface TmdbReview {
+  id: string;
+  author: string;
+  /** 1–10 score the reviewer gave, if they left one */
+  rating?: number | null;
+  content: string;
+  createdAt: string;
+  /** Link to the full review on TMDB */
+  url: string;
+}
+
 export interface TmdbMovieDetailsResponse {
   tmdbId: number;
   title: string;
@@ -79,6 +93,7 @@ export interface TmdbMovieDetailsResponse {
   genres: string[];
   language: string;
   watchProviders: WatchProvider[];
+  reviews: TmdbReview[];
 }
 
 export interface MovieCandidate {
