@@ -37,7 +37,10 @@ const WATCHED_IT = 'Watched it!';
 // rows. Matches the fixed enum enforced server-side by
 // SendConversationMessageBody — there's no way to send free text through
 // this endpoint even via a direct API call, so this list IS the entire
-// vocabulary two users can exchange here.
+// vocabulary two users can exchange here. Row membership below (via
+// QUOTE_ROWS) is fixed by this array's order; only the position *within*
+// a row changes at runtime, when that row's last-used phrase floats to
+// its front — see lastQuoteByRow in ComposerPanel.
 const QUOTE_KEYS = [
   // Standard conversational phrases first — most likely to be reached for,
   // so they default to the leftmost/first positions in each sheet.
@@ -77,6 +80,7 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return rows;
 }
 const QUOTE_ROWS = chunk(QUOTE_KEYS, 7);
+const LAST_QUOTE_STORAGE_KEY = 'film-locker:lastQuoteByRow';
 
 function formatRelative(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -116,10 +120,25 @@ function ComposerPanel({
   // preference, not something worth round-tripping to the server for.
   const [lastEmoji, setLastEmoji] = useState<(typeof EMOJI_KEYS)[number] | null>(null);
 
+  // Same idea for the phrase rows, but kept strictly per-row: the last
+  // phrase used within a given row floats to that row's front, without
+  // ever pulling it into a different row or reordering rows that weren't
+  // touched. Keyed by row index since QUOTE_ROWS/row membership is fixed.
+  const [lastQuoteByRow, setLastQuoteByRow] = useState<Record<number, string>>({});
+
   useEffect(() => {
     AsyncStorage.getItem(LAST_EMOJI_STORAGE_KEY).then((stored) => {
       if (stored && (EMOJI_KEYS as readonly string[]).includes(stored)) {
         setLastEmoji(stored as (typeof EMOJI_KEYS)[number]);
+      }
+    });
+    AsyncStorage.getItem(LAST_QUOTE_STORAGE_KEY).then((stored) => {
+      if (!stored) return;
+      try {
+        const parsed = JSON.parse(stored) as Record<number, string>;
+        setLastQuoteByRow(parsed);
+      } catch {
+        // Ignore malformed/stale storage — falls back to default row order.
       }
     });
   }, []);
@@ -128,10 +147,27 @@ function ComposerPanel({
     ? [lastEmoji, ...EMOJI_KEYS.filter((e) => e !== lastEmoji)]
     : EMOJI_KEYS;
 
+  const orderedQuoteRows = QUOTE_ROWS.map((row, rowIndex) => {
+    const last = lastQuoteByRow[rowIndex];
+    if (last && (row as readonly string[]).includes(last)) {
+      return [last, ...row.filter((p) => p !== last)];
+    }
+    return row;
+  });
+
   const handleEmojiPress = useCallback((emoji: (typeof EMOJI_KEYS)[number]) => {
     setLastEmoji(emoji);
     void AsyncStorage.setItem(LAST_EMOJI_STORAGE_KEY, emoji);
     onSelect(emoji);
+  }, [onSelect]);
+
+  const handleQuotePress = useCallback((phrase: string, rowIndex: number) => {
+    setLastQuoteByRow((prev) => {
+      const next = { ...prev, [rowIndex]: phrase };
+      void AsyncStorage.setItem(LAST_QUOTE_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+    onSelect(phrase as ConversationMessageContent);
   }, [onSelect]);
 
   return (
@@ -172,8 +208,9 @@ function ComposerPanel({
         </ScrollView>
 
         {/* Catchphrase "keys" — where the letters would be, one horizontally
-            scrolling row per keyboard row */}
-        {QUOTE_ROWS.map((row, rowIndex) => (
+            scrolling row per keyboard row. Each row independently floats
+            its own last-used phrase to the front — rows never mix. */}
+        {orderedQuoteRows.map((row, rowIndex) => (
           <ScrollView
             key={rowIndex}
             horizontal
@@ -186,7 +223,7 @@ function ComposerPanel({
                 <TouchableOpacity
                   key={phrase}
                   style={kStyles.quoteKey}
-                  onPress={() => onSelect(phrase)}
+                  onPress={() => handleQuotePress(phrase, rowIndex)}
                   disabled={disabled}
                   activeOpacity={0.7}
                 >
