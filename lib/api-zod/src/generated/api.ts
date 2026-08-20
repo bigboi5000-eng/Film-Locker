@@ -322,14 +322,8 @@ export const GetMovieDetailsResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
-  "reviews": zod.array(zod.object({
-  "id": zod.string(),
-  "author": zod.string(),
-  "rating": zod.number().nullish().describe('1–10 score the reviewer gave, if they left one'),
-  "content": zod.string(),
-  "createdAt": zod.coerce.date(),
-  "url": zod.string().describe('Link to the full review on TMDB')
-}).describe('A user-written text review from TMDB\'s own review system (not IMDb or Rotten Tomatoes — TMDB doesn\'t have access to either).'))
+  "tmdbRating": zod.number().nullable().describe('TMDB\'s own aggregate user rating (0-10), null if the film has no votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to either; this is TMDB\'s own users\' average.\n'),
+  "tmdbVoteCount": zod.number()
 })
 
 

@@ -1176,33 +1176,6 @@ components:
         - overview
         - genres
 
-    TmdbReview:
-      type: object
-      description: A user-written text review from TMDB's own review system (not IMDb or Rotten Tomatoes — TMDB doesn't have access to either).
-      properties:
-        id:
-          type: string
-        author:
-          type: string
-        rating:
-          type: number
-          nullable: true
-          description: 1–10 score the reviewer gave, if they left one
-        content:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        url:
-          type: string
-          description: Link to the full review on TMDB
-      required:
-        - id
-        - author
-        - content
-        - createdAt
-        - url
-
     TmdbMovieDetailsResponse:
       type: object
       properties:
@@ -1232,10 +1205,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WatchProvider"
-        reviews:
-          type: array
-          items:
-            $ref: "#/components/schemas/TmdbReview"
+        tmdbRating:
+          type: number
+          nullable: true
+          description: >
+            TMDB's own aggregate user rating (0-10), null if the film has no
+            votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to
+            either; this is TMDB's own users' average.
+        tmdbVoteCount:
+          type: integer
       required:
         - tmdbId
         - title
@@ -1247,7 +1225,8 @@ components:
         - genres
         - language
         - watchProviders
-        - reviews
+        - tmdbRating
+        - tmdbVoteCount
 
     MovieCandidate:
       type: object
