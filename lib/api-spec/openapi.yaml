@@ -1768,6 +1768,8 @@ components:
         - "This was great!"
         - "Thank you!"
         - "Not for me this one"
+        - "Hey, why you so sweaty?"
+        - "Watching Cops"
       description: >
         A fixed set of emoji + movie-catchphrases + canned questions —
         deliberately not a freeform string. There is no freeform messaging in

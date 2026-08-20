@@ -39,7 +39,15 @@ const WATCHED_IT = 'Watched it!';
 // this endpoint even via a direct API call, so this list IS the entire
 // vocabulary two users can exchange here.
 const QUOTE_KEYS = [
+  // Standard conversational phrases first — most likely to be reached for,
+  // so they default to the leftmost/first positions in each sheet.
   WATCHED_IT,
+  'Have you watched it yet?',
+  'What did you think?',
+  'This was great!',
+  'Not for me this one',
+  'Thank you!',
+  // Movie catchphrases fill the rest.
   'Fool of a Took!',
   'Prestige Worldwide',
   'I miss your whispering eye',
@@ -57,11 +65,8 @@ const QUOTE_KEYS = [
   'To infinity and beyond!',
   'Nobody puts Baby in a corner',
   'Great Scott!',
-  'What did you think?',
-  'Have you watched it yet?',
-  'This was great!',
-  'Thank you!',
-  'Not for me this one',
+  'Hey, why you so sweaty?',
+  'Watching Cops',
 ] as const;
 
 /** Splits QUOTE_KEYS into fixed-size rows so the sheet reads as multiple

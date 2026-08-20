@@ -352,6 +352,8 @@ export const ConversationMessageContent = {
   'This_was_great!': 'This was great!',
   'Thank_you!': 'Thank you!',
   Not_for_me_this_one: 'Not for me this one',
+  'Hey,_why_you_so_sweaty?': 'Hey, why you so sweaty?',
+  Watching_Cops: 'Watching Cops',
 } as const;
 
 export interface SendConversationMessageBody {
