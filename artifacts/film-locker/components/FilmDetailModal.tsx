@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -48,6 +48,7 @@ import {
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
+import { getDeviceRegion } from '@/lib/region';
 import { useToast } from '@/components/ToastProvider';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -973,7 +974,8 @@ export function FilmDetailModal({
 
   // Fetch full TMDB details — parent only renders this component when a movie
   // is selected, so the hook always runs against a valid tmdbId.
-  const { data: details, isLoading } = useGetMovieDetails(tmdbId);
+  const region = useMemo(() => getDeviceRegion(), []);
+  const { data: details, isLoading } = useGetMovieDetails(tmdbId, { region });
 
   // Use Clerk auth state — works for both saved and unsaved films
   const { isSignedIn } = useAuth();

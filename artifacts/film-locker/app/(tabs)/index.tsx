@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { webInputReset } from '@/lib/webInputReset';
+import { getDeviceRegion } from '@/lib/region';
 
 const CARD_W = 120;
 const CARD_H = 180;
@@ -254,10 +255,12 @@ export default function HomeScreen() {
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
   const [createPlaylistVisible, setCreatePlaylistVisible] = useState(false);
 
-  const { data: trendingData, isLoading: trendingLoading, refetch: refetchTrending, isRefetching: trendingRefetching } = useGetTrending();
-  const { data: newReleasesData, isLoading: newReleasesLoading, refetch: refetchNew, isRefetching: newRefetching } = useGetNewReleases();
+  const region = useMemo(() => getDeviceRegion(), []);
+
+  const { data: trendingData, isLoading: trendingLoading, refetch: refetchTrending, isRefetching: trendingRefetching } = useGetTrending({ region });
+  const { data: newReleasesData, isLoading: newReleasesLoading, refetch: refetchNew, isRefetching: newRefetching } = useGetNewReleases({ region });
   const { data: lockerData } = useListMovies();
-  const { data: recommendationsData, isLoading: recommendationsLoading, refetch: refetchRecommendations, isRefetching: recommendationsRefetching } = useGetRecommendations();
+  const { data: recommendationsData, isLoading: recommendationsLoading, refetch: refetchRecommendations, isRefetching: recommendationsRefetching } = useGetRecommendations({ region });
   const { data: playlistsData, refetch: refetchPlaylists, isRefetching: playlistsRefetching } = useGetMyPlaylists({
     query: { queryKey: getGetMyPlaylistsQueryKey(), enabled: Boolean(isSignedIn) },
   });

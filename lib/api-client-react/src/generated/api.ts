@@ -37,6 +37,10 @@ import type {
   FollowsResponse,
   GetBlocksResponse,
   GetFilmCommentsParams,
+  GetMovieDetailsParams,
+  GetNewReleasesParams,
+  GetRecommendationsParams,
+  GetTrendingParams,
   HealthStatus,
   ListMoviesResponse,
   Movie,
@@ -183,21 +187,28 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
-export const getGetRecommendationsUrl = () => {
+export const getGetRecommendationsUrl = (params?: GetRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/recommendations`
+  return stringifiedParams.length > 0 ? `/api/movies/recommendations?${stringifiedParams}` : `/api/movies/recommendations`
 }
 
 /**
  * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
 
  */
-export const getRecommendations = async ( options?: RequestInit): Promise<RecommendationsResponse> => {
+export const getRecommendations = async (params?: GetRecommendationsParams, options?: RequestInit): Promise<RecommendationsResponse> => {
 
-  return customFetch<RecommendationsResponse>(getGetRecommendationsUrl(),
+  return customFetch<RecommendationsResponse>(getGetRecommendationsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -210,23 +221,23 @@ export const getRecommendations = async ( options?: RequestInit): Promise<Recomm
 
 
 
-export const getGetRecommendationsQueryKey = () => {
+export const getGetRecommendationsQueryKey = (params?: GetRecommendationsParams,) => {
     return [
-    `/api/movies/recommendations`
+    `/api/movies/recommendations`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>(params?: GetRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetRecommendationsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetRecommendationsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecommendations>>> = ({ signal }) => getRecommendations({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecommendations>>> = ({ signal }) => getRecommendations(params, { signal, ...requestOptions });
 
 
 
@@ -245,11 +256,11 @@ export type GetRecommendationsQueryError = ErrorType<unknown>
  */
 
 export function useGetRecommendations<TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetRecommendationsQueryOptions(options)
+  const queryOptions = getGetRecommendationsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -262,20 +273,27 @@ export function useGetRecommendations<TData = Awaited<ReturnType<typeof getRecom
 
 
 
-export const getGetTrendingUrl = () => {
+export const getGetTrendingUrl = (params?: GetTrendingParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/trending`
+  return stringifiedParams.length > 0 ? `/api/movies/trending?${stringifiedParams}` : `/api/movies/trending`
 }
 
 /**
  * @summary Fetch trending movies this week from TMDB
  */
-export const getTrending = async ( options?: RequestInit): Promise<TrendingResponse> => {
+export const getTrending = async (params?: GetTrendingParams, options?: RequestInit): Promise<TrendingResponse> => {
 
-  return customFetch<TrendingResponse>(getGetTrendingUrl(),
+  return customFetch<TrendingResponse>(getGetTrendingUrl(params),
   {
     ...options,
     method: 'GET'
@@ -288,23 +306,23 @@ export const getTrending = async ( options?: RequestInit): Promise<TrendingRespo
 
 
 
-export const getGetTrendingQueryKey = () => {
+export const getGetTrendingQueryKey = (params?: GetTrendingParams,) => {
     return [
-    `/api/movies/trending`
+    `/api/movies/trending`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetTrendingQueryOptions = <TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetTrendingQueryOptions = <TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>(params?: GetTrendingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetTrendingQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetTrendingQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrending>>> = ({ signal }) => getTrending({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrending>>> = ({ signal }) => getTrending(params, { signal, ...requestOptions });
 
 
 
@@ -322,11 +340,11 @@ export type GetTrendingQueryError = ErrorType<unknown>
  */
 
 export function useGetTrending<TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetTrendingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetTrendingQueryOptions(options)
+  const queryOptions = getGetTrendingQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -339,20 +357,27 @@ export function useGetTrending<TData = Awaited<ReturnType<typeof getTrending>>, 
 
 
 
-export const getGetNewReleasesUrl = () => {
+export const getGetNewReleasesUrl = (params?: GetNewReleasesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/new-releases`
+  return stringifiedParams.length > 0 ? `/api/movies/new-releases?${stringifiedParams}` : `/api/movies/new-releases`
 }
 
 /**
  * @summary Fetch movies currently in theatres from TMDB
  */
-export const getNewReleases = async ( options?: RequestInit): Promise<NewReleasesResponse> => {
+export const getNewReleases = async (params?: GetNewReleasesParams, options?: RequestInit): Promise<NewReleasesResponse> => {
 
-  return customFetch<NewReleasesResponse>(getGetNewReleasesUrl(),
+  return customFetch<NewReleasesResponse>(getGetNewReleasesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -365,23 +390,23 @@ export const getNewReleases = async ( options?: RequestInit): Promise<NewRelease
 
 
 
-export const getGetNewReleasesQueryKey = () => {
+export const getGetNewReleasesQueryKey = (params?: GetNewReleasesParams,) => {
     return [
-    `/api/movies/new-releases`
+    `/api/movies/new-releases`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetNewReleasesQueryOptions = <TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetNewReleasesQueryOptions = <TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>(params?: GetNewReleasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetNewReleasesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetNewReleasesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNewReleases>>> = ({ signal }) => getNewReleases({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNewReleases>>> = ({ signal }) => getNewReleases(params, { signal, ...requestOptions });
 
 
 
@@ -399,11 +424,11 @@ export type GetNewReleasesQueryError = ErrorType<unknown>
  */
 
 export function useGetNewReleases<TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetNewReleasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetNewReleasesQueryOptions(options)
+  const queryOptions = getGetNewReleasesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -786,21 +811,30 @@ export const useRecommendMovies = <TError = ErrorType<unknown>,
       return useMutation(getRecommendMoviesMutationOptions(options));
     }
 
-export const getGetMovieDetailsUrl = (tmdbId: number,) => {
+export const getGetMovieDetailsUrl = (tmdbId: number,
+    params?: GetMovieDetailsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/tmdb/${tmdbId}`
+  return stringifiedParams.length > 0 ? `/api/movies/tmdb/${tmdbId}?${stringifiedParams}` : `/api/movies/tmdb/${tmdbId}`
 }
 
 /**
  * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
 
  */
-export const getMovieDetails = async (tmdbId: number, options?: RequestInit): Promise<TmdbMovieDetailsResponse> => {
+export const getMovieDetails = async (tmdbId: number,
+    params?: GetMovieDetailsParams, options?: RequestInit): Promise<TmdbMovieDetailsResponse> => {
 
-  return customFetch<TmdbMovieDetailsResponse>(getGetMovieDetailsUrl(tmdbId),
+  return customFetch<TmdbMovieDetailsResponse>(getGetMovieDetailsUrl(tmdbId,params),
   {
     ...options,
     method: 'GET'
@@ -813,23 +847,25 @@ export const getMovieDetails = async (tmdbId: number, options?: RequestInit): Pr
 
 
 
-export const getGetMovieDetailsQueryKey = (tmdbId: number,) => {
+export const getGetMovieDetailsQueryKey = (tmdbId: number,
+    params?: GetMovieDetailsParams,) => {
     return [
-    `/api/movies/tmdb/${tmdbId}`
+    `/api/movies/tmdb/${tmdbId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetMovieDetailsQueryOptions = <TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetMovieDetailsQueryOptions = <TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(tmdbId: number,
+    params?: GetMovieDetailsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetMovieDetailsQueryKey(tmdbId);
+  const queryKey =  queryOptions?.queryKey ?? getGetMovieDetailsQueryKey(tmdbId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMovieDetails>>> = ({ signal }) => getMovieDetails(tmdbId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMovieDetails>>> = ({ signal }) => getMovieDetails(tmdbId,params, { signal, ...requestOptions });
 
 
 
@@ -848,11 +884,12 @@ export type GetMovieDetailsQueryError = ErrorType<void>
  */
 
 export function useGetMovieDetails<TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(
- tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ tmdbId: number,
+    params?: GetMovieDetailsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetMovieDetailsQueryOptions(tmdbId,options)
+  const queryOptions = getGetMovieDetailsQueryOptions(tmdbId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

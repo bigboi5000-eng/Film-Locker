@@ -571,11 +571,39 @@ export interface AddPlaylistItemBody {
   posterUrl: string;
 }
 
+export type GetRecommendationsParams = {
+/**
+ * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
+ */
+region?: string;
+};
+
+export type GetTrendingParams = {
+/**
+ * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
+ */
+region?: string;
+};
+
+export type GetNewReleasesParams = {
+/**
+ * ISO 3166-1 alpha-2 country code. Controls both which country's "now playing" list is used and which country's watch providers are returned. Defaults to US when omitted or invalid.
+ */
+region?: string;
+};
+
 export type SearchMoviesParams = {
 /**
  * @minLength 1
  */
 q: string;
+};
+
+export type GetMovieDetailsParams = {
+/**
+ * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
+ */
+region?: string;
 };
 
 export type GetFilmCommentsParams = {
