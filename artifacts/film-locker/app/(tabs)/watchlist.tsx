@@ -449,7 +449,7 @@ export default function WatchlistScreen() {
       <View
         style={[
           styles.screenHeader,
-          { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) },
+          { paddingTop: insets.top },
         ]}
       >
         <Text style={styles.screenTitle}>My Watchlist</Text>

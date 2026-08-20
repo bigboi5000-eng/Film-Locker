@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
   ScrollView,
   RefreshControl,
   TextInput,
@@ -299,7 +298,7 @@ export default function HomeScreen() {
   }, [createPlaylist, queryClient, router]);
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={

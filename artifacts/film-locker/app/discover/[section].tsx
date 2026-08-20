@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -130,7 +129,7 @@ export default function DiscoverScreen() {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} hitSlop={12} style={styles.backBtn}>

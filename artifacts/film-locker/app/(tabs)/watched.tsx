@@ -84,7 +84,7 @@ export default function WatchedScreen() {
       <View
         style={[
           styles.screenHeader,
-          { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) },
+          { paddingTop: insets.top },
         ]}
       >
         <Text style={styles.screenTitle}>Watched</Text>
