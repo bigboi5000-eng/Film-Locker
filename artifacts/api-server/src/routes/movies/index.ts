@@ -25,7 +25,7 @@ import {
   SearchMoviesResponse,
   GetRecommendationsResponse,
 } from "@workspace/api-zod";
-import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations, enrichCandidates, type TmdbCandidate } from "../../lib/tmdb";
+import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations, enrichCandidates, normalizeRegion, type TmdbCandidate } from "../../lib/tmdb";
 import { cached } from "../../lib/cache";
 
 // Trending/new-releases are identical for every user, and each load fans out
@@ -47,8 +47,9 @@ const router: IRouter = Router();
 // GET /movies/trending
 router.get("/movies/trending", async (req, res): Promise<void> => {
   try {
-    const movies = await cached("trending", DISCOVERY_CACHE_TTL_MS, async () =>
-      enrichCandidates(await fetchTrending())
+    const region = normalizeRegion(req.query.region);
+    const movies = await cached(`trending:${region}`, DISCOVERY_CACHE_TTL_MS, async () =>
+      enrichCandidates(await fetchTrending(), region)
     );
     res.json(GetTrendingResponse.parse({ movies }));
   } catch (err) {
@@ -60,8 +61,9 @@ router.get("/movies/trending", async (req, res): Promise<void> => {
 // GET /movies/new-releases
 router.get("/movies/new-releases", async (req, res): Promise<void> => {
   try {
-    const movies = await cached("new-releases", DISCOVERY_CACHE_TTL_MS, async () =>
-      enrichCandidates(await fetchNowPlaying())
+    const region = normalizeRegion(req.query.region);
+    const movies = await cached(`new-releases:${region}`, DISCOVERY_CACHE_TTL_MS, async () =>
+      enrichCandidates(await fetchNowPlaying(region), region)
     );
     res.json(GetNewReleasesResponse.parse({ movies }));
   } catch (err) {
@@ -94,7 +96,8 @@ router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const details = await fetchMovieDetails(params.data.tmdbId);
+    const region = normalizeRegion(req.query.region);
+    const details = await fetchMovieDetails(params.data.tmdbId, region);
     if (!details) {
       res.status(404).json({ error: "Movie not found on TMDB" });
       return;
@@ -190,7 +193,8 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
       }
     }
 
-    const enriched = await enrichCandidates(recommendations.slice(0, 20));
+    const region = normalizeRegion(req.query.region);
+    const enriched = await enrichCandidates(recommendations.slice(0, 20), region);
     res.json(GetRecommendationsResponse.parse({ movies: enriched }));
   } catch (err) {
     req.log.error({ err }, "recommendations: failed");

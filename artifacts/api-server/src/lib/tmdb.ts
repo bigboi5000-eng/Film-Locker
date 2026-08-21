@@ -40,14 +40,26 @@ interface TmdbProviderEntry {
 }
 
 interface TmdbProvidersResponse {
-  results: {
-    US?: {
+  // Keyed by every country TMDB/JustWatch has data for in one response —
+  // no region query param on this endpoint, you just pick the country key.
+  results: Record<
+    string,
+    {
       link?: string;
       flatrate?: TmdbProviderEntry[];
       rent?: TmdbProviderEntry[];
       buy?: TmdbProviderEntry[];
-    };
-  };
+    }
+  >;
+}
+
+/** Default region when the caller doesn't specify one. */
+export const DEFAULT_REGION = "US";
+
+/** Loose sanitization — just enough to avoid passing junk through to TMDB. */
+export function normalizeRegion(input: unknown): string {
+  const s = typeof input === "string" ? input.trim().toUpperCase() : "";
+  return /^[A-Z]{2}$/.test(s) ? s : DEFAULT_REGION;
 }
 
 export interface TmdbCandidate {
@@ -136,7 +148,10 @@ function movieToCandidate(m: TmdbMovie): TmdbCandidate {
  * watch-providers request per movie, all in parallel; a single movie's
  * failure just leaves that movie's fields empty rather than failing the list.
  */
-export async function enrichCandidates(candidates: TmdbCandidate[]): Promise<TmdbCandidate[]> {
+export async function enrichCandidates(
+  candidates: TmdbCandidate[],
+  region: string = DEFAULT_REGION
+): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
   const okJson = async <T>(res: Response): Promise<T> => {
     if (!res.ok) throw new Error(`TMDB ${res.url} → ${res.status} ${res.statusText}`);
@@ -166,7 +181,7 @@ export async function enrichCandidates(candidates: TmdbCandidate[]): Promise<Tmd
 
       let watchProviders: WatchProvider[] | undefined;
       if (providersResult.status === "fulfilled") {
-        const us = providersResult.value.results?.US;
+        const us = providersResult.value.results?.[region];
         const juswatchLink = us?.link;
         type TypedEntry = TmdbProviderEntry & { _type: WatchProvider["type"] };
         const raw: TypedEntry[] = [
@@ -218,14 +233,17 @@ export async function searchTmdb(query: string): Promise<TmdbCandidate[]> {
 // ── Full details (credits + watch providers) ──────────────────────────────────
 
 /**
- * Fetch full movie details from TMDB including director, top cast,
- * genre names, original language, and US streaming watch providers.
+ * Fetch full movie details from TMDB including director, top cast, genre
+ * names, original language, and streaming watch providers for `region`
+ * (defaults to US — TMDB/JustWatch track availability per country, so a
+ * film's US streaming lineup can be completely different from its UK one).
  *
  * All three sub-requests run in parallel. Individual failures are
  * tolerated — the result falls back to empty values for that field.
  */
 export async function fetchMovieDetails(
-  tmdbId: number
+  tmdbId: number,
+  region: string = DEFAULT_REGION
 ): Promise<TmdbMovieDetails | null> {
   const apiKey = getApiKey();
 
@@ -281,10 +299,10 @@ export async function fetchMovieDetails(
     /* Intl not available in this runtime — use raw code */
   }
 
-  // US watch providers: flatrate (subscription) → rent → buy, preserving type
+  // Watch providers for `region`: flatrate (subscription) → rent → buy, preserving type
   let watchProviders: WatchProvider[] = [];
   if (providersResult.status === "fulfilled") {
-    const us = providersResult.value.results?.US;
+    const us = providersResult.value.results?.[region];
     const juswatchLink = us?.link;
 
     type TypedEntry = TmdbProviderEntry & { _type: WatchProvider['type'] };
@@ -365,10 +383,10 @@ export async function fetchTrending(): Promise<TmdbCandidate[]> {
     .map(movieToCandidate);
 }
 
-export async function fetchNowPlaying(): Promise<TmdbCandidate[]> {
+export async function fetchNowPlaying(region: string = DEFAULT_REGION): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
   const res = await fetch(
-    `${TMDB_BASE}/movie/now_playing?api_key=${apiKey}&language=en-US&region=US`
+    `${TMDB_BASE}/movie/now_playing?api_key=${apiKey}&language=en-US&region=${region}`
   );
   if (!res.ok) throw new Error(`TMDB now_playing failed: ${res.status}`);
   const data = (await res.json()) as TmdbSearchResponse;

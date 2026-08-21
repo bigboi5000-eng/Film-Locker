@@ -21,6 +21,10 @@ export const HealthCheckResponse = zod.object({
  * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
 
  */
+export const GetRecommendationsQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
+})
+
 export const GetRecommendationsResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
@@ -46,6 +50,10 @@ export const GetRecommendationsResponse = zod.object({
 /**
  * @summary Fetch trending movies this week from TMDB
  */
+export const GetTrendingQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
+})
+
 export const GetTrendingResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
@@ -71,6 +79,10 @@ export const GetTrendingResponse = zod.object({
 /**
  * @summary Fetch movies currently in theatres from TMDB
  */
+export const GetNewReleasesQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code. Controls both which country\'s \"now playing\" list is used and which country\'s watch providers are returned. Defaults to US when omitted or invalid.\n')
+})
+
 export const GetNewReleasesResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
@@ -303,6 +315,10 @@ export const RecommendMoviesResponse = zod.object({
  */
 export const GetMovieDetailsParams = zod.object({
   "tmdbId": zod.coerce.number()
+})
+
+export const GetMovieDetailsQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
 })
 
 export const GetMovieDetailsResponse = zod.object({

@@ -38,6 +38,15 @@ paths:
         Calls TMDB recommendations for each saved film, deduplicates,
         and filters out already-saved films. Returns an empty list when
         the watchlist is empty.
+      parameters:
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code used to pick which country's watch
+            providers to return. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -51,6 +60,15 @@ paths:
       operationId: getTrending
       tags: [movies]
       summary: Fetch trending movies this week from TMDB
+      parameters:
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code used to pick which country's watch
+            providers to return. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -64,6 +82,16 @@ paths:
       operationId: getNewReleases
       tags: [movies]
       summary: Fetch movies currently in theatres from TMDB
+      parameters:
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code. Controls both which country's
+            "now playing" list is used and which country's watch providers
+            are returned. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -193,6 +221,14 @@ paths:
           required: true
           schema:
             type: integer
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code used to pick which country's watch
+            providers to return. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Movie details
