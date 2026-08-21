@@ -7,19 +7,26 @@
     "icon": "./assets/images/icon.png",
     "scheme": "film-locker",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "cover",
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.filmlocker.app"
     },
     "android": {
       "backgroundColor": "#FFFFFF",
       "package": "com.filmlocker.app",
       "versionCode": 1,
+      "gradleProperties": {
+        "org.gradle.jvmargs": "-Xmx4g -XX:MaxMetaspaceSize=512m",
+        "org.gradle.daemon": "false",
+        "android.useAndroidX": "true",
+        "android.enableJetifier": "true"
+      },
       "intentFilters": [
         {
           "action": "SEND",

@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
@@ -11,8 +11,19 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { privacyPolicyHtml, termsOfServiceHtml } from "./lib/legalContent";
 
 const app: Express = express();
+
+// Public legal pages — deliberately outside /api and unauthenticated, so
+// they're plain reachable URLs (e.g. for the App Store Connect privacy
+// policy field) as well as links from inside the app.
+app.get("/privacy", (_req, res) => {
+  res.type("html").send(privacyPolicyHtml());
+});
+app.get("/terms", (_req, res) => {
+  res.type("html").send(termsOfServiceHtml());
+});
 
 // Structured request logging
 app.use(
@@ -71,7 +82,38 @@ const heavyLimit = rateLimit({
 
 app.use("/api/movies/process-social-link", heavyLimit);
 app.use("/api/movies/ai-extract", heavyLimit);
+app.use("/api/movies/recommend", heavyLimit);
 
 app.use("/api", router);
+
+// JSON error handler — keeps the API's error shape consistent (matching the
+// { error: string } responses routes already return for 4xx) even for
+// unhandled exceptions, instead of falling through to Express's default HTML
+// error page, which is unreadable to API clients and to error toasts in the app.
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) { next(err); return; }
+  req.log.error({ err }, "unhandled error");
+
+  // The real reason (e.g. "column ... does not exist") is always logged
+  // server-side above. Whether it's also returned to the client depends on
+  // environment: in production that would hand a stranger a look at our
+  // schema/internals on every crash, so only the generic message goes out;
+  // outside production (where we're the ones hitting it) the detail is
+  // worth seeing without digging through logs.
+  if (process.env.NODE_ENV === "production") {
+    res.status(500).json({ error: "Internal server error." });
+    return;
+  }
+
+  // Drizzle wraps the real Postgres error in DrizzleQueryError.cause —
+  // surface that instead of the generic "Failed query: ..." wrapper
+  // message, which has no diagnostic value on its own.
+  const cause = err instanceof Error ? err.cause : undefined;
+  const message =
+    (cause instanceof Error ? cause.message : undefined) ??
+    (err instanceof Error ? err.message : undefined) ??
+    "Internal server error.";
+  res.status(500).json({ error: message });
+});
 
 export default app;

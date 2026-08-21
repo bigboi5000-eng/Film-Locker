@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, desc } from "drizzle-orm";
-import { db, filmNotificationsTable, usersTable, followsTable } from "@workspace/db";
-import { z } from "zod";
+import { and, eq, or, desc } from "drizzle-orm";
+import { db, filmNotificationsTable, conversationMessagesTable, usersTable, followsTable } from "@workspace/db";
 import {
   SendNotificationBody,
   GetNotificationsResponse,
@@ -9,8 +8,10 @@ import {
   MarkNotificationReadParams,
   MarkNotificationReadResponse,
   GetNotificationUsersResponse,
+  SendConversationMessageBody,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { isBlockedEitherWay } from "../lib/blocks";
 import { Expo } from "expo-server-sdk";
 
 const expo = new Expo();
@@ -24,16 +25,19 @@ const router: IRouter = Router();
 router.get("/notifications/users", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
 
-  // Join follows → users to return only people this caller follows
+  // Join follows → users to return only people this caller actively follows
+  // (an accepted relationship — a still-pending request to a private user
+  // doesn't grant permission to recommend films to them yet).
   const users = await db
     .select({
       clerkId: usersTable.clerkId,
       username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
       avatarUrl: usersTable.avatarUrl,
     })
     .from(followsTable)
     .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
-    .where(eq(followsTable.followerId, clerkUserId))
+    .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.status, "accepted")))
     .orderBy(usersTable.username);
 
   res.json(GetNotificationUsersResponse.parse({ users }));
@@ -55,6 +59,7 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
       isRead: filmNotificationsTable.isRead,
       createdAt: filmNotificationsTable.createdAt,
       fromUsername: usersTable.username,
+      fromDisplayInitials: usersTable.displayInitials,
       fromAvatarUrl: usersTable.avatarUrl,
     })
     .from(filmNotificationsTable)
@@ -68,6 +73,7 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
     id: r.id,
     fromUserId: r.fromUserId,
     fromUsername: r.fromUsername ?? null,
+    fromDisplayInitials: r.fromDisplayInitials ?? null,
     fromAvatarUrl: r.fromAvatarUrl ?? null,
     toUserId: r.toUserId,
     tmdbId: r.tmdbId,
@@ -99,14 +105,24 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Enforce follow relationship — caller must follow the recipient
+  // Blocking already removes any follow between the two (see POST /blocks),
+  // so this is belt-and-suspenders on top of the follow check below — kept
+  // explicit so this endpoint doesn't silently depend on that side effect.
+  if (await isBlockedEitherWay(clerkUserId, toUserId)) {
+    res.status(403).json({ error: "You can't send a recommendation to this user." });
+    return;
+  }
+
+  // Enforce follow relationship — caller must have an accepted follow on the
+  // recipient (a still-pending request to a private user isn't enough yet)
   const [followRow] = await db
     .select({ id: followsTable.id })
     .from(followsTable)
     .where(
       and(
         eq(followsTable.followerId, clerkUserId),
-        eq(followsTable.followeeId, toUserId)
+        eq(followsTable.followeeId, toUserId),
+        eq(followsTable.status, "accepted")
       )
     );
 
@@ -134,7 +150,7 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   // Look up sender info and recipient's push token in parallel
   const [[sender], [recipientWithToken]] = await Promise.all([
     db
-      .select({ username: usersTable.username, avatarUrl: usersTable.avatarUrl })
+      .select({ username: usersTable.username, displayInitials: usersTable.displayInitials, avatarUrl: usersTable.avatarUrl })
       .from(usersTable)
       .where(eq(usersTable.clerkId, clerkUserId)),
     db
@@ -166,6 +182,7 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
       id: inserted.id,
       fromUserId: inserted.fromUserId,
       fromUsername: sender?.username ?? null,
+      fromDisplayInitials: sender?.displayInitials ?? null,
       fromAvatarUrl: sender?.avatarUrl ?? null,
       toUserId: inserted.toUserId,
       tmdbId: inserted.tmdbId,
@@ -208,7 +225,7 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
 
   // Fetch sender info for the response
   const [sender] = await db
-    .select({ username: usersTable.username, avatarUrl: usersTable.avatarUrl })
+    .select({ username: usersTable.username, displayInitials: usersTable.displayInitials, avatarUrl: usersTable.avatarUrl })
     .from(usersTable)
     .where(eq(usersTable.clerkId, updated.fromUserId));
 
@@ -217,6 +234,7 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
       id: updated.id,
       fromUserId: updated.fromUserId,
       fromUsername: sender?.username ?? null,
+      fromDisplayInitials: sender?.displayInitials ?? null,
       fromAvatarUrl: sender?.avatarUrl ?? null,
       toUserId: updated.toUserId,
       tmdbId: updated.tmdbId,
@@ -228,67 +246,46 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
   );
 });
 
-// ── PATCH /notifications/:id/react ───────────────────────────────────────────
-// Set (or clear) an emoji / text reaction on a notification.
+// ── Shared helper — is there any relationship (either direction follow, or an
+// existing recommendation between the two) that permits messaging? ──────────
 
-const ReactBody = z.object({
-  reaction: z.string().max(20),
-});
+async function canMessage(userA: string, userB: string): Promise<boolean> {
+  if (await isBlockedEitherWay(userA, userB)) return false;
 
-router.patch("/notifications/:id/react", requireAuth, async (req, res): Promise<void> => {
-  const { clerkUserId } = req as AuthedRequest;
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-
-  const body = ReactBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: "reaction is required" }); return; }
-
-  const [updated] = await db
-    .update(filmNotificationsTable)
-    .set({ reaction: body.data.reaction, reactedAt: new Date(), isRead: true })
+  const [followRow] = await db
+    .select({ id: followsTable.id })
+    .from(followsTable)
     .where(
       and(
-        eq(filmNotificationsTable.id, id),
-        eq(filmNotificationsTable.toUserId, clerkUserId)
+        eq(followsTable.status, "accepted"),
+        or(
+          and(eq(followsTable.followerId, userA), eq(followsTable.followeeId, userB)),
+          and(eq(followsTable.followerId, userB), eq(followsTable.followeeId, userA))
+        )
       )
-    )
-    .returning();
-
-  if (!updated) { res.status(404).json({ error: "Notification not found." }); return; }
-
-  // Notify the sender that their recommendation was reacted to
-  const [[sender], [recipientWithToken]] = await Promise.all([
-    db.select({ username: usersTable.username, expoPushToken: usersTable.expoPushToken })
-      .from(usersTable).where(eq(usersTable.clerkId, updated.fromUserId)),
-    db.select({ username: usersTable.username })
-      .from(usersTable).where(eq(usersTable.clerkId, clerkUserId)),
-  ]);
-
-  const senderToken = sender?.expoPushToken;
-  if (senderToken && Expo.isExpoPushToken(senderToken)) {
-    try {
-      await expo.sendPushNotificationsAsync([{
-        to: senderToken,
-        title: "🎬 Reaction",
-        body: `${recipientWithToken?.username ?? "Someone"} reacted ${body.data.reaction} to your "${updated.filmTitle}" recommendation`,
-        data: { screen: "/(tabs)/notifications" },
-        sound: "default",
-      }]);
-    } catch { /* non-fatal */ }
-  }
-
-  res.json({ id: updated.id, reaction: updated.reaction, reactedAt: updated.reactedAt });
-});
+    );
+  return Boolean(followRow);
+}
 
 // ── GET /notifications/thread/:userId ─────────────────────────────────────────
-// All recommendations from a specific user to the authenticated user.
+// Merged, chronological chat feed with a specific user — recommendations sent
+// either way, plus reactions/messages either way.
 
 router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
-  const fromUserId = String(req.params.userId ?? "").trim();
-  if (!fromUserId) { res.status(400).json({ error: "userId is required" }); return; }
+  const otherUserId = String(req.params.userId ?? "").trim();
+  if (!otherUserId) { res.status(400).json({ error: "userId is required" }); return; }
 
-  const [rows, [sender]] = await Promise.all([
+  const betweenUs = or(
+    and(eq(filmNotificationsTable.fromUserId, otherUserId), eq(filmNotificationsTable.toUserId, clerkUserId)),
+    and(eq(filmNotificationsTable.fromUserId, clerkUserId), eq(filmNotificationsTable.toUserId, otherUserId))
+  );
+  const messagesBetweenUs = or(
+    and(eq(conversationMessagesTable.fromUserId, otherUserId), eq(conversationMessagesTable.toUserId, clerkUserId)),
+    and(eq(conversationMessagesTable.fromUserId, clerkUserId), eq(conversationMessagesTable.toUserId, otherUserId))
+  );
+
+  const [recRows, msgRows, [sender]] = await Promise.all([
     db
       .select({
         id: filmNotificationsTable.id,
@@ -298,44 +295,158 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
         filmTitle: filmNotificationsTable.filmTitle,
         posterUrl: filmNotificationsTable.posterUrl,
         isRead: filmNotificationsTable.isRead,
-        reaction: filmNotificationsTable.reaction,
-        reactedAt: filmNotificationsTable.reactedAt,
         createdAt: filmNotificationsTable.createdAt,
       })
       .from(filmNotificationsTable)
-      .where(
-        and(
-          eq(filmNotificationsTable.fromUserId, fromUserId),
-          eq(filmNotificationsTable.toUserId, clerkUserId)
-        )
-      )
+      .where(betweenUs)
       .orderBy(desc(filmNotificationsTable.createdAt)),
 
     db
-      .select({ clerkId: usersTable.clerkId, username: usersTable.username, avatarUrl: usersTable.avatarUrl })
+      .select({
+        id: conversationMessagesTable.id,
+        fromUserId: conversationMessagesTable.fromUserId,
+        toUserId: conversationMessagesTable.toUserId,
+        content: conversationMessagesTable.content,
+        replyToNotificationId: conversationMessagesTable.replyToNotificationId,
+        createdAt: conversationMessagesTable.createdAt,
+        replyToFilmTitle: filmNotificationsTable.filmTitle,
+      })
+      .from(conversationMessagesTable)
+      .leftJoin(filmNotificationsTable, eq(conversationMessagesTable.replyToNotificationId, filmNotificationsTable.id))
+      .where(messagesBetweenUs)
+      .orderBy(desc(conversationMessagesTable.createdAt)),
+
+    db
+      .select({ clerkId: usersTable.clerkId, username: usersTable.username, displayInitials: usersTable.displayInitials, avatarUrl: usersTable.avatarUrl })
       .from(usersTable)
-      .where(eq(usersTable.clerkId, fromUserId)),
+      .where(eq(usersTable.clerkId, otherUserId)),
   ]);
 
-  // Mark all unread as read in the background
+  const feed = [
+    ...recRows.map((r) => ({
+      type: "recommendation" as const,
+      id: r.id,
+      fromUserId: r.fromUserId,
+      toUserId: r.toUserId,
+      createdAt: r.createdAt,
+      tmdbId: r.tmdbId,
+      filmTitle: r.filmTitle,
+      posterUrl: r.posterUrl,
+      isRead: r.isRead,
+      content: null,
+      replyToNotificationId: null,
+      replyToFilmTitle: null,
+    })),
+    ...msgRows.map((m) => ({
+      type: "message" as const,
+      id: m.id,
+      fromUserId: m.fromUserId,
+      toUserId: m.toUserId,
+      createdAt: m.createdAt,
+      tmdbId: null,
+      filmTitle: null,
+      posterUrl: null,
+      isRead: null,
+      content: m.content,
+      replyToNotificationId: m.replyToNotificationId,
+      replyToFilmTitle: m.replyToFilmTitle ?? null,
+    })),
+  ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  // Mark recommendations this user sent me as read, in the background
   void db
     .update(filmNotificationsTable)
     .set({ isRead: true })
     .where(
       and(
-        eq(filmNotificationsTable.fromUserId, fromUserId),
+        eq(filmNotificationsTable.fromUserId, otherUserId),
         eq(filmNotificationsTable.toUserId, clerkUserId),
         eq(filmNotificationsTable.isRead, false)
       )
     );
 
-  res.json({
-    sender: sender ?? null,
-    notifications: rows.map((r) => ({
-      ...r,
-      fromUsername: sender?.username ?? null,
-      fromAvatarUrl: sender?.avatarUrl ?? null,
-    })),
+  res.json({ sender: sender ?? null, feed });
+});
+
+// ── POST /notifications/thread/:userId/messages ───────────────────────────────
+// Send a reaction/message from the fixed vocabulary — either a reply to a
+// specific film recommendation, or a standalone message. Works even when no
+// recommendation exists between the two users, as long as either follows the
+// other (mirrors the reciprocity already implied by /notifications).
+
+router.post("/notifications/thread/:userId/messages", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const otherUserId = String(req.params.userId ?? "").trim();
+  if (!otherUserId) { res.status(400).json({ error: "userId is required" }); return; }
+  if (otherUserId === clerkUserId) { res.status(400).json({ error: "Cannot message yourself." }); return; }
+
+  const body = SendConversationMessageBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const { content, replyToNotificationId } = body.data;
+
+  const [recipient] = await db
+    .select({ clerkId: usersTable.clerkId, expoPushToken: usersTable.expoPushToken })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, otherUserId));
+  if (!recipient) { res.status(404).json({ error: "User not found." }); return; }
+
+  if (!(await canMessage(clerkUserId, otherUserId))) {
+    res.status(403).json({ error: "You can only message people you follow or who follow you." });
+    return;
+  }
+
+  let replyToFilmTitle: string | null = null;
+  if (replyToNotificationId != null) {
+    const [notif] = await db
+      .select({ id: filmNotificationsTable.id, filmTitle: filmNotificationsTable.filmTitle, fromUserId: filmNotificationsTable.fromUserId, toUserId: filmNotificationsTable.toUserId })
+      .from(filmNotificationsTable)
+      .where(eq(filmNotificationsTable.id, replyToNotificationId));
+
+    const involvesBothUsers =
+      notif &&
+      ((notif.fromUserId === clerkUserId && notif.toUserId === otherUserId) ||
+        (notif.fromUserId === otherUserId && notif.toUserId === clerkUserId));
+
+    if (!involvesBothUsers) {
+      res.status(404).json({ error: "Recommendation not found." });
+      return;
+    }
+    replyToFilmTitle = notif.filmTitle;
+  }
+
+  const [inserted] = await db
+    .insert(conversationMessagesTable)
+    .values({ fromUserId: clerkUserId, toUserId: otherUserId, content, replyToNotificationId: replyToNotificationId ?? null })
+    .returning();
+
+  // Best-effort push to the recipient
+  const pushToken = recipient.expoPushToken;
+  if (pushToken && Expo.isExpoPushToken(pushToken)) {
+    const [sender] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.clerkId, clerkUserId));
+    try {
+      await expo.sendPushNotificationsAsync([{
+        to: pushToken,
+        title: `🎬 ${sender?.username ?? "Someone"}`,
+        body: replyToFilmTitle ? `${content} (re: "${replyToFilmTitle}")` : content,
+        data: { screen: "/(tabs)/notifications" },
+        sound: "default",
+      }]);
+    } catch { /* non-fatal */ }
+  }
+
+  res.status(201).json({
+    type: "message",
+    id: inserted.id,
+    fromUserId: inserted.fromUserId,
+    toUserId: inserted.toUserId,
+    createdAt: inserted.createdAt,
+    tmdbId: null,
+    filmTitle: null,
+    posterUrl: null,
+    isRead: null,
+    content: inserted.content,
+    replyToNotificationId: inserted.replyToNotificationId,
+    replyToFilmTitle,
   });
 });
 

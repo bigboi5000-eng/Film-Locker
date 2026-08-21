@@ -61,6 +61,11 @@ export interface TmdbMovieCard {
   overview: string;
   /** Genre names mapped from TMDB genre_ids */
   genres: string[];
+  /** Full display name of the original language (free on the TMDB list response) */
+  language?: string;
+  director?: string;
+  cast?: string[];
+  watchProviders?: WatchProvider[];
 }
 
 export interface TmdbMovieDetailsResponse {
@@ -74,6 +79,9 @@ export interface TmdbMovieDetailsResponse {
   genres: string[];
   language: string;
   watchProviders: WatchProvider[];
+  /** TMDB's own aggregate user rating (0-10), null if the film has no votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to either; this is TMDB's own users' average. */
+  tmdbRating: number | null;
+  tmdbVoteCount: number;
 }
 
 export interface MovieCandidate {
@@ -95,6 +103,8 @@ export interface GeminiMovieMatch {
   poster_url?: string | null;
   title?: string | null;
   overview?: string | null;
+  /** Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST /movies/recommend, null everywhere else. */
+  synopsis?: string | null;
 }
 
 export interface SearchMoviesResponse {
@@ -167,6 +177,22 @@ export interface ProcessSocialLinkResponse {
   listTitle: string | null;
 }
 
+export interface RecommendBody {
+  /** Natural-language film/TV request, e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre". */
+  query: string;
+  /** When true, identify recommended films but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film. */
+  dryRun?: boolean;
+}
+
+export interface RecommendResponse {
+  /** True when the query wasn't a film/TV request and Gemini refused to answer it — matches will be empty in this case. */
+  offTopic: boolean;
+  matches: GeminiMovieMatch[];
+  saved: Movie[];
+  /** Suggested playlist name when the recommendation is a themed set of multiple films (e.g. "90s Feel-Good Comedies"), null for a single recommendation. */
+  listTitle: string | null;
+}
+
 export interface PatchWatchedBody {
   isWatched: boolean;
 }
@@ -236,6 +262,7 @@ export interface FilmNotification {
   fromUserId: string;
   /** Display username of the sender */
   fromUsername?: string | null;
+  fromDisplayInitials?: string | null;
   fromAvatarUrl?: string | null;
   /** Clerk user ID of the recipient */
   toUserId: string;
@@ -265,6 +292,7 @@ export interface SendNotificationBody {
 export interface NotificationUser {
   clerkId: string;
   username?: string | null;
+  displayInitials?: string | null;
   avatarUrl?: string | null;
 }
 
@@ -272,29 +300,112 @@ export interface NotificationUsersResponse {
   users: NotificationUser[];
 }
 
-export interface ReactNotificationBody {
-  /**
-     * Emoji or predefined text e.g. "Watched it!"
-     * @maxLength 20
-     */
-  reaction: string;
+/**
+ * A fixed set of emoji + movie-catchphrases + canned questions — deliberately not a freeform string. There is no freeform messaging in this app; this enum is enforced server-side (not just left to the client UI) so free text can never reach another user through it.
+ */
+export type ConversationMessageContent = typeof ConversationMessageContent[keyof typeof ConversationMessageContent];
+
+
+export const ConversationMessageContent = {
+  '❤️': '❤️',
+  '😂': '😂',
+  '😍': '😍',
+  '😭': '😭',
+  '🤪': '🤪',
+  '🤓': '🤓',
+  '🤯': '🤯',
+  '👍': '👍',
+  '🤌': '🤌',
+  '👎': '👎',
+  'Watched_it!': 'Watched it!',
+  'Fool_of_a_Took!': 'Fool of a Took!',
+  Prestige_Worldwide: 'Prestige Worldwide',
+  I_miss_your_whispering_eye: 'I miss your whispering eye',
+  Aim_for_the_bushes: 'Aim for the bushes',
+  'Read_a_f***ing_book': 'Read a f***ing book',
+  'I\'ll_be_back': 'I\'ll be back',
+  'Why_so_serious?': 'Why so serious?',
+  'You_can\'t_handle_the_truth!': 'You can\'t handle the truth!',
+  May_the_Force_be_with_you: 'May the Force be with you',
+  'Here\'s_looking_at_you,_kid': 'Here\'s looking at you, kid',
+  'You_shall_not_pass!': 'You shall not pass!',
+  I_am_Groot: 'I am Groot',
+  'Say_hello_to_my_little_friend!': 'Say hello to my little friend!',
+  Life_is_like_a_box_of_chocolates: 'Life is like a box of chocolates',
+  'To_infinity_and_beyond!': 'To infinity and beyond!',
+  Nobody_puts_Baby_in_a_corner: 'Nobody puts Baby in a corner',
+  'Great_Scott!': 'Great Scott!',
+  'What_did_you_think?': 'What did you think?',
+  'Have_you_watched_it_yet?': 'Have you watched it yet?',
+  'This_was_great!': 'This was great!',
+  'Thank_you!': 'Thank you!',
+  Not_for_me_this_one: 'Not for me this one',
+  'Hey,_why_you_so_sweaty?': 'Hey, why you so sweaty?',
+  Watching_Cops: 'Watching Cops',
+} as const;
+
+export interface SendConversationMessageBody {
+  content: ConversationMessageContent;
+  /** Targets a specific film recommendation (per-film React button or swipe-to-reply). Omit or set null for a standalone message. */
+  replyToNotificationId?: number | null;
 }
 
-export interface ReactNotificationResponse {
+export type ConversationFeedItemType = typeof ConversationFeedItemType[keyof typeof ConversationFeedItemType];
+
+
+export const ConversationFeedItemType = {
+  recommendation: 'recommendation',
+  message: 'message',
+} as const;
+
+/**
+ * One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction/message, distinguished by "type".
+ */
+export interface ConversationFeedItem {
+  type: ConversationFeedItemType;
   id: number;
-  reaction?: string | null;
-  reactedAt?: string | null;
+  fromUserId: string;
+  toUserId: string;
+  createdAt: string;
+  tmdbId?: number | null;
+  filmTitle?: string | null;
+  posterUrl?: string | null;
+  isRead?: boolean | null;
+  /** Present when type is "message" — the canned phrase/emoji sent */
+  content?: string | null;
+  replyToNotificationId?: number | null;
+  /** Denormalized title of the film this message replies to, if any */
+  replyToFilmTitle?: string | null;
 }
 
 export interface NotificationThreadResponse {
   sender?: NotificationUser | null;
-  notifications: FilmNotification[];
+  feed: ConversationFeedItem[];
 }
 
 export interface UserProfile {
   clerkId: string;
   email: string;
   username?: string | null;
+  /**
+     * Optional short display initials shown instead of username-derived ones
+     * @maxLength 5
+     */
+  displayInitials?: string | null;
+  /** Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester. */
+  isPrivate: boolean;
+  avatarUrl?: string | null;
+}
+
+/**
+ * Another user's public profile — never includes their email address.
+ */
+export interface PublicUserProfile {
+  clerkId: string;
+  username?: string | null;
+  /** @maxLength 5 */
+  displayInitials?: string | null;
+  isPrivate: boolean;
   avatarUrl?: string | null;
 }
 
@@ -310,10 +421,17 @@ export interface UpdateMeBody {
      * @maxLength 30
      */
   username?: string;
+  /**
+     * Optional — set null/empty to clear and fall back to username-derived initials
+     * @maxLength 5
+     */
+  displayInitials?: string | null;
+  /** Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way. */
+  isPrivate?: boolean;
 }
 
 export interface SearchUsersResponse {
-  users: UserProfile[];
+  users: PublicUserProfile[];
 }
 
 export interface FollowBody {
@@ -321,11 +439,73 @@ export interface FollowBody {
   followeeId: string;
 }
 
+export type FollowResponseStatus = typeof FollowResponseStatus[keyof typeof FollowResponseStatus];
+
+
+export const FollowResponseStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+} as const;
+
+export interface FollowResponse {
+  followerId: string;
+  followeeId: string;
+  status: FollowResponseStatus;
+}
+
 export interface FollowsResponse {
-  /** Users that the authenticated user follows */
-  following: UserProfile[];
-  /** Users that follow the authenticated user */
-  followers: UserProfile[];
+  /** Users the authenticated user follows (accepted only) */
+  following: PublicUserProfile[];
+  /** Users that follow the authenticated user (accepted only) */
+  followers: PublicUserProfile[];
+  /** Pending follow requests sent TO the authenticated user, awaiting their accept/decline */
+  incomingRequests: PublicUserProfile[];
+  /** Pending follow requests the authenticated user has sent, awaiting the other person's approval */
+  outgoingRequests: PublicUserProfile[];
+}
+
+export interface SubmitFeedbackBody {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  message: string;
+}
+
+export interface SubmitFeedbackResponse {
+  id: number;
+  createdAt: string;
+}
+
+export interface BlockUserBody {
+  /** Clerk user ID of the user to block */
+  blockedId: string;
+}
+
+export interface BlockUserResponse {
+  blockerId: string;
+  blockedId: string;
+}
+
+export interface GetBlocksResponse {
+  blocked: PublicUserProfile[];
+}
+
+export interface SubmitReportBody {
+  /** Clerk user ID of the user being reported */
+  reportedUserId: string;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
+  /** If reporting a specific comment */
+  commentId?: number | null;
+}
+
+export interface SubmitReportResponse {
+  id: number;
+  createdAt: string;
 }
 
 export interface UpdatePushTokenBody {
@@ -391,11 +571,39 @@ export interface AddPlaylistItemBody {
   posterUrl: string;
 }
 
+export type GetRecommendationsParams = {
+/**
+ * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
+ */
+region?: string;
+};
+
+export type GetTrendingParams = {
+/**
+ * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
+ */
+region?: string;
+};
+
+export type GetNewReleasesParams = {
+/**
+ * ISO 3166-1 alpha-2 country code. Controls both which country's "now playing" list is used and which country's watch providers are returned. Defaults to US when omitted or invalid.
+ */
+region?: string;
+};
+
 export type SearchMoviesParams = {
 /**
  * @minLength 1
  */
 q: string;
+};
+
+export type GetMovieDetailsParams = {
+/**
+ * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
+ */
+region?: string;
 };
 
 export type GetFilmCommentsParams = {

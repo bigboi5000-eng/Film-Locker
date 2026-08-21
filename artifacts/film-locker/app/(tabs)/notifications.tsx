@@ -1,15 +1,23 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetNotifications,
+  useGetFollows,
+  useAcceptFollowRequest,
+  useDeclineFollowRequest,
+  useUnfollowUser,
+  getGetFollowsQueryKey,
+  getGetNotificationUsersQueryKey,
   type FilmNotification,
+  type PublicUserProfile,
 } from '@workspace/api-client-react';
 
 function formatRelative(date: Date): string {
@@ -27,6 +35,7 @@ function formatRelative(date: Date): string {
 interface ConversationGroup {
   fromUserId: string;
   fromUsername: string | null;
+  fromDisplayInitials: string | null;
   fromAvatarUrl: string | null;
   latest: FilmNotification;
   allPosters: string[];
@@ -49,6 +58,7 @@ function groupNotifications(notifications: FilmNotification[]): ConversationGrou
       map.set(n.fromUserId, {
         fromUserId: n.fromUserId,
         fromUsername: n.fromUsername ?? null,
+        fromDisplayInitials: n.fromDisplayInitials ?? null,
         fromAvatarUrl: n.fromAvatarUrl ?? null,
         latest: n,
         allPosters: [n.posterUrl],
@@ -61,7 +71,7 @@ function groupNotifications(notifications: FilmNotification[]): ConversationGrou
 }
 
 function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress: () => void }) {
-  const initials = (group.fromUsername ?? '?').slice(0, 2).toUpperCase();
+  const initials = (group.fromDisplayInitials || group.fromUsername || '?').slice(0, 5).toUpperCase();
   const previews = group.allPosters.slice(0, 3);
 
   return (
@@ -72,7 +82,7 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
           <Image source={{ uri: group.fromAvatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
         {group.unreadCount > 0 && (
@@ -85,7 +95,7 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.contentHeader}>
-          <Text style={[styles.username, group.unreadCount > 0 && styles.usernameUnread]}>
+          <Text style={[styles.username, group.unreadCount > 0 && styles.usernameUnread]} numberOfLines={1}>
             {group.fromUsername ?? 'Unknown'}
           </Text>
           <Text style={styles.time}>{formatRelative(group.latestAt)}</Text>
@@ -113,10 +123,175 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
   );
 }
 
+// ── Film Pals — people you follow and who follow you back, plus incoming and
+// outgoing follow requests. Lives as a second tab on this screen since it's
+// the same "people I have a relationship with" surface as the inbox. ──
+
+function PalAvatar({ user }: { user: PublicUserProfile }) {
+  const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
+  return user.avatarUrl ? (
+    <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
+  ) : (
+    <View style={[styles.avatar, styles.avatarFallback]}>
+      <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
+    </View>
+  );
+}
+
+function FilmPalsView() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch, isRefetching } = useGetFollows();
+  const { mutateAsync: acceptRequest } = useAcceptFollowRequest();
+  const { mutateAsync: declineRequest } = useDeclineFollowRequest();
+  const { mutateAsync: unfollowUser } = useUnfollowUser();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const invalidate = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: getGetFollowsQueryKey() });
+    await queryClient.invalidateQueries({ queryKey: getGetNotificationUsersQueryKey() });
+  }, [queryClient]);
+
+  const incomingRequests = data?.incomingRequests ?? [];
+  const outgoingRequests = data?.outgoingRequests ?? [];
+  const following = data?.following ?? [];
+  const followerIds = new Set((data?.followers ?? []).map((u) => u.clerkId));
+  const filmPals = following.filter((u) => followerIds.has(u.clerkId));
+
+  const handleAccept = useCallback(async (user: PublicUserProfile) => {
+    setBusyId(user.clerkId);
+    try {
+      await acceptRequest({ userId: user.clerkId });
+      await invalidate();
+    } catch {
+      Alert.alert('Error', 'Could not accept this request.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [acceptRequest, invalidate]);
+
+  const handleDecline = useCallback(async (user: PublicUserProfile) => {
+    setBusyId(user.clerkId);
+    try {
+      await declineRequest({ userId: user.clerkId });
+      await invalidate();
+    } catch {
+      Alert.alert('Error', 'Could not decline this request.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [declineRequest, invalidate]);
+
+  const handleCancel = useCallback(async (user: PublicUserProfile) => {
+    setBusyId(user.clerkId);
+    try {
+      await unfollowUser({ userId: user.clerkId });
+      await invalidate();
+    } catch {
+      Alert.alert('Error', 'Could not cancel this request.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [unfollowUser, invalidate]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#0066FF" />
+      </View>
+    );
+  }
+
+  const isEmpty = incomingRequests.length === 0 && outgoingRequests.length === 0 && filmPals.length === 0;
+
+  return (
+    <FlatList
+      data={[]}
+      renderItem={null}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0066FF" />}
+      contentContainerStyle={isEmpty ? { flex: 1 } : { paddingBottom: 24 }}
+      ListHeaderComponent={
+        <>
+          {incomingRequests.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Requests ({incomingRequests.length})</Text>
+              {incomingRequests.map((u) => (
+                <View key={u.clerkId} style={styles.palRow}>
+                  <PalAvatar user={u} />
+                  <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
+                  {busyId === u.clerkId ? (
+                    <ActivityIndicator size="small" color="#0066FF" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity style={styles.declineBtn} onPress={() => handleDecline(u)} activeOpacity={0.8}>
+                        <Text style={styles.declineBtnText}>Decline</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(u)} activeOpacity={0.8}>
+                        <Text style={styles.acceptBtnText}>Accept</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {outgoingRequests.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Sent ({outgoingRequests.length})</Text>
+              {outgoingRequests.map((u) => (
+                <View key={u.clerkId} style={styles.palRow}>
+                  <PalAvatar user={u} />
+                  <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
+                  {busyId === u.clerkId ? (
+                    <ActivityIndicator size="small" color="#0066FF" />
+                  ) : (
+                    <TouchableOpacity style={styles.pendingBtn} onPress={() => handleCancel(u)} activeOpacity={0.8}>
+                      <Text style={styles.pendingBtnText}>Requested</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Film Pals{filmPals.length > 0 ? ` (${filmPals.length})` : ''}
+            </Text>
+            {filmPals.length === 0 ? (
+              <Text style={styles.emptyText}>
+                Film Pals are people you follow who follow you back. Follow someone from Find People to get started.
+              </Text>
+            ) : (
+              filmPals.map((u) => (
+                <TouchableOpacity
+                  key={u.clerkId}
+                  style={styles.palRow}
+                  activeOpacity={0.75}
+                  onPress={() => router.push({ pathname: '/inbox/[userId]', params: { userId: u.clerkId, username: u.username ?? '' } })}
+                >
+                  <PalAvatar user={u} />
+                  <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </>
+      }
+      ListEmptyComponent={null}
+    />
+  );
+}
+
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'inbox' | 'filmPals'>('inbox');
   const { data, isLoading, refetch, isRefetching } = useGetNotifications();
+  const { data: followsData } = useGetFollows();
+  const incomingRequestCount = followsData?.incomingRequests?.length ?? 0;
 
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unreadCount ?? 0;
@@ -153,7 +328,32 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
       </View>
 
-      {isLoading ? (
+      {/* Tab switcher */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'inbox' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('inbox')}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'inbox' && styles.tabBtnTextActive]}>Notifications</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'filmPals' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('filmPals')}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'filmPals' && styles.tabBtnTextActive]}>Film Pals</Text>
+          {incomingRequestCount > 0 && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{incomingRequestCount > 9 ? '9+' : incomingRequestCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'filmPals' ? (
+        <FilmPalsView />
+      ) : isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#0066FF" />
         </View>
@@ -213,6 +413,52 @@ const styles = StyleSheet.create({
   peopleBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  tabBar: {
+    flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, gap: 8,
+    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+  },
+  tabBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 4, paddingBottom: 10,
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  tabBtnActive: { borderBottomColor: '#0066FF' },
+  tabBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
+  tabBtnTextActive: { color: '#0066FF' },
+  tabBadge: {
+    backgroundColor: '#EF4444', borderRadius: 9, minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+  },
+  tabBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#FFF' },
+
+  section: { paddingHorizontal: 16, paddingTop: 20 },
+  sectionTitle: {
+    fontSize: 13, fontFamily: 'Inter_600SemiBold',
+    color: '#9CA3AF', letterSpacing: 0.5, textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', lineHeight: 20 },
+
+  palRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  palName: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  acceptBtn: {
+    backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+  },
+  acceptBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  declineBtn: {
+    backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  declineBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  pendingBtn: {
+    backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  pendingBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
 
   row: {
     flexDirection: 'row', alignItems: 'center',

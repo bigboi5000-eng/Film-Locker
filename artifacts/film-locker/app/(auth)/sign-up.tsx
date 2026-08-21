@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { useSignUp, useSSO, useAuth } from '@clerk/expo';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { webInputReset } from '@/lib/webInputReset';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -243,6 +245,19 @@ export default function SignUpScreen() {
             </Link>
           </View>
 
+          {/* Legal */}
+          <Text style={styles.legalText}>
+            By creating an account you agree to our{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL('https://film-locker.replit.app/terms')}>
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL('https://film-locker.replit.app/privacy')}>
+              Privacy Policy
+            </Text>
+            .
+          </Text>
+
           {/* Required for Clerk bot protection */}
           <View nativeID="clerk-captcha" />
         </View>
@@ -272,6 +287,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     marginBottom: 14,
+    ...webInputReset,
   },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 46 },
@@ -309,4 +325,9 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
   linkRow: { alignItems: 'center', paddingVertical: 8 },
   mutedText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
+  legalText: {
+    fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF',
+    textAlign: 'center', marginTop: 16, lineHeight: 18,
+  },
+  legalLink: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
 });

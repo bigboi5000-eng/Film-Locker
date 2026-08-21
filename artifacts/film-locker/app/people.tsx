@@ -8,15 +8,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { webInputReset } from '@/lib/webInputReset';
+import { confirmDestructive } from '@/lib/confirm';
+import { useToast } from '@/components/ToastProvider';
 import {
   useSearchUsers,
   getSearchUsersQueryKey,
   useGetFollows,
   useFollowUser,
   useUnfollowUser,
+  useBlockUser,
   getGetFollowsQueryKey,
   getGetNotificationUsersQueryKey,
-  type UserProfile,
+  type PublicUserProfile,
 } from '@workspace/api-client-react';
 
 export default function PeopleScreen() {
@@ -41,15 +45,24 @@ export default function PeopleScreen() {
   const { data: followsData, isLoading: followsLoading } = useGetFollows();
   const { mutateAsync: followUser } = useFollowUser();
   const { mutateAsync: unfollowUser } = useUnfollowUser();
+  const { mutateAsync: blockUser } = useBlockUser();
+  const { showToast } = useToast();
 
   const followingIds = new Set((followsData?.following ?? []).map((u) => u.clerkId));
+  const pendingOutgoingIds = new Set((followsData?.outgoingRequests ?? []).map((u) => u.clerkId));
+
+  function followState(clerkId: string): 'none' | 'pending' | 'accepted' {
+    if (followingIds.has(clerkId)) return 'accepted';
+    if (pendingOutgoingIds.has(clerkId)) return 'pending';
+    return 'none';
+  }
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: getGetFollowsQueryKey() });
     await queryClient.invalidateQueries({ queryKey: getGetNotificationUsersQueryKey() });
   }, [queryClient]);
 
-  const handleFollow = useCallback(async (user: UserProfile) => {
+  const handleFollow = useCallback(async (user: PublicUserProfile) => {
     setActionUserId(user.clerkId);
     try {
       await followUser({ data: { followeeId: user.clerkId } });
@@ -61,7 +74,7 @@ export default function PeopleScreen() {
     }
   }, [followUser, invalidate]);
 
-  const handleUnfollow = useCallback(async (user: UserProfile) => {
+  const handleUnfollow = useCallback(async (user: PublicUserProfile) => {
     setActionUserId(user.clerkId);
     try {
       await unfollowUser({ userId: user.clerkId });
@@ -73,34 +86,65 @@ export default function PeopleScreen() {
     }
   }, [unfollowUser, invalidate]);
 
-  function UserRow({ user, isFollowing }: { user: UserProfile; isFollowing: boolean }) {
-    const initials = (user.username ?? user.email).slice(0, 2).toUpperCase();
+  const handleBlock = useCallback((user: PublicUserProfile) => {
+    const name = user.username ?? 'this user';
+    confirmDestructive(
+      `Block ${name}? They won't be able to follow, message, or see your comments, and you won't see theirs.`,
+      'Block',
+      async () => {
+        setActionUserId(user.clerkId);
+        try {
+          await blockUser({ data: { blockedId: user.clerkId } });
+          await invalidate();
+          showToast({ title: `Blocked ${name}`, variant: 'success' });
+        } catch {
+          showToast({ title: 'Could not block this user', variant: 'error' });
+        } finally {
+          setActionUserId(null);
+        }
+      }
+    );
+  }, [blockUser, invalidate, showToast]);
+
+  function UserRow({ user, state }: { user: PublicUserProfile; state: 'none' | 'pending' | 'accepted' }) {
+    const initials = (user.displayInitials || user.username || '??').slice(0, 5).toUpperCase();
     const busy = actionUserId === user.clerkId;
     return (
-      <View style={styles.userRow}>
+      <TouchableOpacity
+        style={styles.userRow}
+        onLongPress={() => handleBlock(user)}
+        delayLongPress={400}
+        activeOpacity={1}
+      >
         {user.avatarUrl ? (
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
         <View style={styles.userInfo}>
-          <Text style={styles.username}>{user.username ?? user.email}</Text>
-          {user.username && <Text style={styles.email}>{user.email}</Text>}
+          <View style={styles.usernameRow}>
+            <Text style={styles.username}>{user.username ?? 'Unnamed user'}</Text>
+            {user.isPrivate && <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginLeft: 4 }} />}
+          </View>
         </View>
         {busy ? (
           <ActivityIndicator size="small" color="#0066FF" style={{ marginLeft: 12 }} />
-        ) : isFollowing ? (
+        ) : state === 'accepted' ? (
           <TouchableOpacity style={styles.unfollowBtn} onPress={() => handleUnfollow(user)} activeOpacity={0.8}>
             <Text style={styles.unfollowBtnText}>Following</Text>
           </TouchableOpacity>
+        ) : state === 'pending' ? (
+          <TouchableOpacity style={styles.unfollowBtn} onPress={() => handleUnfollow(user)} activeOpacity={0.8}>
+            <Text style={styles.unfollowBtnText}>Requested</Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.followBtn} onPress={() => handleFollow(user)} activeOpacity={0.8}>
-            <Text style={styles.followBtnText}>Follow</Text>
+            <Text style={styles.followBtnText}>{user.isPrivate ? 'Request' : 'Follow'}</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -153,7 +197,7 @@ export default function PeopleScreen() {
                   <Text style={styles.emptyText}>No users found for "{debouncedQ}"</Text>
                 ) : (
                   searchResults.map((u) => (
-                    <UserRow key={u.clerkId} user={u} isFollowing={followingIds.has(u.clerkId)} />
+                    <UserRow key={u.clerkId} user={u} state={followState(u.clerkId)} />
                   ))
                 )}
               </View>
@@ -172,7 +216,7 @@ export default function PeopleScreen() {
                     <Text style={styles.emptyText}>You're not following anyone yet. Search above to find people.</Text>
                   ) : (
                     following.map((u) => (
-                      <UserRow key={u.clerkId} user={u} isFollowing={true} />
+                      <UserRow key={u.clerkId} user={u} state="accepted" />
                     ))
                   )}
                 </View>
@@ -181,7 +225,7 @@ export default function PeopleScreen() {
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Followers ({followers.length})</Text>
                     {followers.map((u) => (
-                      <UserRow key={u.clerkId} user={u} isFollowing={followingIds.has(u.clerkId)} />
+                      <UserRow key={u.clerkId} user={u} state={followState(u.clerkId)} />
                     ))}
                   </View>
                 )}
@@ -216,6 +260,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1, paddingVertical: 12,
     fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   clearBtn: { padding: 4 },
 
@@ -236,6 +281,7 @@ const styles = StyleSheet.create({
   avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
   userInfo: { flex: 1 },
+  usernameRow: { flexDirection: 'row', alignItems: 'center' },
   username: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
   email: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
 

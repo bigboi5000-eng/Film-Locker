@@ -1,6 +1,19 @@
 import { Router, type IRouter } from "express";
 import { eq, or, ilike } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  moviesTable,
+  followsTable,
+  filmNotificationsTable,
+  conversationMessagesTable,
+  filmCommentsTable,
+  filmCommunityRatingsTable,
+  playlistsTable,
+  feedbackTable,
+  blocksTable,
+  reportsTable,
+} from "@workspace/db";
 import { UpdatePushTokenBody } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { z } from "zod";
@@ -15,6 +28,8 @@ const SyncUserBody = z.object({
 
 const UpdateMeBody = z.object({
   username: z.string().min(2).max(30).optional(),
+  displayInitials: z.string().max(5).nullable().optional(),
+  isPrivate: z.boolean().optional(),
 });
 
 // ── POST /users/sync ──────────────────────────────────────────────────────────
@@ -53,6 +68,8 @@ router.post("/users/sync", requireAuth, async (req, res): Promise<void> => {
     clerkId: row.clerkId,
     email: row.email,
     username: row.username,
+    displayInitials: row.displayInitials,
+    isPrivate: row.isPrivate,
     avatarUrl: row.avatarUrl,
   });
 });
@@ -67,6 +84,8 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
       clerkId: usersTable.clerkId,
       email: usersTable.email,
       username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
+      isPrivate: usersTable.isPrivate,
       avatarUrl: usersTable.avatarUrl,
     })
     .from(usersTable)
@@ -105,12 +124,75 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     clerkId: row.clerkId,
     email: row.email,
     username: row.username,
+    displayInitials: row.displayInitials,
+    isPrivate: row.isPrivate,
     avatarUrl: row.avatarUrl,
   });
 });
 
+// ── DELETE /users/me ───────────────────────────────────────────────────────────
+// Permanently deletes every row this app holds for the user — their locker,
+// comments, ratings, notifications, messages, follows (both directions),
+// playlists (playlist_items cascade via FK), and feedback — before the
+// client deletes the Clerk identity itself. Deliberately does not touch
+// Clerk; called from the app just before clerkUser.delete() so the two
+// stay in sync for the one deletion path the app actually exposes.
+
+router.delete("/users/me", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(conversationMessagesTable)
+      .where(
+        or(
+          eq(conversationMessagesTable.fromUserId, clerkUserId),
+          eq(conversationMessagesTable.toUserId, clerkUserId)
+        )
+      );
+    await tx
+      .delete(filmNotificationsTable)
+      .where(
+        or(
+          eq(filmNotificationsTable.fromUserId, clerkUserId),
+          eq(filmNotificationsTable.toUserId, clerkUserId)
+        )
+      );
+    await tx
+      .delete(followsTable)
+      .where(
+        or(
+          eq(followsTable.followerId, clerkUserId),
+          eq(followsTable.followeeId, clerkUserId)
+        )
+      );
+    await tx
+      .delete(blocksTable)
+      .where(
+        or(
+          eq(blocksTable.blockerId, clerkUserId),
+          eq(blocksTable.blockedId, clerkUserId)
+        )
+      );
+    // Reports you filed are yours to delete. Reports filed about you are
+    // retained as a safety record — deleting your account shouldn't erase
+    // evidence someone else submitted about your conduct.
+    await tx.delete(reportsTable).where(eq(reportsTable.reporterId, clerkUserId));
+    await tx.delete(filmCommentsTable).where(eq(filmCommentsTable.userId, clerkUserId));
+    await tx.delete(filmCommunityRatingsTable).where(eq(filmCommunityRatingsTable.userId, clerkUserId));
+    await tx.delete(playlistsTable).where(eq(playlistsTable.userId, clerkUserId));
+    await tx.delete(feedbackTable).where(eq(feedbackTable.userId, clerkUserId));
+    await tx.delete(moviesTable).where(eq(moviesTable.clerkUserId, clerkUserId));
+    await tx.delete(usersTable).where(eq(usersTable.clerkId, clerkUserId));
+  });
+
+  res.status(204).send();
+});
+
 // ── GET /users/search?q= ──────────────────────────────────────────────────────
-// Search users by username or email (partial match, case-insensitive).
+// Search users by username or email (partial match, case-insensitive) — the
+// response never includes another user's email address, only their public
+// profile fields.
 // Never returns the calling user themselves.
 
 router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
@@ -128,6 +210,8 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     .select({
       clerkId: usersTable.clerkId,
       username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
+      isPrivate: usersTable.isPrivate,
       avatarUrl: usersTable.avatarUrl,
       email: usersTable.email,
     })
@@ -140,10 +224,12 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     )
     .limit(20);
 
-  // Exclude self
-  const filtered = rows.filter((r) => r.clerkId !== clerkUserId);
+  // Exclude self, and never expose another user's email address in the response
+  const users = rows
+    .filter((r) => r.clerkId !== clerkUserId)
+    .map(({ clerkId, username, displayInitials, isPrivate, avatarUrl }) => ({ clerkId, username, displayInitials, isPrivate, avatarUrl }));
 
-  res.json({ users: filtered });
+  res.json({ users });
 });
 
 // ── PUT /users/push-token ─────────────────────────────────────────────────────

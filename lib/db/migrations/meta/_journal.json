@@ -29,6 +29,34 @@
       "when": 1786305833314,
       "tag": "0003_workable_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787051580287,
+      "tag": "0004_complete_shooting_star",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787055543697,
+      "tag": "0005_faulty_titania",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787135331483,
+      "tag": "0006_ambiguous_leech",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787142071947,
+      "tag": "0007_empty_anthem",
+      "breakpoints": true
     }
   ]
 }

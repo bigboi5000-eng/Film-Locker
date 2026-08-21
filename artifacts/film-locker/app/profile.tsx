@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Alert, ScrollView, ActivityIndicator, Platform,
+  ScrollView, ActivityIndicator, Platform, Switch, Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,8 +12,26 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetMe,
   useUpdateMe,
+  useSubmitFeedback,
+  useDeleteMe,
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
+import { confirmDestructive } from '@/lib/confirm';
+import { useToast } from '@/components/ToastProvider';
+import { webInputReset } from '@/lib/webInputReset';
+
+function errorMessage(err: unknown): string | undefined {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') {
+    return (err as any).message;
+  }
+  return undefined;
+}
+
+// Stable production domain — same one eas.json points builds at, so these
+// links work from any build (dev, preview, or production) without depending
+// on whichever host is proxying the app's own API calls right now.
+const PRIVACY_URL = 'https://film-locker.replit.app/privacy';
+const TERMS_URL = 'https://film-locker.replit.app/terms';
 
 function Row({
   icon, label, value, danger, onPress,
@@ -57,14 +75,17 @@ export default function ProfileScreen() {
   });
 
   const { mutateAsync: updateMe, isPending: saving } = useUpdateMe();
+  const { showToast } = useToast();
 
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
+  const [editingInitials, setEditingInitials] = useState(false);
+  const [initialsInput, setInitialsInput] = useState('');
 
   const displayName = profile?.username ?? clerkUser?.username ?? clerkUser?.firstName ?? 'You';
   const email = profile?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? '';
   const avatarUrl = clerkUser?.imageUrl;
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const initials = (profile?.displayInitials || displayName).slice(0, 5).toUpperCase();
 
   const handleStartEditUsername = useCallback(() => {
     setUsernameInput(profile?.username ?? '');
@@ -74,53 +95,91 @@ export default function ProfileScreen() {
   const handleSaveUsername = useCallback(async () => {
     const trimmed = usernameInput.trim();
     if (!trimmed || trimmed.length < 2) {
-      Alert.alert('Too short', 'Username must be at least 2 characters.');
+      showToast({ title: 'Too short', subtitle: 'Username must be at least 2 characters.', variant: 'error' });
       return;
     }
     try {
       await updateMe({ data: { username: trimmed } });
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       setEditingUsername(false);
-    } catch {
-      Alert.alert('Error', 'Could not update username. Try a different one.');
+    } catch (err) {
+      showToast({ title: 'Could not update username', subtitle: errorMessage(err) ?? 'Try a different one.', variant: 'error' });
     }
-  }, [usernameInput, updateMe, queryClient]);
+  }, [usernameInput, updateMe, queryClient, showToast]);
+
+  const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+
+  const handleTogglePrivacy = useCallback(async (next: boolean) => {
+    setTogglingPrivacy(true);
+    try {
+      await updateMe({ data: { isPrivate: next } });
+      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    } catch (err) {
+      showToast({ title: 'Could not update account visibility', subtitle: errorMessage(err), variant: 'error' });
+    } finally {
+      setTogglingPrivacy(false);
+    }
+  }, [updateMe, queryClient, showToast]);
+
+  const handleStartEditInitials = useCallback(() => {
+    setInitialsInput(profile?.displayInitials ?? '');
+    setEditingInitials(true);
+  }, [profile?.displayInitials]);
+
+  const handleSaveInitials = useCallback(async () => {
+    const trimmed = initialsInput.trim().toUpperCase();
+    try {
+      await updateMe({ data: { displayInitials: trimmed.length > 0 ? trimmed : null } });
+      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      setEditingInitials(false);
+    } catch (err) {
+      showToast({ title: 'Could not update display initials', subtitle: errorMessage(err), variant: 'error' });
+    }
+  }, [initialsInput, updateMe, queryClient, showToast]);
+
+  const [feedbackText, setFeedbackText] = useState('');
+  const { mutateAsync: submitFeedback, isPending: sendingFeedback } = useSubmitFeedback();
+
+  const handleSendFeedback = useCallback(async () => {
+    const trimmed = feedbackText.trim();
+    if (!trimmed) return;
+    try {
+      await submitFeedback({ data: { message: trimmed } });
+      setFeedbackText('');
+      showToast({ title: 'Thanks for the feedback!', subtitle: 'We read every one.', variant: 'success' });
+    } catch (err) {
+      showToast({ title: 'Could not send feedback', subtitle: errorMessage(err), variant: 'error' });
+    }
+  }, [feedbackText, submitFeedback, showToast]);
 
   const handleSignOut = useCallback(() => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)/sign-in');
-        },
-      },
-    ]);
+    confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
+      await signOut();
+      router.replace('/(auth)/sign-in');
+    });
   }, [signOut, router]);
 
+  const { mutateAsync: deleteMe } = useDeleteMe();
+
   const handleDeleteAccount = useCallback(() => {
-    Alert.alert(
-      'Delete account',
+    confirmDestructive(
       'This permanently deletes your Film Locker account, watchlist, and all social data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clerkUser?.delete();
-              router.replace('/(auth)/sign-in');
-            } catch {
-              Alert.alert('Error', 'Could not delete your account. Please contact support.');
-            }
-          },
-        },
-      ]
+      'Delete',
+      async () => {
+        try {
+          // Delete our own data first, while the session is still valid —
+          // then remove the Clerk identity itself. If the first step fails,
+          // we deliberately don't delete the Clerk account, so the two
+          // never drift out of sync.
+          await deleteMe();
+          await clerkUser?.delete();
+          router.replace('/(auth)/sign-in');
+        } catch (err) {
+          showToast({ title: 'Could not delete your account', subtitle: errorMessage(err) ?? 'Please contact support.', variant: 'error' });
+        }
+      }
     );
-  }, [clerkUser, router]);
+  }, [deleteMe, clerkUser, router, showToast]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -195,18 +254,123 @@ export default function ProfileScreen() {
             />
           )}
 
+          {editingInitials ? (
+            <View style={styles.editRow}>
+              <TextInput
+                style={styles.textInput}
+                value={initialsInput}
+                onChangeText={(t) => setInitialsInput(t.slice(0, 5))}
+                placeholder="e.g. JPLT"
+                placeholderTextColor="#9CA3AF"
+                autoFocus
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={5}
+              />
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleSaveInitials}
+                disabled={saving}
+                activeOpacity={0.8}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setEditingInitials(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Row
+              icon="text-outline"
+              label="Display Initials (Optional)"
+              value={profile?.displayInitials ?? 'Derived from username'}
+              onPress={handleStartEditInitials}
+            />
+          )}
+
           <Row icon="mail-outline" label="Email" value={email} />
         </View>
 
         {/* Privacy */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Privacy</Text>
+          <View style={styles.privacyRow}>
+            <View style={styles.rowIcon}>
+              <Ionicons name="lock-closed-outline" size={18} color="#6B7280" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Private account</Text>
+              <Text style={styles.rowValue}>
+                {profile?.isPrivate
+                  ? 'Follows need your approval; comments are followers-only'
+                  : 'Anyone can follow you and see your comments'}
+              </Text>
+            </View>
+            {togglingPrivacy ? (
+              <ActivityIndicator size="small" color="#0066FF" />
+            ) : (
+              <Switch
+                value={Boolean(profile?.isPrivate)}
+                onValueChange={handleTogglePrivacy}
+                trackColor={{ true: '#0066FF' }}
+              />
+            )}
+          </View>
           <Row
-            icon="lock-closed-outline"
-            label="Account visibility"
-            value="Public"
-            onPress={() => Alert.alert('Coming soon', 'Private accounts are coming in a future update.')}
+            icon="ban-outline"
+            label="Blocked users"
+            onPress={() => router.push('/blocked-users')}
           />
+        </View>
+
+        {/* Legal */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Legal</Text>
+          <Row icon="document-text-outline" label="Privacy Policy" onPress={() => Linking.openURL(PRIVACY_URL)} />
+          <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL(TERMS_URL)} />
+        </View>
+
+        {/* Feedback */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Feedback</Text>
+          <View style={styles.feedbackBody}>
+            <Text style={styles.feedbackHint}>
+              Spot a bug, or have an idea for the app? Let us know below.
+            </Text>
+            <TextInput
+              style={styles.feedbackInput}
+              value={feedbackText}
+              onChangeText={(t) => setFeedbackText(t.slice(0, 2000))}
+              placeholder="What's working, what's not, what you'd like to see…"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              maxLength={2000}
+              textAlignVertical="top"
+            />
+            <View style={styles.feedbackFooter}>
+              <Text style={styles.feedbackCharCount}>{feedbackText.length}/2000</Text>
+              <TouchableOpacity
+                style={[styles.saveBtn, (!feedbackText.trim() || sendingFeedback) && styles.saveBtnDisabled]}
+                onPress={handleSendFeedback}
+                disabled={!feedbackText.trim() || sendingFeedback}
+                activeOpacity={0.8}
+              >
+                {sendingFeedback ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         {/* Danger zone */}
@@ -254,6 +418,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 13,
     borderTopWidth: 1, borderTopColor: '#F3F4F6',
   },
+  privacyRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 13,
+  },
   rowIcon: {
     width: 32, height: 32, borderRadius: 8,
     backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center',
@@ -275,11 +443,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', borderRadius: 8,
     borderWidth: 1, borderColor: '#E5E7EB',
     fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   saveBtn: {
     backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 10,
     borderRadius: 8, minWidth: 56, alignItems: 'center',
   },
+  saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
   cancelBtn: { padding: 8 },
+
+  feedbackBody: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16 },
+  feedbackHint: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 10, lineHeight: 18 },
+  feedbackInput: {
+    minHeight: 90, maxHeight: 160, paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#F9FAFB', borderRadius: 8,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
+  },
+  feedbackFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  feedbackCharCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
 });

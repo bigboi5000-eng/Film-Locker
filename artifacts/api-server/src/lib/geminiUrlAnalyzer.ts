@@ -28,6 +28,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { GeminiExtractionResult } from "./geminiParser";
+import { GEMINI_MODEL } from "./geminiModel";
 import { extractMoviesWithGemini } from "./geminiParser";
 
 let _client: GoogleGenAI | null = null;
@@ -75,7 +76,7 @@ async function fetchUrlDescription(url: string): Promise<string | null> {
     `If NOT_FOUND, write nothing else.`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: GEMINI_MODEL,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       // Google Search grounding lets Gemini look up what this URL is about

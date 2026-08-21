@@ -37,6 +37,7 @@ import {
 } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
+import { webInputReset } from '@/lib/webInputReset';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -45,6 +46,14 @@ interface ShareFilmSheetProps {
   /** Suggested playlist name when the share was a curated/ranked list, e.g. "Top 10 Horror Films of All Time" */
   listTitle?: string | null;
   onClose: () => void;
+  /**
+   * Exit the app after the user is done — correct for the Android share-intent
+   * flow, which should return to whatever app the user shared from. Pass
+   * false when the sheet is opened from inside Film Locker itself (e.g. the
+   * watchlist screen's paste-link box), where "done" should just dismiss the
+   * sheet. Defaults to true to preserve the share-intent behavior.
+   */
+  exitAppOnReturn?: boolean;
 }
 
 const CONFIDENCE_THRESHOLD = 0.45;
@@ -307,7 +316,6 @@ function BulkAddPanel({
   const alsoAddToWatchlist = mode === 'both';
 
   const [newName, setNewName] = useState(initialName ?? '');
-  const [showNewInput, setShowNewInput] = useState(Boolean(initialName));
   const [addingTo, setAddingTo] = useState<number | 'watchlist' | null>(mode === 'watchlist' ? 'watchlist' : null);
   const [done, setDone] = useState(false);
 
@@ -435,63 +443,58 @@ function BulkAddPanel({
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
       <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
 
-      {/* Existing playlists */}
-      {playlists.map((pl) => (
-        <TouchableOpacity
-          key={pl.id}
-          style={ppStyles.plRow}
-          onPress={() => addAllToPlaylist(pl.id)}
-          disabled={addingTo !== null}
-          activeOpacity={0.75}
-        >
-          <View style={ppStyles.plIcon}>
-            <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
-          </View>
-          <View style={ppStyles.plInfo}>
-            <Text style={ppStyles.plName}>{pl.name}</Text>
-            <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
-          </View>
-          {addingTo === pl.id ? (
-            <ActivityIndicator size="small" color="#0066FF" />
-          ) : (
-            <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
-          )}
-        </TouchableOpacity>
-      ))}
+      {/* Existing playlists — tap to add the selected films straight in */}
+      {playlists.length > 0 && (
+        <>
+          <Text style={ppStyles.sectionLabel}>ADD TO EXISTING</Text>
+          {playlists.map((pl) => (
+            <TouchableOpacity
+              key={pl.id}
+              style={ppStyles.plRow}
+              onPress={() => addAllToPlaylist(pl.id)}
+              disabled={addingTo !== null}
+              activeOpacity={0.75}
+            >
+              <View style={ppStyles.plIcon}>
+                <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
+              </View>
+              <View style={ppStyles.plInfo}>
+                <Text style={ppStyles.plName}>{pl.name}</Text>
+                <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
+              </View>
+              {addingTo === pl.id ? (
+                <ActivityIndicator size="small" color="#0066FF" />
+              ) : (
+                <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
+              )}
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
 
-      {/* Create new */}
-      {showNewInput ? (
-        <View style={ppStyles.newRow}>
-          <TextInput
-            style={ppStyles.newInput}
-            value={newName}
-            onChangeText={setNewName}
-            placeholder="New playlist name…"
-            placeholderTextColor="#9CA3AF"
-            autoFocus
-            maxLength={100}
-            returnKeyType="done"
-            onSubmitEditing={handleCreateAndAdd}
-          />
-          <TouchableOpacity
-            style={ppStyles.newCreate}
-            onPress={handleCreateAndAdd}
-            disabled={!newName.trim() || creating || addingTo !== null}
-            activeOpacity={0.8}
-          >
-            {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
-          </TouchableOpacity>
-        </View>
-      ) : (
+      {/* Create new — always visible, prefilled from the detected list title
+          (e.g. "Best Feel Good Movies") when there is one, but always editable. */}
+      <Text style={ppStyles.sectionLabel}>{playlists.length > 0 ? 'OR CREATE NEW' : 'NEW PLAYLIST'}</Text>
+      <View style={ppStyles.newRow}>
+        <TextInput
+          style={ppStyles.newInput}
+          value={newName}
+          onChangeText={setNewName}
+          placeholder="New playlist name…"
+          placeholderTextColor="#9CA3AF"
+          maxLength={100}
+          returnKeyType="done"
+          onSubmitEditing={handleCreateAndAdd}
+        />
         <TouchableOpacity
-          style={ppStyles.newBtn}
-          onPress={() => setShowNewInput(true)}
+          style={ppStyles.newCreate}
+          onPress={handleCreateAndAdd}
+          disabled={!newName.trim() || creating || addingTo !== null}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={18} color="#0066FF" style={{ marginRight: 6 }} />
-          <Text style={ppStyles.newBtnText}>Create new playlist</Text>
+          {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
-      )}
+      </View>
     </ScrollView>
   );
 }
@@ -508,13 +511,16 @@ const ppStyles = StyleSheet.create({
   plInfo: { flex: 1 },
   plName: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
   plCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
-  newBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
-  newBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
-  newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
+  sectionLabel: {
+    fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF',
+    letterSpacing: 0.8, marginTop: 16, marginBottom: 4,
+  },
+  newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   newInput: {
     flex: 1, height: 40, paddingHorizontal: 12,
     backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB',
     fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   newCreate: { backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
   newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
@@ -524,7 +530,7 @@ const ppStyles = StyleSheet.create({
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
-export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFilmSheetProps) {
+export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
   const colors = useColors();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [addedCount, setAddedCount] = useState(0);
@@ -536,7 +542,9 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
     (m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null
   );
 
-  const isMultiFilm = candidates.length > 1;
+  // 3+ films offer the playlist/watchlist/both picker; 1-2 use the simpler
+  // per-card "Add to Watchlist" flow below instead.
+  const isMultiFilm = candidates.length > 2;
   const selectedCandidates = candidates.filter((m) => selectedIds.has(String(m.tmdb_id)));
 
   useEffect(() => {
@@ -576,10 +584,15 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
 
   const handleReturn = useCallback(() => {
     onClose();
-    setTimeout(() => {
-      BackHandler.exitApp();
-    }, 200);
-  }, [onClose]);
+    if (exitAppOnReturn) {
+      setTimeout(() => {
+        BackHandler.exitApp();
+      }, 200);
+    }
+  }, [onClose, exitAppOnReturn]);
+
+  const doneLabel = exitAppOnReturn ? 'Return to previous app' : 'Done';
+  const skipLabel = exitAppOnReturn ? 'Return without adding' : 'Close';
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
@@ -656,7 +669,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                   >
                     <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
                     <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
-                      Return without adding
+                      {skipLabel}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -753,7 +766,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                       activeOpacity={0.85}
                     >
                       <Ionicons name="arrow-back" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.returnBtnText}>Return to previous app</Text>
+                      <Text style={styles.returnBtnText}>{doneLabel}</Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
@@ -763,7 +776,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                     >
                       <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
                       <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
-                        Return without adding
+                        {skipLabel}
                       </Text>
                     </TouchableOpacity>
                   )}

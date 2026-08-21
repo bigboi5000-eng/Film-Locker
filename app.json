@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "928f493b-e2c3-4de7-837d-857a074850f5"
+      }
+    },
+    "android": {
+      "package": "com.jake.tanner.workspace"
+    }
+  }
+}

@@ -21,6 +21,10 @@ export const HealthCheckResponse = zod.object({
  * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
 
  */
+export const GetRecommendationsQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
+})
+
 export const GetRecommendationsResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
@@ -28,7 +32,17 @@ export const GetRecommendationsResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -36,6 +50,10 @@ export const GetRecommendationsResponse = zod.object({
 /**
  * @summary Fetch trending movies this week from TMDB
  */
+export const GetTrendingQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
+})
+
 export const GetTrendingResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
@@ -43,7 +61,17 @@ export const GetTrendingResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -51,6 +79,10 @@ export const GetTrendingResponse = zod.object({
 /**
  * @summary Fetch movies currently in theatres from TMDB
  */
+export const GetNewReleasesQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code. Controls both which country\'s \"now playing\" list is used and which country\'s watch providers are returned. Defaults to US when omitted or invalid.\n')
+})
+
 export const GetNewReleasesResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
@@ -58,7 +90,17 @@ export const GetNewReleasesResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -80,7 +122,17 @@ export const SearchMoviesResponse = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
-  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids')
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional()
 }))
 })
 
@@ -123,7 +175,8 @@ export const AiExtractResponse = zod.object({
   "tmdb_id": zod.number().nullish(),
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
-  "overview": zod.string().nullish()
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -174,7 +227,8 @@ export const ProcessSocialLinkResponse = zod.object({
   "tmdb_id": zod.number().nullish(),
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
-  "overview": zod.string().nullish()
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -204,11 +258,67 @@ export const ProcessSocialLinkResponse = zod.object({
 
 
 /**
+ * @summary Ask Gemini for film/TV recommendations from a natural-language query (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre"), enrich each with TMDB data, and optionally save to the locker. Strictly scoped to film/TV requests — Gemini is instructed to refuse anything else, surfaced as offTopic=true with no matches.
+
+ */
+export const RecommendMoviesBody = zod.object({
+  "query": zod.string().describe('Natural-language film\/TV request, e.g. \"recommend a 90 minute horror film similar to Texas Chainsaw Massacre\".\n'),
+  "dryRun": zod.boolean().optional().describe('When true, identify recommended films but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film.\n')
+})
+
+export const recommendMoviesResponseSavedItemRatingMax = 5;
+
+
+
+export const RecommendMoviesResponse = zod.object({
+  "offTopic": zod.boolean().describe('True when the query wasn\'t a film\/TV request and Gemini refused to answer it — matches will be empty in this case.\n'),
+  "matches": zod.array(zod.object({
+  "movie_title": zod.string(),
+  "release_year": zod.string(),
+  "confidence_score": zod.number(),
+  "tmdb_id": zod.number().nullish(),
+  "poster_url": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
+}).describe('Single movie reference extracted by Gemini, with confidence score')),
+  "saved": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})),
+  "rating": zod.number().min(1).max(recommendMoviesResponseSavedItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+})),
+  "listTitle": zod.string().nullable().describe('Suggested playlist name when the recommendation is a themed set of multiple films (e.g. \"90s Feel-Good Comedies\"), null for a single recommendation.\n')
+})
+
+
+/**
  * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
 
  */
 export const GetMovieDetailsParams = zod.object({
   "tmdbId": zod.coerce.number()
+})
+
+export const GetMovieDetailsQueryParams = zod.object({
+  "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
 })
 
 export const GetMovieDetailsResponse = zod.object({
@@ -227,7 +337,9 @@ export const GetMovieDetailsResponse = zod.object({
   "logo_url": zod.string(),
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
-}))
+})),
+  "tmdbRating": zod.number().nullable().describe('TMDB\'s own aggregate user rating (0-10), null if the film has no votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to either; this is TMDB\'s own users\' average.\n'),
+  "tmdbVoteCount": zod.number()
 })
 
 
@@ -534,6 +646,7 @@ export const GetNotificationsResponse = zod.object({
   "id": zod.number(),
   "fromUserId": zod.string().describe('Clerk user ID of the sender'),
   "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromDisplayInitials": zod.string().nullish(),
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
@@ -562,6 +675,7 @@ export const SendNotificationResponse = zod.object({
   "id": zod.number(),
   "fromUserId": zod.string().describe('Clerk user ID of the sender'),
   "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromDisplayInitials": zod.string().nullish(),
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
@@ -581,6 +695,7 @@ export const GetNotificationUsersResponse = zod.object({
   "users": zod.array(zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
   "avatarUrl": zod.string().nullish()
 }))
 })
@@ -597,6 +712,7 @@ export const MarkNotificationReadResponse = zod.object({
   "id": zod.number(),
   "fromUserId": zod.string().describe('Clerk user ID of the sender'),
   "fromUsername": zod.string().nullish().describe('Display username of the sender'),
+  "fromDisplayInitials": zod.string().nullish(),
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
@@ -610,29 +726,8 @@ export const MarkNotificationReadResponse = zod.object({
 
 
 /**
- * @summary Set an emoji or text reaction on a received notification
- */
-export const ReactToNotificationParams = zod.object({
-  "id": zod.coerce.number()
-})
+ * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
 
-export const reactToNotificationBodyReactionMax = 20;
-
-
-
-export const ReactToNotificationBody = zod.object({
-  "reaction": zod.string().max(reactToNotificationBodyReactionMax).describe('Emoji or predefined text e.g. \"Watched it!\"')
-})
-
-export const ReactToNotificationResponse = zod.object({
-  "id": zod.number(),
-  "reaction": zod.string().nullish(),
-  "reactedAt": zod.coerce.date().nullish()
-})
-
-
-/**
- * @summary All recommendations from a specific user to the authenticated user
  */
 export const GetNotificationThreadParams = zod.object({
   "userId": zod.coerce.string()
@@ -642,23 +737,53 @@ export const GetNotificationThreadResponse = zod.object({
   "sender": zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
   "avatarUrl": zod.string().nullish()
 }).nullish(),
-  "notifications": zod.array(zod.object({
+  "feed": zod.array(zod.object({
+  "type": zod.enum(['recommendation', 'message']),
   "id": zod.number(),
-  "fromUserId": zod.string().describe('Clerk user ID of the sender'),
-  "fromUsername": zod.string().nullish().describe('Display username of the sender'),
-  "fromAvatarUrl": zod.string().nullish(),
-  "toUserId": zod.string().describe('Clerk user ID of the recipient'),
-  "tmdbId": zod.number(),
-  "filmTitle": zod.string(),
-  "posterUrl": zod.string(),
-  "isRead": zod.boolean(),
-  "reaction": zod.string().nullish().describe('Emoji or \"Watched it!\" set by the recipient'),
-  "reactedAt": zod.coerce.date().nullish(),
-  "createdAt": zod.coerce.date()
-}))
+  "fromUserId": zod.string(),
+  "toUserId": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "tmdbId": zod.number().nullish(),
+  "filmTitle": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "isRead": zod.boolean().nullish(),
+  "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
+  "replyToNotificationId": zod.number().nullish(),
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
+}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n'))
 })
+
+
+/**
+ * @summary Send a reaction/message to a user from the fixed vocabulary — either a reply to a specific film recommendation (replyToNotificationId) or a standalone message. Allowed regardless of whether a recommendation exists, as long as a follow relationship exists in either direction.
+
+ */
+export const SendConversationMessageParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const SendConversationMessageBody = zod.object({
+  "content": zod.enum(['❤️', '😂', '😍', '😭', '🤪', '🤓', '🤯', '👍', '🤌', '👎', 'Watched it!', 'Fool of a Took!', 'Prestige Worldwide', 'I miss your whispering eye', 'Aim for the bushes', 'Read a f***ing book', 'I\'ll be back', 'Why so serious?', 'You can\'t handle the truth!', 'May the Force be with you', 'Here\'s looking at you, kid', 'You shall not pass!', 'I am Groot', 'Say hello to my little friend!', 'Life is like a box of chocolates', 'To infinity and beyond!', 'Nobody puts Baby in a corner', 'Great Scott!', 'What did you think?', 'Have you watched it yet?', 'This was great!', 'Thank you!', 'Not for me this one', 'Hey, why you so sweaty?', 'Watching Cops']).describe('A fixed set of emoji + movie-catchphrases + canned questions — deliberately not a freeform string. There is no freeform messaging in this app; this enum is enforced server-side (not just left to the client UI) so free text can never reach another user through it.\n'),
+  "replyToNotificationId": zod.number().nullish().describe('Targets a specific film recommendation (per-film React button or swipe-to-reply). Omit or set null for a standalone message.\n')
+})
+
+export const SendConversationMessageResponse = zod.object({
+  "type": zod.enum(['recommendation', 'message']),
+  "id": zod.number(),
+  "fromUserId": zod.string(),
+  "toUserId": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "tmdbId": zod.number().nullish(),
+  "filmTitle": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "isRead": zod.boolean().nullish(),
+  "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
+  "replyToNotificationId": zod.number().nullish(),
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
+}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n')
 
 
 /**
@@ -670,10 +795,16 @@ export const SyncUserBody = zod.object({
   "username": zod.string().nullish()
 })
 
+export const syncUserResponseDisplayInitialsMax = 5;
+
+
+
 export const SyncUserResponse = zod.object({
   "clerkId": zod.string(),
   "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(syncUserResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
+  "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -681,10 +812,16 @@ export const SyncUserResponse = zod.object({
 /**
  * @summary Get the authenticated user's own profile
  */
+export const getMeResponseDisplayInitialsMax = 5;
+
+
+
 export const GetMeResponse = zod.object({
   "clerkId": zod.string(),
   "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
+  "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
   "avatarUrl": zod.string().nullish()
 })
 
@@ -695,18 +832,35 @@ export const GetMeResponse = zod.object({
 export const updateMeBodyUsernameMin = 2;
 export const updateMeBodyUsernameMax = 30;
 
+export const updateMeBodyDisplayInitialsMax = 5;
+
 
 
 export const UpdateMeBody = zod.object({
-  "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional()
+  "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional(),
+  "displayInitials": zod.string().max(updateMeBodyDisplayInitialsMax).nullish().describe('Optional — set null\/empty to clear and fall back to username-derived initials'),
+  "isPrivate": zod.boolean().optional().describe('Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way.\n')
 })
+
+export const updateMeResponseDisplayInitialsMax = 5;
+
+
 
 export const UpdateMeResponse = zod.object({
   "clerkId": zod.string(),
   "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(updateMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
+  "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
   "avatarUrl": zod.string().nullish()
 })
+
+
+/**
+ * @summary Permanently delete the authenticated user's Film Locker data — their locker, comments, ratings, notifications, messages, follows, playlists, and feedback. Call this before deleting the Clerk identity itself; it does not touch Clerk.
+
+ */
+export const DeleteMeResponse = zod.void()
 
 
 /**
@@ -720,53 +874,193 @@ export const SearchUsersQueryParams = zod.object({
   "q": zod.coerce.string().min(searchUsersQueryQMin)
 })
 
+export const searchUsersResponseUsersItemDisplayInitialsMax = 5;
+
+
+
 export const SearchUsersResponse = zod.object({
   "users": zod.array(zod.object({
   "clerkId": zod.string(),
-  "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(searchUsersResponseUsersItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
   "avatarUrl": zod.string().nullish()
-}))
+}).describe('Another user\'s public profile — never includes their email address.'))
 })
 
 
 /**
  * @summary Get the authenticated user's following and follower lists
  */
+export const getFollowsResponseFollowingItemDisplayInitialsMax = 5;
+
+export const getFollowsResponseFollowersItemDisplayInitialsMax = 5;
+
+export const getFollowsResponseIncomingRequestsItemDisplayInitialsMax = 5;
+
+export const getFollowsResponseOutgoingRequestsItemDisplayInitialsMax = 5;
+
+
+
 export const GetFollowsResponse = zod.object({
   "following": zod.array(zod.object({
   "clerkId": zod.string(),
-  "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseFollowingItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
   "avatarUrl": zod.string().nullish()
-})).describe('Users that the authenticated user follows'),
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Users the authenticated user follows (accepted only)'),
   "followers": zod.array(zod.object({
   "clerkId": zod.string(),
-  "email": zod.string(),
   "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseFollowersItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
   "avatarUrl": zod.string().nullish()
-})).describe('Users that follow the authenticated user')
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Users that follow the authenticated user (accepted only)'),
+  "incomingRequests": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseIncomingRequestsItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Pending follow requests sent TO the authenticated user, awaiting their accept\/decline'),
+  "outgoingRequests": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getFollowsResponseOutgoingRequestsItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.')).describe('Pending follow requests the authenticated user has sent, awaiting the other person\'s approval')
 })
 
 
 /**
- * @summary Follow another user
+ * @summary Follow another user. Accepted immediately if they're public; creates a pending follow request if they're private.
+
  */
 export const FollowUserBody = zod.object({
   "followeeId": zod.string().describe('Clerk user ID of the user to follow')
 })
 
-export const FollowUserResponse = zod.void()
+export const FollowUserResponse = zod.object({
+  "followerId": zod.string(),
+  "followeeId": zod.string(),
+  "status": zod.enum(['pending', 'accepted'])
+})
 
 
 /**
- * @summary Unfollow a user
+ * @summary Unfollow a user, or cancel an outgoing follow request you sent them
  */
 export const UnfollowUserParams = zod.object({
   "userId": zod.coerce.string()
 })
 
 export const UnfollowUserResponse = zod.void()
+
+
+/**
+ * @summary Accept an incoming follow request from userId
+ */
+export const AcceptFollowRequestParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const AcceptFollowRequestResponse = zod.object({
+  "followerId": zod.string(),
+  "followeeId": zod.string(),
+  "status": zod.enum(['pending', 'accepted'])
+})
+
+
+/**
+ * @summary Decline an incoming pending follow request from userId
+ */
+export const DeclineFollowRequestParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const DeclineFollowRequestResponse = zod.void()
+
+
+/**
+ * @summary Send feedback from the account management page. Always saved to the database first; a notification email is best-effort on top of that.
+
+ */
+export const submitFeedbackBodyMessageMax = 2000;
+
+
+
+export const SubmitFeedbackBody = zod.object({
+  "message": zod.string().min(1).max(submitFeedbackBodyMessageMax)
+})
+
+export const SubmitFeedbackResponse = zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List users the authenticated user has blocked
+ */
+export const getBlocksResponseBlockedItemDisplayInitialsMax = 5;
+
+
+
+export const GetBlocksResponse = zod.object({
+  "blocked": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getBlocksResponseBlockedItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.'))
+})
+
+
+/**
+ * @summary Block a user. Also removes any existing follow relationship between the two people, in either direction (including a still-pending request).
+
+ */
+export const BlockUserBody = zod.object({
+  "blockedId": zod.string().describe('Clerk user ID of the user to block')
+})
+
+export const BlockUserResponse = zod.object({
+  "blockerId": zod.string(),
+  "blockedId": zod.string()
+})
+
+
+/**
+ * @summary Unblock a user
+ */
+export const UnblockUserParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const UnblockUserResponse = zod.void()
+
+
+/**
+ * @summary Report a user, optionally about a specific comment. Always saved to the database first; a notification email is best-effort on top of that — there's no in-app moderation queue yet.
+
+ */
+export const submitReportBodyReasonMax = 1000;
+
+
+
+export const SubmitReportBody = zod.object({
+  "reportedUserId": zod.string().describe('Clerk user ID of the user being reported'),
+  "reason": zod.string().min(1).max(submitReportBodyReasonMax),
+  "commentId": zod.number().nullish().describe('If reporting a specific comment')
+})
+
+export const SubmitReportResponse = zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date()
+})
 
 
 /**
