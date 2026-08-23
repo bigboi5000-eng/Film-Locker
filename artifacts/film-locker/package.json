@@ -63,6 +63,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "expo-build-properties": "^1.0.10",
     "expo-localization": "~17.0.9",
     "expo-notifications": "^0.32.17",
     "react-native-receive-sharing-intent": "^2.0.0"
