@@ -10,7 +10,7 @@
       },
       "ios": {},
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "workspaceapi-server-production-43de.up.railway.app"
       }
     },
     "production": {
@@ -19,7 +19,7 @@
       },
       "ios": {},
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "film-locker.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "workspaceapi-server-production-43de.up.railway.app"
       }
     }
   },
