@@ -5,7 +5,7 @@
  * Displays each identified film with poster/title, lets the user tap
  * "Add to Watchlist", and offers a "Return to [app]" action once done.
  */
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,6 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Animated,
   Dimensions,
   Platform,
   BackHandler,
@@ -532,7 +531,6 @@ const ppStyles = StyleSheet.create({
 
 export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
   const colors = useColors();
-  const slideAnim = useRef(new Animated.Value(0)).current;
   const [addedCount, setAddedCount] = useState(0);
   const [multiMode, setMultiMode] = useState<BulkAddMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -546,15 +544,6 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
   // per-card "Add to Watchlist" flow below instead.
   const isMultiFilm = candidates.length > 2;
   const selectedCandidates = candidates.filter((m) => selectedIds.has(String(m.tmdb_id)));
-
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: visible ? 1 : 0,
-      useNativeDriver: true,
-      tension: 60,
-      friction: 11,
-    }).start();
-  }, [visible, slideAnim]);
 
   // Reset state when sheet opens for a new share — default selection is "all".
   useEffect(() => {
@@ -594,11 +583,6 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
   const doneLabel = exitAppOnReturn ? 'Return to previous app' : 'Done';
   const skipLabel = exitAppOnReturn ? 'Return without adding' : 'Close';
 
-  const translateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [SCREEN_H, 0],
-  });
-
   const allAdded = candidates.length > 0 && addedCount >= candidates.length;
 
   // Derive header text
@@ -610,14 +594,13 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
     : 'Gemini could not identify a film in this post';
 
   return (
-    <Modal transparent visible={visible} onRequestClose={onClose} animationType="none">
+    <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide">
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
-        <Animated.View
+        <View
           style={[
             styles.sheet,
             {
               backgroundColor: colors.background,
-              transform: [{ translateY }],
               paddingBottom: Platform.OS === 'ios' ? 34 : 20,
             },
           ]}
@@ -785,7 +768,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
             )}
 
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </TouchableOpacity>
     </Modal>
   );
