@@ -991,6 +991,7 @@ export function FilmDetailModal({
   const { mutateAsync: patchWatched, isPending: isWatchingPending } = usePatchWatched();
   const { mutateAsync: patchRating, isPending: isRatingPending } = usePatchRating();
   const { mutateAsync: addMovie, isPending: isAddingPending } = useAddMovie();
+  const { showToast } = useToast();
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
@@ -1042,6 +1043,12 @@ export function FilmDetailModal({
     }
   }, [savedMovie, currentWatched, patchWatched, invalidate]);
 
+  const handleClose = useCallback(() => {
+    setOptimisticRating(undefined);
+    setOptimisticWatched(undefined);
+    onClose();
+  }, [onClose]);
+
   const handleAddToWatchlist = useCallback(async () => {
     try {
       await addMovie({
@@ -1055,17 +1062,12 @@ export function FilmDetailModal({
       });
       await invalidate();
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Added!', `"${title}" has been added to your Watchlist.`);
+      showToast({ title: 'Added to Watchlist', subtitle: `"${title}" is now in your watchlist.`, variant: 'success' });
+      handleClose();
     } catch {
-      Alert.alert('Error', 'Could not add this film to your Watchlist.');
+      showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
     }
-  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate]);
-
-  const handleClose = useCallback(() => {
-    setOptimisticRating(undefined);
-    setOptimisticWatched(undefined);
-    onClose();
-  }, [onClose]);
+  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose]);
 
   return (
     <Modal

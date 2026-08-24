@@ -80,7 +80,7 @@ export default function TabLayout() {
   if (!isLoaded) return null;
 
   // Not signed in → send to auth screens
-  if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
+  if (!isSignedIn) return <Redirect href="/(auth)/welcome" />;
 
   return (
     <Tabs
