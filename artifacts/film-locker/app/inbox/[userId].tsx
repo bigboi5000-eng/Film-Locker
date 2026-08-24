@@ -298,7 +298,7 @@ function RecommendationCard({
   onAddToWatchlist: (item: ConversationFeedItem) => void;
 }) {
   return (
-    <View style={styles.filmCard}>
+    <View style={[styles.filmCard, isMine ? styles.filmCardMine : styles.filmCardTheirs]}>
       <Image source={{ uri: item.posterUrl! }} style={styles.poster} contentFit="cover" transition={200} />
       <View style={styles.filmInfo}>
         <Text style={styles.filmMeta}>{isMine ? 'You recommended' : 'Recommended'}</Text>
@@ -606,7 +606,10 @@ const styles = StyleSheet.create({
   filmCard: {
     flexDirection: 'row', gap: 14,
     backgroundColor: '#FFF', paddingVertical: 12,
+    maxWidth: '85%',
   },
+  filmCardMine: { alignSelf: 'flex-end' },
+  filmCardTheirs: { alignSelf: 'flex-start' },
   poster: { width: 80, height: 120, borderRadius: 8, flexShrink: 0 },
   filmInfo: { flex: 1 },
   filmMeta: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
