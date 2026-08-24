@@ -26,7 +26,9 @@ import {
   useListMovies,
   useGetMyPlaylists,
   useCreatePlaylist,
+  useGetMe,
   getGetMyPlaylistsQueryKey,
+  getGetMeQueryKey,
   type TmdbMovieCard,
   type Playlist,
 } from '@workspace/api-client-react';
@@ -277,9 +279,11 @@ export default function HomeScreen() {
     ? lockerData?.movies.find((m) => m.tmdbId === selectedMovie.tmdbId)
     : undefined;
 
-  // Avatar for profile button
+  // Avatar for profile button — a set displayInitials takes priority over
+  // Clerk's own avatar image, so the button reflects what the user chose.
+  const { data: profile } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
   const avatarUrl = user?.imageUrl;
-  const initials = ((user?.username ?? user?.firstName ?? 'U').slice(0, 2)).toUpperCase();
+  const displayInitials = profile?.displayInitials || null;
 
   const handleRefresh = useCallback(() => {
     refetchTrending();
@@ -326,10 +330,12 @@ export default function HomeScreen() {
             onPress={() => router.push('/profile')}
             activeOpacity={0.8}
           >
-            {avatarUrl ? (
+            {displayInitials ? (
+              <Text style={styles.profileInitials}>{displayInitials}</Text>
+            ) : avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.profileAvatar} contentFit="cover" />
             ) : (
-              <Text style={styles.profileInitials}>{initials}</Text>
+              <Ionicons name="person" size={18} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>

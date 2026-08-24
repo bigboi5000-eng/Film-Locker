@@ -240,6 +240,8 @@ export interface FilmComment {
   updatedAt: string;
   /** True when the authenticated user authored this comment */
   isOwn: boolean;
+  /** The author's own community star rating (1-5) for this film, if they've left one */
+  rating: number | null;
 }
 
 export interface FilmCommentsResponse {
@@ -423,7 +425,7 @@ export interface UpdateMeBody {
   username?: string;
   /**
      * Optional — set null/empty to clear and fall back to username-derived initials
-     * @maxLength 5
+     * @maxLength 3
      */
   displayInitials?: string | null;
   /** Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way. */

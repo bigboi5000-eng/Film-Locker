@@ -421,6 +421,16 @@ export default function InboxThreadScreen() {
     query: { queryKey: getGetNotificationThreadQueryKey(userId!), enabled: !!userId },
   });
 
+  // Loading this thread marks its messages/recommendations as read on the
+  // server as a side effect — refresh the bell-badge query once so the
+  // unread count clears immediately instead of waiting for its next poll.
+  const readInvalidatedRef = useRef(false);
+  useEffect(() => {
+    if (!data || readInvalidatedRef.current) return;
+    readInvalidatedRef.current = true;
+    void queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+  }, [data, queryClient]);
+
   const { mutateAsync: sendMessage } = useSendConversationMessage();
   const { mutateAsync: addMovie } = useAddMovie();
 

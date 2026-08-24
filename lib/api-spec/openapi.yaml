@@ -1604,6 +1604,10 @@ components:
         isOwn:
           type: boolean
           description: True when the authenticated user authored this comment
+        rating:
+          type: integer
+          nullable: true
+          description: The author's own community star rating (1-5) for this film, if they've left one
       required:
         - id
         - tmdbId
@@ -1612,6 +1616,7 @@ components:
         - createdAt
         - updatedAt
         - isOwn
+        - rating
 
     FilmCommentsResponse:
       type: object
@@ -1943,7 +1948,7 @@ components:
         displayInitials:
           type: string
           nullable: true
-          maxLength: 5
+          maxLength: 3
           description: Optional — set null/empty to clear and fall back to username-derived initials
         isPrivate:
           type: boolean

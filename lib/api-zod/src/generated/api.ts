@@ -582,7 +582,8 @@ export const GetFilmCommentsResponse = zod.object({
   "body": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "isOwn": zod.boolean().describe('True when the authenticated user authored this comment')
+  "isOwn": zod.boolean().describe('True when the authenticated user authored this comment'),
+  "rating": zod.number().nullable().describe('The author\'s own community star rating (1-5) for this film, if they\'ve left one')
 })),
   "page": zod.number(),
   "hasMore": zod.boolean()
@@ -613,7 +614,8 @@ export const PostFilmCommentResponse = zod.object({
   "body": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "isOwn": zod.boolean().describe('True when the authenticated user authored this comment')
+  "isOwn": zod.boolean().describe('True when the authenticated user authored this comment'),
+  "rating": zod.number().nullable().describe('The author\'s own community star rating (1-5) for this film, if they\'ve left one')
 })
 
 
@@ -832,7 +834,7 @@ export const GetMeResponse = zod.object({
 export const updateMeBodyUsernameMin = 2;
 export const updateMeBodyUsernameMax = 30;
 
-export const updateMeBodyDisplayInitialsMax = 5;
+export const updateMeBodyDisplayInitialsMax = 3;
 
 
 

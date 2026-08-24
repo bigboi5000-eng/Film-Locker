@@ -261,6 +261,18 @@ function CommentRow({
           <Text style={commentStyles.username}>
             {comment.username ?? 'Anonymous'}
           </Text>
+          {comment.rating != null && (
+            <View style={commentStyles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Ionicons
+                  key={n}
+                  name={comment.rating! >= n ? 'star' : 'star-outline'}
+                  size={11}
+                  color="#FF8C00"
+                />
+              ))}
+            </View>
+          )}
           <Text style={commentStyles.time}>{timeAgo}</Text>
           {comment.isOwn ? (
             <TouchableOpacity
@@ -402,8 +414,9 @@ const commentStyles = StyleSheet.create({
   avatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
   avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
   username: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  ratingRow: { flexDirection: 'row', gap: 1 },
   time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
   deleteBtn: { marginLeft: 'auto' },
   body: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#374151', lineHeight: 20 },
@@ -1073,7 +1086,7 @@ export function FilmDetailModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
       onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
@@ -1082,7 +1095,7 @@ export function FilmDetailModal({
       >
         <View style={[styles.root, { paddingTop: insets.top }]}>
           {/* Close button */}
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+          <TouchableOpacity style={styles.closeBtn} onPress={handleClose} hitSlop={12}>
             <Ionicons name="close" size={22} color="#111827" />
           </TouchableOpacity>
 

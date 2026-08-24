@@ -127,7 +127,7 @@ export default function ProfileScreen() {
   }, [profile?.displayInitials]);
 
   const handleSaveInitials = useCallback(async () => {
-    const trimmed = initialsInput.trim().toUpperCase();
+    const trimmed = initialsInput.trim().toUpperCase().slice(0, 3);
     try {
       await updateMe({ data: { displayInitials: trimmed.length > 0 ? trimmed : null } });
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
@@ -259,13 +259,13 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.textInput}
                 value={initialsInput}
-                onChangeText={(t) => setInitialsInput(t.slice(0, 5))}
-                placeholder="e.g. JPLT"
+                onChangeText={(t) => setInitialsInput(t.slice(0, 3))}
+                placeholder="e.g. JPT"
                 placeholderTextColor="#9CA3AF"
                 autoFocus
                 autoCapitalize="characters"
                 autoCorrect={false}
-                maxLength={5}
+                maxLength={3}
               />
               <TouchableOpacity
                 style={styles.saveBtn}

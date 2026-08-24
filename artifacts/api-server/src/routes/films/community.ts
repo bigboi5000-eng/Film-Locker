@@ -139,7 +139,9 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
 
   const clerkUserId: string | undefined = getAuth(req)?.userId ?? undefined;
 
-  // Fetch comments with user profile join
+  // Fetch comments with user profile join, plus that author's own community
+  // rating for this film (if they've left one) so it can show alongside
+  // their comment.
   const rows = await db
     .select({
       id: filmCommentsTable.id,
@@ -151,9 +153,17 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
       username: usersTable.username,
       avatarUrl: usersTable.avatarUrl,
       isPrivate: usersTable.isPrivate,
+      rating: filmCommunityRatingsTable.rating,
     })
     .from(filmCommentsTable)
     .leftJoin(usersTable, eq(filmCommentsTable.userId, usersTable.clerkId))
+    .leftJoin(
+      filmCommunityRatingsTable,
+      and(
+        eq(filmCommunityRatingsTable.tmdbId, filmCommentsTable.tmdbId),
+        eq(filmCommunityRatingsTable.userId, filmCommentsTable.userId)
+      )
+    )
     .where(eq(filmCommentsTable.tmdbId, tmdbId))
     .orderBy(desc(filmCommentsTable.createdAt))
     .limit(PAGE_SIZE + 1)
@@ -201,6 +211,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       isOwn: clerkUserId ? r.userId === clerkUserId : false,
+      rating: r.rating ?? null,
     }));
 
   res.json(GetFilmCommentsResponse.parse({ comments, page, hasMore }));
@@ -229,11 +240,21 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
     .values({ userId: clerkUserId, tmdbId, body: body.data.body })
     .returning();
 
-  // Look up user profile for the response
+  // Look up user profile and their own community rating for this film, for the response
   const [user] = await db
     .select({ username: usersTable.username, avatarUrl: usersTable.avatarUrl })
     .from(usersTable)
     .where(eq(usersTable.clerkId, clerkUserId));
+
+  const [ratingRow] = await db
+    .select({ rating: filmCommunityRatingsTable.rating })
+    .from(filmCommunityRatingsTable)
+    .where(
+      and(
+        eq(filmCommunityRatingsTable.tmdbId, tmdbId),
+        eq(filmCommunityRatingsTable.userId, clerkUserId)
+      )
+    );
 
   res.status(201).json(
     PostFilmCommentResponse.parse({
@@ -246,6 +267,7 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
       createdAt: inserted.createdAt,
       updatedAt: inserted.updatedAt,
       isOwn: true,
+      rating: ratingRow?.rating ?? null,
     })
   );
 });
