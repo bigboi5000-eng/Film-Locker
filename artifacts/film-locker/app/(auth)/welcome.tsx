@@ -211,7 +211,7 @@ export default function WelcomeScreen() {
         </View>
 
         <TouchableOpacity style={styles.cta} onPress={handleGetStarted} activeOpacity={0.85}>
-          <Text style={styles.ctaText}>Get Started</Text>
+          <Text style={styles.ctaText}>Aim for the bushes!</Text>
           <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
         </TouchableOpacity>
       </View>
