@@ -631,7 +631,25 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
 
   return (
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
+      {/*
+        Two-layer overlay/backdrop, matching the sheet pattern already used
+        elsewhere in this app (app/(tabs)/index.tsx, app/playlist/[id].tsx,
+        FilmDetailModal's report sheet, ShareToFriendSheet). The dim backdrop
+        is an absolutely-positioned SIBLING of the sheet, not a flex:1
+        wrapper around it — a transparent Android Modal's native root
+        doesn't reliably report a definite size to Yoga, so folding the
+        background color and tap-to-close handler into the same flex:1 node
+        that also sized the sheet (the previous structure here) could
+        resolve the sheet to zero height. Combined with `sheet`'s
+        overflow:'hidden' below, a zero-height resolution wouldn't just
+        squash the content, it would clip it away entirely — leaving only
+        the dim backdrop with nothing on top of it. Because the backdrop is
+        now a sibling rather than a parent, the sheet's own content no
+        longer needs an inner tap-swallowing wrapper either — taps on it
+        simply don't land on the separate backdrop element.
+      */}
+      <View style={styles.overlay}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         <View
           style={[
             styles.sheet,
@@ -641,9 +659,6 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
             },
           ]}
         >
-          {/* Prevent inner taps from closing the sheet */}
-          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }}>
-
             {/* Handle bar */}
             <View style={styles.handleContainer}>
               <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -808,19 +823,24 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
               </>
             )}
             </ErrorBoundary>
-
-          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  // overlay lays the sheet out (flex:1, bottom-aligned); backdrop is an
+  // absolutely-positioned sibling that only paints the dim tint and handles
+  // tap-to-close. See the comment above this component's return for why
+  // these are split rather than merged into one flex:1 node.
+  overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
     maxHeight: SCREEN_H * 0.85,
