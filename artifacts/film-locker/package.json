@@ -66,6 +66,6 @@
     "expo-build-properties": "^1.0.10",
     "expo-localization": "~17.0.9",
     "expo-notifications": "^0.32.17",
-    "react-native-receive-sharing-intent": "^2.0.0"
+    "expo-share-intent": "^5.1.1"
   }
 }

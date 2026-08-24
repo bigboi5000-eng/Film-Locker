@@ -6,6 +6,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { ShareIntentProvider } from 'expo-share-intent';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -142,24 +143,26 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <SafeAreaProvider>
-          <ErrorBoundary>
-            <QueryClientProvider client={queryClient}>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <ToastProvider>
-                  <KeyboardProvider>
-                    <PushNotificationManager />
-                    <RootLayoutNav />
-                    <ShareIntentHandler />
-                  </KeyboardProvider>
-                </ToastProvider>
-              </GestureHandlerRootView>
-            </QueryClientProvider>
-          </ErrorBoundary>
-        </SafeAreaProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <ShareIntentProvider>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <SafeAreaProvider>
+            <ErrorBoundary>
+              <QueryClientProvider client={queryClient}>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <ToastProvider>
+                    <KeyboardProvider>
+                      <PushNotificationManager />
+                      <RootLayoutNav />
+                      <ShareIntentHandler />
+                    </KeyboardProvider>
+                  </ToastProvider>
+                </GestureHandlerRootView>
+              </QueryClientProvider>
+            </ErrorBoundary>
+          </SafeAreaProvider>
+        </ClerkLoaded>
+      </ClerkProvider>
+    </ShareIntentProvider>
   );
 }

@@ -26,14 +26,7 @@
         "org.gradle.daemon": "false",
         "android.useAndroidX": "true",
         "android.enableJetifier": "true"
-      },
-      "intentFilters": [
-        {
-          "action": "SEND",
-          "data": [{ "mimeType": "text/plain" }],
-          "category": ["DEFAULT"]
-        }
-      ]
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -64,6 +57,13 @@
               "pickFirst": ["META-INF/versions/9/OSGI-INF/MANIFEST.MF"]
             }
           }
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "disableIOS": true,
+          "androidIntentFilters": ["text/*"]
         }
       ]
     ],
