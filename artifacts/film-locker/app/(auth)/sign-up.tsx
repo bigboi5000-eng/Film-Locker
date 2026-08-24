@@ -17,6 +17,7 @@ import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { webInputReset } from '@/lib/webInputReset';
+import { useToast } from '@/components/ToastProvider';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -34,6 +35,7 @@ export default function SignUpScreen() {
   const { isSignedIn } = useAuth();
   const { signUp, errors, fetchStatus } = useSignUp();
   const { startSSOFlow } = useSSO();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,9 +66,12 @@ export default function SignUpScreen() {
   const handleOAuth = useCallback(async (strategy: 'oauth_google' | 'oauth_apple') => {
     setOauthLoading(strategy === 'oauth_google' ? 'google' : 'apple');
     try {
+      // An explicit path makes the redirect URI more specific — Android's
+      // Custom Tabs sometimes report a false "dismiss" for a bare scheme
+      // redirect even after the OAuth provider actually completed.
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy,
-        redirectUrl: AuthSession.makeRedirectUri(),
+        redirectUrl: AuthSession.makeRedirectUri({ path: 'oauth-native-callback' }),
       });
       if (createdSessionId) {
         await setActive!({
@@ -76,13 +81,20 @@ export default function SignUpScreen() {
             router.replace('/(tabs)');
           },
         });
+      } else {
+        showToast({
+          title: 'Sign-in did not complete',
+          subtitle: 'Please try again.',
+          variant: 'error',
+        });
       }
     } catch (err) {
       console.error('OAuth error:', err);
+      showToast({ title: 'Sign-in failed', subtitle: 'Please try again.', variant: 'error' });
     } finally {
       setOauthLoading(null);
     }
-  }, [startSSOFlow, router]);
+  }, [startSSOFlow, router, showToast]);
 
   // Email verification step
   if (
