@@ -717,7 +717,9 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
               <>
                 {/* Selection checklist — every film defaults to selected */}
                 <ScrollView
-                  style={{ flex: 1 }}
+                  // flexShrink, not flex:1 — see the comment on the single-film
+                  // ScrollView below for why flex:1 collapses this to zero height.
+                  style={{ flexShrink: 1 }}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={false}
                 >
@@ -784,7 +786,17 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
               <>
                 {/* Single film — unchanged inline add-to-watchlist flow */}
                 <ScrollView
-                  style={{ flex: 1 }}
+                  // flexShrink (not flex:1 / flexGrow) — flex:1 sets
+                  // flexBasis:0, which contributes nothing to `sheet`'s
+                  // content-based auto-height when the sheet never grows
+                  // large enough to hit its maxHeight cap (e.g. a single
+                  // film card). That's the exact bug: header/footer (plain,
+                  // unflexed views) rendered fine while this collapsed to
+                  // zero height in between them. flexShrink keeps the
+                  // default content-based flexBasis, so short content sizes
+                  // correctly, while still shrinking to fit once a long
+                  // list (3+ films) pushes the sheet past its cap.
+                  style={{ flexShrink: 1 }}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={false}
                 >

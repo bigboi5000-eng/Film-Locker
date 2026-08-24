@@ -15,6 +15,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, Modal, ActivityIndicator, StyleSheet, Platform, Alert } from 'react-native';
 import { useShareIntentContext } from 'expo-share-intent';
+import { useRouter } from 'expo-router';
 import {
   useProcessSocialLink,
   type GeminiMovieMatch,
@@ -26,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export function ShareIntentHandler() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { mutateAsync: processLink } = useProcessSocialLink();
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
 
@@ -58,6 +60,11 @@ export function ShareIntentHandler() {
     // Deduplicate — the same intent can resurface on AppState resume.
     if (handledRef.current === url) return;
     handledRef.current = url;
+
+    // Sharing into the app should always land the user on the Watchlist tab
+    // (same place the in-app paste-link flow lives), not wherever the app
+    // happened to be showing when Android launched/resumed it.
+    router.replace('/(tabs)/watchlist');
 
     setIsPending(true);
 
