@@ -37,6 +37,7 @@ import {
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -527,6 +528,36 @@ const ppStyles = StyleSheet.create({
   doneText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
 });
 
+// ── Crash fallback ────────────────────────────────────────────────────────────
+// Renders inside the sheet if anything below throws during render, instead of
+// leaving the Modal's dark backdrop on screen with nothing on top of it (the
+// "grey screen, nothing happens" report). Surfaces the actual error message
+// on-screen so a report of this includes the real cause, not just a screenshot
+// of a blank overlay.
+
+function SheetCrashFallback({ error, onClose }: { error: Error; onClose: () => void }) {
+  return (
+    <View style={crashStyles.wrap}>
+      <Ionicons name="warning-outline" size={40} color="#DC2626" />
+      <Text style={crashStyles.title}>Couldn't show these results</Text>
+      <Text style={crashStyles.message} selectable>
+        {error.message || 'Unknown error'}
+      </Text>
+      <TouchableOpacity style={crashStyles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+        <Text style={crashStyles.closeBtnText}>Close</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const crashStyles = StyleSheet.create({
+  wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 10 },
+  title: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#111827', textAlign: 'center' },
+  message: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center' },
+  closeBtn: { marginTop: 8, backgroundColor: '#EF4444', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
+  closeBtnText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+});
+
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
 export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
@@ -534,6 +565,10 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
   const [addedCount, setAddedCount] = useState(0);
   const [multiMode, setMultiMode] = useState<BulkAddMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Bumped every time the sheet opens fresh — remounts the ErrorBoundary below
+  // so a crash on one share doesn't permanently wedge the fallback UI in place
+  // for every share after it.
+  const [openId, setOpenId] = useState(0);
 
   // Candidates are matches that passed confidence threshold and have a TMDB id
   const candidates = matches.filter(
@@ -550,6 +585,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
     if (visible) {
       setAddedCount(0);
       setMultiMode(null);
+      setOpenId((n) => n + 1);
       setSelectedIds(new Set(matches
         .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null)
         .map((m) => String(m.tmdb_id))
@@ -594,7 +630,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
     : 'Gemini could not identify a film in this post';
 
   return (
-    <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide">
+    <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
         <View
           style={[
@@ -624,7 +660,12 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
               </TouchableOpacity>
             </View>
 
-            {/* Content */}
+            {/* Content — wrapped so a render error shows a real message instead
+                of leaving the backdrop blank with nothing on top of it. */}
+            <ErrorBoundary
+              key={openId}
+              FallbackComponent={({ error }) => <SheetCrashFallback error={error} onClose={onClose} />}
+            >
             {multiMode !== null ? (
               /* Bulk add panel — acts on whatever was checked in the selection list */
               <BulkAddPanel
@@ -766,6 +807,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                 </View>
               </>
             )}
+            </ErrorBoundary>
 
           </TouchableOpacity>
         </View>
