@@ -38,6 +38,7 @@ import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -439,7 +440,7 @@ function BulkAddPanel({
   }
 
   return (
-    <ScrollView contentContainerStyle={ppStyles.root} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollViewCompat contentContainerStyle={ppStyles.root}>
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
       <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
 
@@ -495,7 +496,7 @@ function BulkAddPanel({
           {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollViewCompat>
   );
 }
 

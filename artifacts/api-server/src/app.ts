@@ -15,6 +15,14 @@ import { privacyPolicyHtml, termsOfServiceHtml } from "./lib/legalContent";
 
 const app: Express = express();
 
+// Railway sits the app behind a reverse proxy that sets X-Forwarded-For on
+// every request. Without this, Express's default trust-proxy setting (false)
+// makes express-rate-limit refuse to trust that header (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+// and fall back to req.ip resolving incorrectly — bucketing unrelated
+// requests together under the same rate-limit key instead of one per real
+// client IP. `1` trusts exactly one hop (Railway's own edge proxy).
+app.set("trust proxy", 1);
+
 // Public legal pages — deliberately outside /api and unauthenticated, so
 // they're plain reachable URLs (e.g. for the App Store Connect privacy
 // policy field) as well as links from inside the app.
