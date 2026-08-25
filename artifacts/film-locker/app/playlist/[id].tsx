@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Alert, ActivityIndicator, TextInput, Switch, Modal,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,35 +15,144 @@ import {
   useUpdatePlaylist,
   useDeletePlaylist,
   useRemovePlaylistItem,
+  useAddPlaylistItem,
+  useSearchMovies,
   useListMovies,
   getGetPlaylistQueryKey,
   getGetMyPlaylistsQueryKey,
+  getSearchMoviesQueryKey,
   type PlaylistItem,
   type Movie,
+  type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
 
+function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
+  playlistId: number;
+  existingTmdbIds: Set<number>;
+  onAdded: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [justAddedIds, setJustAddedIds] = useState<Set<number>>(new Set());
+  const [addingId, setAddingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data, isFetching } = useSearchMovies(
+    { q: debouncedQuery },
+    { query: { enabled: debouncedQuery.length >= 2, queryKey: getSearchMoviesQueryKey({ q: debouncedQuery }) } }
+  );
+  const { mutateAsync: addItem } = useAddPlaylistItem();
+  const results = data?.movies ?? [];
+
+  const handleAdd = useCallback(async (movie: TmdbMovieCard) => {
+    setAddingId(movie.tmdbId);
+    try {
+      await addItem({
+        id: playlistId,
+        data: { tmdbId: movie.tmdbId, filmTitle: movie.title, posterUrl: movie.posterUrl ?? '' },
+      });
+      setJustAddedIds((prev) => new Set(prev).add(movie.tmdbId));
+      onAdded();
+    } catch {
+      Alert.alert('Error', `Could not add "${movie.title}".`);
+    } finally {
+      setAddingId(null);
+    }
+  }, [addItem, playlistId, onAdded]);
+
+  return (
+    <View>
+      <Text style={editStyles.label}>Add Films</Text>
+      <View style={editStyles.searchRow}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <TextInput
+          style={editStyles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search for a film to add…"
+          placeholderTextColor="#9CA3AF"
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {isFetching ? (
+        <ActivityIndicator color="#0066FF" style={{ marginTop: 12 }} />
+      ) : debouncedQuery.length >= 2 && results.length === 0 ? (
+        <Text style={editStyles.searchEmptyText}>No films found for "{debouncedQuery}"</Text>
+      ) : (
+        results.map((movie) => {
+          const alreadyIn = existingTmdbIds.has(movie.tmdbId) || justAddedIds.has(movie.tmdbId);
+          return (
+            <View key={movie.tmdbId} style={editStyles.filmRow}>
+              {movie.posterUrl ? (
+                <Image source={{ uri: movie.posterUrl }} style={editStyles.filmPoster} contentFit="cover" />
+              ) : (
+                <View style={[editStyles.filmPoster, editStyles.filmPosterFallback]}>
+                  <Ionicons name="film-outline" size={16} color="#D1D5DB" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={editStyles.filmTitle} numberOfLines={1}>{movie.title}</Text>
+                {movie.releaseYear ? <Text style={editStyles.filmYear}>{movie.releaseYear}</Text> : null}
+              </View>
+              {alreadyIn ? (
+                <View style={editStyles.addedRow}>
+                  <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+                </View>
+              ) : addingId === movie.tmdbId ? (
+                <ActivityIndicator color="#0066FF" size="small" />
+              ) : (
+                <TouchableOpacity onPress={() => handleAdd(movie)} hitSlop={8}>
+                  <Ionicons name="add-circle-outline" size={26} color="#0066FF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+}
+
 function EditSheet({
   visible,
+  playlistId,
   initialName,
   initialDescription,
   initialIsPublic,
+  existingTmdbIds,
   onSave,
   onDelete,
   onClose,
+  onFilmAdded,
   saving,
 }: {
   visible: boolean;
+  playlistId: number;
   initialName: string;
   initialDescription: string | null | undefined;
   initialIsPublic: boolean;
+  existingTmdbIds: Set<number>;
   onSave: (data: { name: string; description: string | null; isPublic: boolean }) => void;
   onDelete: () => void;
   onClose: () => void;
+  onFilmAdded: () => void;
   saving: boolean;
 }) {
   const [name, setName] = useState(initialName);
@@ -55,60 +165,68 @@ function EditSheet({
         <TouchableOpacity style={editStyles.backdrop} onPress={onClose} activeOpacity={1} />
         <View style={editStyles.sheet}>
           <View style={editStyles.handle} />
-          <Text style={editStyles.title}>Edit Playlist</Text>
+          <KeyboardAwareScrollViewCompat contentContainerStyle={editStyles.scrollContent}>
+            <Text style={editStyles.title}>Edit Playlist</Text>
 
-          <Text style={editStyles.label}>Name</Text>
-          <TextInput
-            style={editStyles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Playlist name"
-            placeholderTextColor="#9CA3AF"
-            maxLength={100}
-          />
-
-          <Text style={editStyles.label}>Description</Text>
-          <TextInput
-            style={[editStyles.input, editStyles.inputMultiline]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Optional description…"
-            placeholderTextColor="#9CA3AF"
-            multiline
-            numberOfLines={3}
-            maxLength={300}
-          />
-
-          <View style={editStyles.toggleRow}>
-            <View>
-              <Text style={editStyles.toggleLabel}>Public playlist</Text>
-              <Text style={editStyles.toggleSub}>Anyone can search for and view this</Text>
-            </View>
-            <Switch
-              value={isPublic}
-              onValueChange={setIsPublic}
-              trackColor={{ true: '#0066FF', false: '#E5E7EB' }}
-              thumbColor="#FFF"
+            <Text style={editStyles.label}>Name</Text>
+            <TextInput
+              style={editStyles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Playlist name"
+              placeholderTextColor="#9CA3AF"
+              maxLength={100}
             />
-          </View>
 
-          <TouchableOpacity
-            style={editStyles.saveBtn}
-            onPress={() => onSave({ name: name.trim(), description: description.trim() || null, isPublic })}
-            disabled={saving || !name.trim()}
-            activeOpacity={0.8}
-          >
-            {saving ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={editStyles.saveBtnText}>Save Changes</Text>
-            )}
-          </TouchableOpacity>
+            <Text style={editStyles.label}>Description</Text>
+            <TextInput
+              style={[editStyles.input, editStyles.inputMultiline]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Optional description…"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={3}
+              maxLength={300}
+            />
 
-          <TouchableOpacity style={editStyles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
-            <Ionicons name="trash-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
-            <Text style={editStyles.deleteBtnText}>Delete Playlist</Text>
-          </TouchableOpacity>
+            <View style={editStyles.toggleRow}>
+              <View>
+                <Text style={editStyles.toggleLabel}>Public playlist</Text>
+                <Text style={editStyles.toggleSub}>Anyone can search for and view this</Text>
+              </View>
+              <Switch
+                value={isPublic}
+                onValueChange={setIsPublic}
+                trackColor={{ true: '#0066FF', false: '#E5E7EB' }}
+                thumbColor="#FFF"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={editStyles.saveBtn}
+              onPress={() => onSave({ name: name.trim(), description: description.trim() || null, isPublic })}
+              disabled={saving || !name.trim()}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={editStyles.saveBtnText}>Save Changes</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={editStyles.divider} />
+
+            <AddFilmsSection playlistId={playlistId} existingTmdbIds={existingTmdbIds} onAdded={onFilmAdded} />
+
+            <View style={editStyles.divider} />
+
+            <TouchableOpacity style={editStyles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
+              <Ionicons name="trash-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+              <Text style={editStyles.deleteBtnText}>Delete Playlist</Text>
+            </TouchableOpacity>
+          </KeyboardAwareScrollViewCompat>
         </View>
       </View>
     </Modal>
@@ -118,8 +236,10 @@ function EditSheet({
 const editStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%', paddingTop: 12 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 20 },
   title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 20 },
   label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#6B7280', marginBottom: 6 },
   input: {
@@ -143,6 +263,28 @@ const editStyles = StyleSheet.create({
     padding: 14, borderRadius: 10, backgroundColor: '#FEF2F2',
   },
   deleteBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#EF4444' },
+
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 4,
+    backgroundColor: '#F9FAFB', borderRadius: 10,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  searchInput: {
+    flex: 1, paddingVertical: 10,
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
+  },
+  searchEmptyText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 12 },
+  filmRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 8, marginTop: 4,
+  },
+  filmPoster: { width: 34, height: 50, borderRadius: 6 },
+  filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  filmTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  addedRow: { flexDirection: 'row', alignItems: 'center' },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,6 +391,7 @@ export default function PlaylistScreen() {
   ), [savedByTmdbId, openItemModal, handleRemove]);
 
   const items = playlist?.items ?? [];
+  const existingTmdbIds = useMemo(() => new Set(items.map((item) => item.tmdbId)), [items]);
 
   // Merge in filterable metadata from the matching watchlist entry, if any.
   const filterableItems = useMemo(
@@ -350,12 +493,15 @@ export default function PlaylistScreen() {
       {playlist && (
         <EditSheet
           visible={editVisible}
+          playlistId={numericId}
           initialName={playlist.name}
           initialDescription={playlist.description}
           initialIsPublic={playlist.isPublic}
+          existingTmdbIds={existingTmdbIds}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditVisible(false)}
+          onFilmAdded={invalidate}
           saving={saving}
         />
       )}
