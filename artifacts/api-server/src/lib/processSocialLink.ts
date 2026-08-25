@@ -100,6 +100,29 @@ function extractUrlFromMixedText(input: string): { url: string; titleHint: strin
 // ── Search URL helpers ────────────────────────────────────────────────────────
 
 /**
+ * share.google links are Google's short-link redirector for shared search
+ * results — the actual destination is almost always a real
+ * google.com/search?q=... page, which extractSearchQuery() below already
+ * handles reliably. Without resolving the redirect first, a share.google
+ * link falls through to page-caption scraping, Gemini URL grounding, and
+ * yt-dlp — none of which have anything real to find on a redirect-only
+ * link (yt-dlp in particular gets an outright 429 from Google itself when
+ * it tries to treat the short link as a video page, unrelated to any
+ * Gemini quota).
+ */
+async function resolveShareGoogleLink(url: string): Promise<string> {
+  try {
+    const { hostname } = new URL(url);
+    if (!hostname.toLowerCase().endsWith("share.google")) return url;
+    const res = await fetch(url, { redirect: "follow" });
+    void res.body?.cancel?.();
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * If the URL is a Google or Bing search results page, return the search query.
  * Otherwise return null so the caller proceeds to Gemini URL analysis.
  *
@@ -153,6 +176,15 @@ export async function processSocialLink(
         warn?.({ titleHint: mixed.titleHint, err }, "processSocialLink: title text pipeline failed — continuing with URL");
       }
     }
+  }
+
+  // A share.google link with no useful title hint (or one Gemini didn't
+  // recognize) still needs resolving before the search-URL fast path below
+  // has a chance — see resolveShareGoogleLink() for why.
+  const resolvedUrl = await resolveShareGoogleLink(url);
+  if (resolvedUrl !== url) {
+    warn?.({ url, resolvedUrl }, "processSocialLink: resolved share.google redirect");
+    url = resolvedUrl;
   }
 
   // ── Step 0: Google / Bing search URL (fast path) ──────────────────────────
