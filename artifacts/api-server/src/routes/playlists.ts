@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { and, eq, ilike, desc, count, sql } from "drizzle-orm";
-import { db, playlistsTable, playlistItemsTable } from "@workspace/db";
+import { and, eq, ilike, desc, count, sql, or } from "drizzle-orm";
+import { db, playlistsTable, playlistItemsTable, usersTable, followsTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { z } from "zod";
 
@@ -83,11 +83,23 @@ router.post("/playlists", requireAuth, async (req, res): Promise<void> => {
 });
 
 // ── GET /playlists/public ─────────────────────────────────────────────────
-// Search public playlists. Must be defined BEFORE /:id to avoid Express
-// treating "public" as a playlist id.
+// Search public playlists — by name (q), by a constituent film (tmdbId), or
+// scoped to one user's public playlists (userId, used by the profile
+// screen). Must be defined BEFORE /:id to avoid Express treating "public"
+// as a playlist id.
+//
+// Unauthenticated requests are allowed (no requireAuth), but a signed-in
+// caller's identity (when present) is still used to decide visibility: a
+// public playlist owned by a PRIVATE account is only included for the
+// owner themselves or an accepted follower — matching how that account's
+// comments are already followers-only elsewhere. Per-playlist isPublic and
+// the owner's account-level isPrivate are otherwise independent gates.
 
 router.get("/playlists/public", async (req, res): Promise<void> => {
   const q = String(req.query.q ?? "").trim();
+  const tmdbId = req.query.tmdbId !== undefined ? Number(req.query.tmdbId) : undefined;
+  const userId = req.query.userId ? String(req.query.userId).trim() : undefined;
+  const viewerId = getAuth(req)?.userId ?? null;
 
   const rows = await db
     .select({
@@ -103,16 +115,47 @@ router.get("/playlists/public", async (req, res): Promise<void> => {
         array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
         FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
       `.as("cover_posters"),
+      // Owner identity — cheap to include since usersTable is already
+      // joined for the privacy check below, and the Discover tab needs to
+      // show whose playlist each search result is.
+      ownerUsername: usersTable.username,
+      ownerDisplayInitials: usersTable.displayInitials,
+      ownerAvatarUrl: usersTable.avatarUrl,
     })
     .from(playlistsTable)
     .leftJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
+    .innerJoin(usersTable, eq(usersTable.clerkId, playlistsTable.userId))
     .where(
       and(
         eq(playlistsTable.isPublic, true),
-        q.length >= 2 ? ilike(playlistsTable.name, `%${q}%`) : undefined
+        q.length >= 2 ? ilike(playlistsTable.name, `%${q}%`) : undefined,
+        userId ? eq(playlistsTable.userId, userId) : undefined,
+        Number.isInteger(tmdbId)
+          ? sql`EXISTS (
+              SELECT 1 FROM ${playlistItemsTable}
+              WHERE ${playlistItemsTable.playlistId} = ${playlistsTable.id}
+                AND ${playlistItemsTable.tmdbId} = ${tmdbId}
+            )`
+          : undefined,
+        or(
+          eq(usersTable.isPrivate, false),
+          viewerId ? eq(playlistsTable.userId, viewerId) : sql`false`,
+          viewerId
+            ? sql`EXISTS (
+                SELECT 1 FROM ${followsTable}
+                WHERE ${followsTable.followerId} = ${viewerId}
+                  AND ${followsTable.followeeId} = ${playlistsTable.userId}
+                  AND ${followsTable.status} = 'accepted'
+              )`
+            : sql`false`
+        )
       )
     )
-    .groupBy(playlistsTable.id)
+    // Grouping by usersTable.id (its actual primary key, not just the
+    // unique clerkId column) lets Postgres infer the other selected
+    // usersTable columns are functionally dependent, without listing each
+    // one explicitly.
+    .groupBy(playlistsTable.id, usersTable.id)
     .orderBy(desc(playlistsTable.updatedAt))
     .limit(30);
 

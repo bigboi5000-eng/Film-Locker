@@ -892,6 +892,49 @@ export const SearchUsersResponse = zod.object({
 
 
 /**
+ * Headline stats (films watched, reviews given, public playlist count) are always included, even for a private account the caller doesn't follow. The actual list of public playlists is only included (non-null) when the account is public, the caller is viewing their own profile, or the caller is an accepted follower — otherwise publicPlaylists is null and publicPlaylistCount stands in for it.
+ * @summary Get another user's public profile
+ */
+export const GetUserProfileParams = zod.object({
+  "id": zod.coerce.string().describe('Clerk user ID of the profile to view')
+})
+
+export const getUserProfileResponseUserDisplayInitialsMax = 5;
+
+
+
+export const GetUserProfileResponse = zod.object({
+  "user": zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getUserProfileResponseUserDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.'),
+  "followStatus": zod.enum(['self', 'none', 'pending', 'accepted']).describe('The caller\'s relationship to this profile — \"self\" when viewing your own profile, otherwise the same pending\/accepted states as the rest of the follow system, or \"none\" if not followed at all.\n'),
+  "stats": zod.object({
+  "watchedCount": zod.number(),
+  "reviewCount": zod.number(),
+  "publicPlaylistCount": zod.number()
+}),
+  "publicPlaylists": zod.array(zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
+})).nullable().describe('Null when the account is private and the caller isn\'t an accepted follower (and isn\'t the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them.\n')
+})
+
+
+/**
  * @summary Get the authenticated user's following and follower lists
  */
 export const getFollowsResponseFollowingItemDisplayInitialsMax = 5;
@@ -1078,7 +1121,10 @@ export const GetMyPlaylistsResponse = zod.object({
   "itemCount": zod.number(),
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
 }))
 })
 
@@ -1107,15 +1153,21 @@ export const CreatePlaylistResponse = zod.object({
   "itemCount": zod.number(),
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
 })
 
 
 /**
+ * Filter with `q` (by name), `tmdbId` (playlists containing that film), or `userId` (one user's public playlists — used by the profile screen). Any combination may be passed together. A public playlist owned by a private account is only included for that account's owner or an accepted follower.
  * @summary Search public playlists
  */
 export const SearchPublicPlaylistsQueryParams = zod.object({
-  "q": zod.coerce.string().optional()
+  "q": zod.coerce.string().optional(),
+  "tmdbId": zod.coerce.number().optional(),
+  "userId": zod.coerce.string().optional()
 })
 
 export const SearchPublicPlaylistsResponse = zod.object({
@@ -1128,7 +1180,10 @@ export const SearchPublicPlaylistsResponse = zod.object({
   "itemCount": zod.number(),
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
 }))
 })
 
@@ -1149,7 +1204,10 @@ export const GetPlaylistResponse = zod.object({
   "itemCount": zod.number(),
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
 }).and(zod.object({
   "items": zod.array(zod.object({
   "id": zod.number(),
@@ -1190,7 +1248,10 @@ export const UpdatePlaylistResponse = zod.object({
   "itemCount": zod.number(),
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
 })
 
 

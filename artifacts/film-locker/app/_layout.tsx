@@ -122,6 +122,8 @@ function RootLayoutNav() {
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="blocked-users" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="playlist/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="playlists" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="user/[clerkId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
     </Stack>
   );
 }

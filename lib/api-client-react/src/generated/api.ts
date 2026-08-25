@@ -79,7 +79,8 @@ import type {
   UpdateMeBody,
   UpdatePlaylistBody,
   UpdatePushTokenBody,
-  UserProfile
+  UserProfile,
+  UserProfileResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2530,6 +2531,84 @@ export function useSearchUsers<TData = Awaited<ReturnType<typeof searchUsers>>, 
 
 
 
+export const getGetUserProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/profile`
+}
+
+/**
+ * Headline stats (films watched, reviews given, public playlist count) are always included, even for a private account the caller doesn't follow. The actual list of public playlists is only included (non-null) when the account is public, the caller is viewing their own profile, or the caller is an accepted follower — otherwise publicPlaylists is null and publicPlaylistCount stands in for it.
+ * @summary Get another user's public profile
+ */
+export const getUserProfile = async (id: string, options?: RequestInit): Promise<UserProfileResponse> => {
+
+  return customFetch<UserProfileResponse>(getGetUserProfileUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserProfileQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/profile`
+    ] as const;
+    }
+
+
+export const getGetUserProfileQueryOptions = <TData = Awaited<ReturnType<typeof getUserProfile>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserProfileQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserProfile>>> = ({ signal }) => getUserProfile(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+export type GetUserProfileQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get another user's public profile
+ */
+
+export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfile>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserProfileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetFollowsUrl = () => {
 
 
@@ -3415,6 +3494,7 @@ export const getSearchPublicPlaylistsUrl = (params?: SearchPublicPlaylistsParams
 }
 
 /**
+ * Filter with `q` (by name), `tmdbId` (playlists containing that film), or `userId` (one user's public playlists — used by the profile screen). Any combination may be passed together. A public playlist owned by a private account is only included for that account's owner or an accepted follower.
  * @summary Search public playlists
  */
 export const searchPublicPlaylists = async (params?: SearchPublicPlaylistsParams, options?: RequestInit): Promise<PlaylistsResponse> => {

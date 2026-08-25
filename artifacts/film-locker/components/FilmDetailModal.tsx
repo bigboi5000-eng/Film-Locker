@@ -18,6 +18,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@clerk/expo';
@@ -237,30 +238,36 @@ function CommentRow({
   onDelete: (id: number) => void;
   onReport: (comment: FilmComment) => void;
 }) {
+  const router = useRouter();
   const initials = (comment.username ?? comment.userId.slice(0, 2)).slice(0, 2).toUpperCase();
   const timeAgo = formatRelative(new Date(comment.createdAt));
+  const goToProfile = () => router.push(`/user/${comment.userId}`);
 
   return (
     <View style={commentStyles.row}>
       {/* Avatar */}
-      {comment.avatarUrl ? (
-        <Image
-          source={{ uri: comment.avatarUrl }}
-          style={commentStyles.avatar}
-          contentFit="cover"
-        />
-      ) : (
-        <View style={[commentStyles.avatar, commentStyles.avatarFallback]}>
-          <Text style={commentStyles.avatarText}>{initials}</Text>
-        </View>
-      )}
+      <TouchableOpacity onPress={goToProfile} activeOpacity={0.7}>
+        {comment.avatarUrl ? (
+          <Image
+            source={{ uri: comment.avatarUrl }}
+            style={commentStyles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[commentStyles.avatar, commentStyles.avatarFallback]}>
+            <Text style={commentStyles.avatarText}>{initials}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
 
       {/* Body */}
       <View style={{ flex: 1 }}>
         <View style={commentStyles.metaRow}>
-          <Text style={commentStyles.username}>
-            {comment.username ?? 'Anonymous'}
-          </Text>
+          <TouchableOpacity onPress={goToProfile} activeOpacity={0.7}>
+            <Text style={commentStyles.username}>
+              {comment.username ?? 'Anonymous'}
+            </Text>
+          </TouchableOpacity>
           {comment.rating != null && (
             <View style={commentStyles.ratingRow}>
               {[1, 2, 3, 4, 5].map((n) => (

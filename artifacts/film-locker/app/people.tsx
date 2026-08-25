@@ -112,9 +112,10 @@ export default function PeopleScreen() {
     return (
       <TouchableOpacity
         style={styles.userRow}
+        onPress={() => router.push(`/user/${user.clerkId}`)}
         onLongPress={() => handleBlock(user)}
         delayLongPress={400}
-        activeOpacity={1}
+        activeOpacity={0.7}
       >
         {user.avatarUrl ? (
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
