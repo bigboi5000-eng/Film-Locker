@@ -56,9 +56,17 @@ function useDebounce<T>(value: T, delay: number): T {
 // search), or a natural-language recommendation request. No scheme required —
 // people paste "instagram.com/reel/…" without "https://" all the time.
 const URL_LIKE_RE = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i;
+// Google's share sheet (and similar) prepends the page title before the link,
+// e.g. "Schindler's List https://share.google/5PhWqNwJU80K34PTK" — that fails
+// URL_LIKE_RE (it's not ENTIRELY a URL) but still needs to go through the
+// link-processing path, not a literal TMDB title search for the whole string.
+// The backend's processSocialLink already strips the title/URL apart
+// (extractUrlFromMixedText) — this just needs to recognize and forward it.
+const EMBEDDED_URL_RE = /https?:\/\/\S+/i;
 
 function looksLikeUrl(text: string): boolean {
-  return URL_LIKE_RE.test(text.trim());
+  const trimmed = text.trim();
+  return URL_LIKE_RE.test(trimmed) || EMBEDDED_URL_RE.test(trimmed);
 }
 
 /** A multi-word request or a question reads as a recommendation ask, not a title fragment — skip the live TMDB dropdown so it doesn't flash "no results" mid-sentence. */
