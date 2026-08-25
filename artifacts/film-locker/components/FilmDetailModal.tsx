@@ -51,6 +51,7 @@ import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
 import { useToast } from '@/components/ToastProvider';
+import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
@@ -991,6 +992,7 @@ export function FilmDetailModal({
   const [optimisticRating, setOptimisticRating] = useState<number | null | undefined>(undefined);
   const [optimisticWatched, setOptimisticWatched] = useState<boolean | undefined>(undefined);
   const [recommendVisible, setRecommendVisible] = useState(false);
+  const [addToPlaylistVisible, setAddToPlaylistVisible] = useState(false);
 
   // Fetch full TMDB details — parent only renders this component when a movie
   // is selected, so the hook always runs against a valid tmdbId.
@@ -1306,6 +1308,23 @@ export function FilmDetailModal({
                 </TouchableOpacity>
               )}
 
+              {/* Add to Playlist — shown whenever the user is signed in */}
+              {isLoggedIn && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonRecommend]}
+                  onPress={() => setAddToPlaylistVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="list-outline"
+                    size={20}
+                    color="#0066FF"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.actionButtonRecommendText}>Add to Playlist</Text>
+                </TouchableOpacity>
+              )}
+
             </View>
           </ScrollView>
         </View>
@@ -1317,6 +1336,15 @@ export function FilmDetailModal({
         onClose={() => setRecommendVisible(false)}
         tmdbId={tmdbId}
         filmTitle={title}
+        posterUrl={posterUrl}
+      />
+
+      {/* Add to Playlist sheet */}
+      <AddToPlaylistSheet
+        visible={addToPlaylistVisible}
+        onClose={() => setAddToPlaylistVisible(false)}
+        tmdbId={tmdbId}
+        title={title}
         posterUrl={posterUrl}
       />
     </Modal>

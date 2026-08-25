@@ -71,13 +71,18 @@ function groupNotifications(notifications: FilmNotification[]): ConversationGrou
 }
 
 function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress: () => void }) {
+  const router = useRouter();
   const initials = (group.fromDisplayInitials || group.fromUsername || '?').slice(0, 5).toUpperCase();
   const previews = group.allPosters.slice(0, 3);
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.75}>
-      {/* Avatar */}
-      <View style={styles.avatarWrap}>
+      {/* Avatar — tapping this opens the profile instead of the thread */}
+      <TouchableOpacity
+        style={styles.avatarWrap}
+        onPress={() => router.push(`/user/${group.fromUserId}`)}
+        activeOpacity={0.7}
+      >
         {group.fromAvatarUrl ? (
           <Image source={{ uri: group.fromAvatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
@@ -90,7 +95,7 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
             <Text style={styles.unreadBadgeText}>{group.unreadCount > 9 ? '9+' : group.unreadCount}</Text>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* Content */}
       <View style={styles.content}>
@@ -127,15 +132,18 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
 // outgoing follow requests. Lives as a second tab on this screen since it's
 // the same "people I have a relationship with" surface as the inbox. ──
 
-function PalAvatar({ user }: { user: PublicUserProfile }) {
+function PalAvatar({ user, onPress }: { user: PublicUserProfile; onPress?: () => void }) {
   const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
-  return user.avatarUrl ? (
+  const avatar = user.avatarUrl ? (
     <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
   ) : (
     <View style={[styles.avatar, styles.avatarFallback]}>
       <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
     </View>
   );
+  return onPress ? (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{avatar}</TouchableOpacity>
+  ) : avatar;
 }
 
 function FilmPalsView() {
@@ -217,7 +225,7 @@ function FilmPalsView() {
               <Text style={styles.sectionTitle}>Requests ({incomingRequests.length})</Text>
               {incomingRequests.map((u) => (
                 <View key={u.clerkId} style={styles.palRow}>
-                  <PalAvatar user={u} />
+                  <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
                   {busyId === u.clerkId ? (
                     <ActivityIndicator size="small" color="#0066FF" />
@@ -241,7 +249,7 @@ function FilmPalsView() {
               <Text style={styles.sectionTitle}>Sent ({outgoingRequests.length})</Text>
               {outgoingRequests.map((u) => (
                 <View key={u.clerkId} style={styles.palRow}>
-                  <PalAvatar user={u} />
+                  <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
                   {busyId === u.clerkId ? (
                     <ActivityIndicator size="small" color="#0066FF" />
@@ -271,7 +279,7 @@ function FilmPalsView() {
                   activeOpacity={0.75}
                   onPress={() => router.push({ pathname: '/inbox/[userId]', params: { userId: u.clerkId, username: u.username ?? '' } })}
                 >
-                  <PalAvatar user={u} />
+                  <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
                   <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
                 </TouchableOpacity>
