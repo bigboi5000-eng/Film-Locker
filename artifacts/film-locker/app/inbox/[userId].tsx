@@ -507,7 +507,11 @@ export default function InboxThreadScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
+        <TouchableOpacity
+          style={styles.headerCenter}
+          onPress={() => router.push(`/user/${userId}`)}
+          activeOpacity={0.7}
+        >
           {sender?.avatarUrl ? (
             <Image source={{ uri: sender.avatarUrl }} style={styles.headerAvatar} contentFit="cover" />
           ) : (
@@ -519,7 +523,7 @@ export default function InboxThreadScreen() {
             <Text style={styles.headerName}>{displayName}</Text>
             <Text style={styles.headerSub}>{recommendationCount} recommendation{recommendationCount !== 1 ? 's' : ''}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {isLoading ? (

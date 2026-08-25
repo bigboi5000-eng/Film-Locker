@@ -100,17 +100,66 @@ function extractUrlFromMixedText(input: string): { url: string; titleHint: strin
 // ── Search URL helpers ────────────────────────────────────────────────────────
 
 /**
+ * share.google links are Google's short-link redirector for shared search
+ * results — the actual destination is almost always a real
+ * google.com/search?q=... page, which extractSearchQuery() below already
+ * handles reliably. Without resolving the redirect first, a share.google
+ * link falls through to page-caption scraping, Gemini URL grounding, and
+ * yt-dlp — none of which have anything real to find on a redirect-only
+ * link (yt-dlp in particular gets an outright 429 from Google itself when
+ * it tries to treat the short link as a video page, unrelated to any
+ * Gemini quota).
+ */
+async function resolveShareGoogleLink(url: string): Promise<string> {
+  try {
+    const { hostname } = new URL(url);
+    if (!hostname.toLowerCase().endsWith("share.google")) return url;
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+    void res.body?.cancel?.();
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * If the URL is a Google or Bing search results page, return the search query.
  * Otherwise return null so the caller proceeds to Gemini URL analysis.
  *
  * Examples:
  *   https://www.google.com/search?q=inception+2010   → "inception 2010"
  *   https://www.bing.com/search?q=parasite+film      → "parasite film"
+ *
+ * Also handles Google's automated-traffic block page
+ * (google.com/sorry/index?continue=<the real URL you were headed to>&...) —
+ * server-side requests to Google Search get this instead of real results
+ * disturbingly often. We can't get past the CAPTCHA, but the block page's
+ * own `continue` param already contains the real destination URL — including
+ * its `q=` search query — so the query is recoverable without ever loading
+ * the actual search page.
  */
 function extractSearchQuery(url: string): string | null {
   try {
     const u = new URL(url);
     const h = u.hostname.toLowerCase();
+
+    if (h.includes("google.") && u.pathname.startsWith("/sorry")) {
+      const dest = u.searchParams.get("continue");
+      if (!dest) return null;
+      try {
+        const destUrl = new URL(dest);
+        return destUrl.searchParams.get("q") ?? destUrl.searchParams.get("query") ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     const isSearch =
       (h.includes("google.") && u.pathname.startsWith("/search")) ||
       (h.includes("bing.com") && u.pathname.startsWith("/search"));
@@ -143,7 +192,7 @@ export async function processSocialLink(
     if (mixed.titleHint) {
       warn?.({ url, titleHint: mixed.titleHint }, "processSocialLink: mixed-text share detected — trying title as search query first");
       try {
-        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId);
+        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId, true);
         if (matches.length > 0) {
           warn?.({ matchCount: matches.length }, "processSocialLink: title text pipeline succeeded");
           return { source: "caption", text: mixed.titleHint, matches, saved, listTitle };
@@ -155,12 +204,21 @@ export async function processSocialLink(
     }
   }
 
+  // A share.google link with no useful title hint (or one Gemini didn't
+  // recognize) still needs resolving before the search-URL fast path below
+  // has a chance — see resolveShareGoogleLink() for why.
+  const resolvedUrl = await resolveShareGoogleLink(url);
+  if (resolvedUrl !== url) {
+    warn?.({ url, resolvedUrl }, "processSocialLink: resolved share.google redirect");
+    url = resolvedUrl;
+  }
+
   // ── Step 0: Google / Bing search URL (fast path) ──────────────────────────
   const searchQuery = extractSearchQuery(url);
   if (searchQuery) {
     warn?.({ url, searchQuery }, "processSocialLink: search URL detected — running text pipeline on query");
     try {
-      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId);
+      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId, true);
       warn?.({ matchCount: matches.length }, "processSocialLink: search query pipeline complete");
       return { source: "caption", text: searchQuery, matches, saved, listTitle };
     } catch (err) {

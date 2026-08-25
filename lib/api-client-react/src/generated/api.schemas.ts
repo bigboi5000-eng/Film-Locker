@@ -411,6 +411,51 @@ export interface PublicUserProfile {
   avatarUrl?: string | null;
 }
 
+/**
+ * The caller's relationship to this profile — "self" when viewing your own profile, otherwise the same pending/accepted states as the rest of the follow system, or "none" if not followed at all.
+ */
+export type UserProfileResponseFollowStatus = typeof UserProfileResponseFollowStatus[keyof typeof UserProfileResponseFollowStatus];
+
+
+export const UserProfileResponseFollowStatus = {
+  self: 'self',
+  none: 'none',
+  pending: 'pending',
+  accepted: 'accepted',
+} as const;
+
+export type UserProfileResponseStats = {
+  watchedCount: number;
+  reviewCount: number;
+  publicPlaylistCount: number;
+};
+
+export interface Playlist {
+  id: number;
+  userId: string;
+  name: string;
+  description?: string | null;
+  isPublic: boolean;
+  itemCount: number;
+  /** Up to 4 poster URLs for the cover collage */
+  coverPosters: string[];
+  createdAt: string;
+  updatedAt: string;
+  /** Only populated by GET /playlists/public (Discover search results need to show whose playlist it is) */
+  ownerUsername?: string | null;
+  ownerDisplayInitials?: string | null;
+  ownerAvatarUrl?: string | null;
+}
+
+export interface UserProfileResponse {
+  user: PublicUserProfile;
+  /** The caller's relationship to this profile — "self" when viewing your own profile, otherwise the same pending/accepted states as the rest of the follow system, or "none" if not followed at all. */
+  followStatus: UserProfileResponseFollowStatus;
+  stats: UserProfileResponseStats;
+  /** Null when the account is private and the caller isn't an accepted follower (and isn't the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them. */
+  publicPlaylists: Playlist[] | null;
+}
+
 export interface SyncUserBody {
   email: string;
   avatarUrl?: string | null;
@@ -524,19 +569,6 @@ export interface PlaylistItem {
   addedAt: string;
 }
 
-export interface Playlist {
-  id: number;
-  userId: string;
-  name: string;
-  description?: string | null;
-  isPublic: boolean;
-  itemCount: number;
-  /** Up to 4 poster URLs for the cover collage */
-  coverPosters: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 export type PlaylistWithItems = Playlist & {
   items: PlaylistItem[];
 };
@@ -624,5 +656,7 @@ q: string;
 
 export type SearchPublicPlaylistsParams = {
 q?: string;
+tmdbId?: number;
+userId?: string;
 };
 

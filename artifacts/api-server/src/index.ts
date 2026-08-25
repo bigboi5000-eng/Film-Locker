@@ -21,5 +21,17 @@ app.listen(port, (err) => {
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  // Railway injects these automatically for GitHub-connected deployments —
+  // logging them on startup makes it possible to confirm from the deploy
+  // logs alone which commit is actually running, instead of inferring it
+  // from stack-trace line numbers after the fact.
+  logger.info(
+    {
+      port,
+      commit: process.env["RAILWAY_GIT_COMMIT_SHA"] ?? null,
+      commitMessage: process.env["RAILWAY_GIT_COMMIT_MESSAGE"] ?? null,
+      branch: process.env["RAILWAY_GIT_BRANCH"] ?? null,
+    },
+    "Server listening",
+  );
 });

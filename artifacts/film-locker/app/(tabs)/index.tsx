@@ -8,9 +8,6 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
-  TextInput,
-  Switch,
-  Modal,
   Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -30,11 +27,11 @@ import {
   getGetMyPlaylistsQueryKey,
   getGetMeQueryKey,
   type TmdbMovieCard,
-  type Playlist,
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
-import { webInputReset } from '@/lib/webInputReset';
+import { PlaylistCard } from '@/components/PlaylistCard';
+import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import { getDeviceRegion } from '@/lib/region';
 
 const CARD_W = 120;
@@ -65,16 +62,25 @@ function SectionHeader({
   section,
   actionLabel,
   onAction,
+  onTitlePress,
 }: {
   title: string;
   section?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Makes the title itself tappable — used for "Playlists" → the full Playlists hub. */
+  onTitlePress?: () => void;
 }) {
   const router = useRouter();
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      {onTitlePress ? (
+        <TouchableOpacity onPress={onTitlePress} activeOpacity={0.7}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+        </TouchableOpacity>
+      ) : (
+        <Text style={styles.sectionTitle}>{title}</Text>
+      )}
       {section ? (
         <TouchableOpacity
           style={styles.seeAllBtn}
@@ -94,156 +100,6 @@ function SectionHeader({
     </View>
   );
 }
-
-// ── Create Playlist Modal ────────────────────────────────────────────────────
-
-function CreatePlaylistModal({
-  visible,
-  onClose,
-  onCreate,
-  creating,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onCreate: (name: string, isPublic: boolean) => void;
-  creating: boolean;
-}) {
-  const [name, setName] = useState('');
-  const [isPublic, setIsPublic] = useState(false);
-
-  const handleCreate = () => {
-    if (!name.trim()) return;
-    onCreate(name.trim(), isPublic);
-  };
-
-  const handleClose = () => {
-    setName('');
-    setIsPublic(false);
-    onClose();
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={cpStyles.overlay}>
-        <TouchableOpacity style={cpStyles.backdrop} onPress={handleClose} activeOpacity={1} />
-        <View style={cpStyles.sheet}>
-          <View style={cpStyles.handle} />
-          <Text style={cpStyles.title}>New Playlist</Text>
-
-          <TextInput
-            style={cpStyles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Playlist name…"
-            placeholderTextColor="#9CA3AF"
-            autoFocus
-            maxLength={100}
-            returnKeyType="done"
-            onSubmitEditing={handleCreate}
-          />
-
-          <View style={cpStyles.toggleRow}>
-            <View>
-              <Text style={cpStyles.toggleLabel}>Public</Text>
-              <Text style={cpStyles.toggleSub}>Anyone can search for this playlist</Text>
-            </View>
-            <Switch
-              value={isPublic}
-              onValueChange={setIsPublic}
-              trackColor={{ true: '#0066FF', false: '#E5E7EB' }}
-              thumbColor="#FFF"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[cpStyles.createBtn, (!name.trim() || creating) && cpStyles.createBtnDisabled]}
-            onPress={handleCreate}
-            disabled={!name.trim() || creating}
-            activeOpacity={0.8}
-          >
-            {creating ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={cpStyles.createBtnText}>Create Playlist</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const cpStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 16 },
-  input: {
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, fontFamily: 'Inter_400Regular', color: '#111827',
-    marginBottom: 16, backgroundColor: '#F9FAFB',
-    ...webInputReset,
-  },
-  toggleRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6', marginBottom: 20,
-  },
-  toggleLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 2 },
-  createBtn: { backgroundColor: '#0066FF', padding: 14, borderRadius: 10, alignItems: 'center' },
-  createBtnDisabled: { opacity: 0.5 },
-  createBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
-});
-
-// ── Playlist card ────────────────────────────────────────────────────────────
-
-function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPress: () => void }) {
-  const covers = playlist.coverPosters ?? [];
-  return (
-    <TouchableOpacity style={plStyles.card} onPress={onPress} activeOpacity={0.8}>
-      <View style={plStyles.coverGrid}>
-        {[0, 1, 2, 3].map((i) => (
-          covers[i] ? (
-            <Image key={i} source={{ uri: covers[i] }} style={plStyles.coverCell} contentFit="cover" />
-          ) : (
-            <View key={i} style={[plStyles.coverCell, plStyles.coverPlaceholder]}>
-              {i === 0 && covers.length === 0 && (
-                <Ionicons name="film-outline" size={20} color="#D1D5DB" />
-              )}
-            </View>
-          )
-        ))}
-      </View>
-      <View style={plStyles.info}>
-        <Text style={plStyles.name} numberOfLines={1}>{playlist.name}</Text>
-        <View style={plStyles.meta}>
-          <Ionicons
-            name={playlist.isPublic ? 'globe-outline' : 'lock-closed-outline'}
-            size={11}
-            color="#9CA3AF"
-          />
-          <Text style={plStyles.metaText}>{playlist.itemCount} film{playlist.itemCount !== 1 ? 's' : ''}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-const plStyles = StyleSheet.create({
-  card: { width: 140, marginRight: 12 },
-  coverGrid: {
-    width: 140, height: 100, borderRadius: 10, overflow: 'hidden',
-    flexDirection: 'row', flexWrap: 'wrap',
-  },
-  coverCell: { width: '50%', height: '50%' },
-  coverPlaceholder: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  info: { paddingTop: 8, paddingHorizontal: 2 },
-  name: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827', marginBottom: 3 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
-});
 
 // ── Home Screen ───────────────────────────────────────────────────────────────
 
@@ -405,13 +261,14 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* My Playlists — only when signed in */}
+        {/* Playlists — only when signed in */}
         {isSignedIn && (
           <View style={styles.section}>
             <SectionHeader
-              title="📋 My Playlists"
+              title="📋 Playlists"
               actionLabel="New"
               onAction={() => setCreatePlaylistVisible(true)}
+              onTitlePress={() => router.push('/playlists')}
             />
             {playlists.length === 0 ? (
               <TouchableOpacity

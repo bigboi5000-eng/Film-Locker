@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, or, ilike } from "drizzle-orm";
+import { eq, or, and, ilike, count, desc, sql } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -10,12 +10,14 @@ import {
   filmCommentsTable,
   filmCommunityRatingsTable,
   playlistsTable,
+  playlistItemsTable,
   feedbackTable,
   blocksTable,
   reportsTable,
 } from "@workspace/db";
 import { UpdatePushTokenBody } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { isBlockedEitherWay } from "../lib/blocks";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -230,6 +232,105 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     .map(({ clerkId, username, displayInitials, isPrivate, avatarUrl }) => ({ clerkId, username, displayInitials, isPrivate, avatarUrl }));
 
   res.json({ users });
+});
+
+// ── GET /users/:id/profile ─────────────────────────────────────────────────────
+// Another user's public profile: their PublicUserProfile fields, the
+// caller's follow status toward them, headline stats (films watched,
+// reviews given, public playlist count — always shown, even for a private
+// account the caller doesn't follow), and their public playlists — the
+// actual list is only included when the account is public, the caller is
+// the account itself, or the caller is an accepted follower; otherwise
+// publicPlaylists is null and only the count above stands in for it.
+
+router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const targetId = String(req.params.id ?? "").trim();
+  if (!targetId) {
+    res.status(400).json({ error: "id path param is required" });
+    return;
+  }
+
+  const [target] = await db
+    .select({
+      clerkId: usersTable.clerkId,
+      username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
+      isPrivate: usersTable.isPrivate,
+      avatarUrl: usersTable.avatarUrl,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, targetId));
+
+  // Treat a blocked-either-way relationship the same as "not found" —
+  // matches how blocks are enforced elsewhere, and doesn't reveal that a
+  // block exists.
+  if (!target || (await isBlockedEitherWay(clerkUserId, targetId))) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  const isSelf = clerkUserId === targetId;
+
+  let followStatus: "self" | "none" | "pending" | "accepted" = "self";
+  if (!isSelf) {
+    const [edge] = await db
+      .select({ status: followsTable.status })
+      .from(followsTable)
+      .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, targetId)));
+    followStatus = edge ? (edge.status as "pending" | "accepted") : "none";
+  }
+
+  const canViewDetails = isSelf || !target.isPrivate || followStatus === "accepted";
+
+  const [[watchedRow], [reviewRow], [playlistCountRow]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(moviesTable)
+      .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true))),
+    db.select({ value: count() }).from(filmCommentsTable).where(eq(filmCommentsTable.userId, targetId)),
+    db
+      .select({ value: count() })
+      .from(playlistsTable)
+      .where(and(eq(playlistsTable.userId, targetId), eq(playlistsTable.isPublic, true))),
+  ]);
+
+  let publicPlaylists = null;
+  if (canViewDetails) {
+    const rows = await db
+      .select({
+        id: playlistsTable.id,
+        userId: playlistsTable.userId,
+        name: playlistsTable.name,
+        description: playlistsTable.description,
+        isPublic: playlistsTable.isPublic,
+        createdAt: playlistsTable.createdAt,
+        updatedAt: playlistsTable.updatedAt,
+        itemCount: count(playlistItemsTable.id),
+        coverPosters: sql<string[]>`
+          array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
+          FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
+        `.as("cover_posters"),
+      })
+      .from(playlistsTable)
+      .leftJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
+      .where(and(eq(playlistsTable.userId, targetId), eq(playlistsTable.isPublic, true)))
+      .groupBy(playlistsTable.id)
+      .orderBy(desc(playlistsTable.updatedAt));
+
+    publicPlaylists = rows.map((r) => ({ ...r, coverPosters: (r.coverPosters ?? []).slice(0, 4) }));
+  }
+
+  res.json({
+    user: target,
+    followStatus,
+    stats: {
+      watchedCount: watchedRow.value,
+      reviewCount: reviewRow.value,
+      publicPlaylistCount: playlistCountRow.value,
+    },
+    publicPlaylists,
+  });
 });
 
 // ── PUT /users/push-token ─────────────────────────────────────────────────────
