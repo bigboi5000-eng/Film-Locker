@@ -180,13 +180,42 @@ export async function enrichAndSaveMatches(
 
 /**
  * Full text → Gemini → TMDB → DB pipeline.
+ *
+ * @param treatAsLiteralTitle  Set when `text` is already believed to be a
+ *   literal film title rather than freeform caption/prose — a mixed-text
+ *   share's title hint, or a search engine's own `q=` query string. In that
+ *   case, if Gemini's freeform-text extraction doesn't recognize `text` as a
+ *   film reference (common for a short or ambiguous title with zero
+ *   surrounding context — a single word that's also an everyday English
+ *   word, e.g. "Hokum" — where an unambiguous title like "Schindler's List"
+ *   would still be recognized fine), fall back to searching TMDB directly
+ *   for `text` rather than giving up. Left false for genuine freeform text
+ *   (e.g. a full scraped caption), where blindly TMDB-searching the whole
+ *   string could turn up an unrelated false-positive match.
  */
 export async function runMoviePipeline(
   text: string,
   warn?: WarnFn,
   dryRun = false,
-  clerkUserId = ""
+  clerkUserId = "",
+  treatAsLiteralTitle = false
 ): Promise<PipelineResult> {
   const { movies: rawMatches, list_title: listTitle } = await extractMoviesWithGemini(text);
+
+  if (rawMatches.length === 0 && treatAsLiteralTitle) {
+    const hits = await searchTmdb(text).catch(() => []);
+    const hit = hits[0];
+    if (hit) {
+      warn?.({ text, tmdbId: hit.tmdbId }, "pipeline: Gemini found no reference — direct TMDB search matched");
+      return enrichAndSaveMatches(
+        [{ movie_title: hit.title, release_year: hit.releaseYear, confidence_score: 1 }],
+        warn,
+        dryRun,
+        clerkUserId,
+        null
+      );
+    }
+  }
+
   return enrichAndSaveMatches(rawMatches, warn, dryRun, clerkUserId, listTitle);
 }

@@ -192,7 +192,7 @@ export async function processSocialLink(
     if (mixed.titleHint) {
       warn?.({ url, titleHint: mixed.titleHint }, "processSocialLink: mixed-text share detected — trying title as search query first");
       try {
-        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId);
+        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId, true);
         if (matches.length > 0) {
           warn?.({ matchCount: matches.length }, "processSocialLink: title text pipeline succeeded");
           return { source: "caption", text: mixed.titleHint, matches, saved, listTitle };
@@ -218,7 +218,7 @@ export async function processSocialLink(
   if (searchQuery) {
     warn?.({ url, searchQuery }, "processSocialLink: search URL detected — running text pipeline on query");
     try {
-      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId);
+      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId, true);
       warn?.({ matchCount: matches.length }, "processSocialLink: search query pipeline complete");
       return { source: "caption", text: searchQuery, matches, saved, listTitle };
     } catch (err) {
