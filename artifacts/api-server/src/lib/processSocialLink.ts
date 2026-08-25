@@ -114,7 +114,13 @@ async function resolveShareGoogleLink(url: string): Promise<string> {
   try {
     const { hostname } = new URL(url);
     if (!hostname.toLowerCase().endsWith("share.google")) return url;
-    const res = await fetch(url, { redirect: "follow" });
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
     void res.body?.cancel?.();
     return res.url || url;
   } catch {
@@ -129,11 +135,31 @@ async function resolveShareGoogleLink(url: string): Promise<string> {
  * Examples:
  *   https://www.google.com/search?q=inception+2010   → "inception 2010"
  *   https://www.bing.com/search?q=parasite+film      → "parasite film"
+ *
+ * Also handles Google's automated-traffic block page
+ * (google.com/sorry/index?continue=<the real URL you were headed to>&...) —
+ * server-side requests to Google Search get this instead of real results
+ * disturbingly often. We can't get past the CAPTCHA, but the block page's
+ * own `continue` param already contains the real destination URL — including
+ * its `q=` search query — so the query is recoverable without ever loading
+ * the actual search page.
  */
 function extractSearchQuery(url: string): string | null {
   try {
     const u = new URL(url);
     const h = u.hostname.toLowerCase();
+
+    if (h.includes("google.") && u.pathname.startsWith("/sorry")) {
+      const dest = u.searchParams.get("continue");
+      if (!dest) return null;
+      try {
+        const destUrl = new URL(dest);
+        return destUrl.searchParams.get("q") ?? destUrl.searchParams.get("query") ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     const isSearch =
       (h.includes("google.") && u.pathname.startsWith("/search")) ||
       (h.includes("bing.com") && u.pathname.startsWith("/search"));
