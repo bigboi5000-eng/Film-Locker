@@ -10,10 +10,12 @@ import {
   getGetUserProfileQueryKey,
   useFollowUser,
   useUnfollowUser,
+  useGetFollows,
   getGetFollowsQueryKey,
   getGetNotificationUsersQueryKey,
 } from '@workspace/api-client-react';
 import { PlaylistCard } from '@/components/PlaylistCard';
+import { WatchedFilmsSheet } from '@/components/WatchedFilmsSheet';
 
 export default function UserProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -22,12 +24,20 @@ export default function UserProfileScreen() {
   const { clerkId } = useLocalSearchParams<{ clerkId: string }>();
 
   const [busy, setBusy] = useState(false);
+  const [watchedVisible, setWatchedVisible] = useState(false);
 
   const { data, isLoading } = useGetUserProfile(clerkId, {
     query: { queryKey: getGetUserProfileQueryKey(clerkId), enabled: Boolean(clerkId) },
   });
   const { mutateAsync: followUser } = useFollowUser();
   const { mutateAsync: unfollowUser } = useUnfollowUser();
+  const { data: followsData } = useGetFollows();
+
+  const isFilmPal = (() => {
+    const following = followsData?.following ?? [];
+    const followerIds = new Set((followsData?.followers ?? []).map((u) => u.clerkId));
+    return following.some((u) => u.clerkId === clerkId && followerIds.has(u.clerkId));
+  })();
 
   const invalidate = useCallback(async () => {
     await Promise.all([
@@ -127,10 +137,21 @@ export default function UserProfileScreen() {
 
         {/* Headline stats */}
         <View style={styles.statsRow}>
-          <View style={styles.statTile}>
-            <Text style={styles.statValue}>{stats.watchedCount}</Text>
-            <Text style={styles.statLabel}>Watched</Text>
-          </View>
+          {followStatus === 'self' || isFilmPal ? (
+            <TouchableOpacity
+              style={styles.statTile}
+              onPress={() => setWatchedVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.statValue}>{stats.watchedCount}</Text>
+              <Text style={styles.statLabel}>Watched</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.statTile}>
+              <Text style={styles.statValue}>{stats.watchedCount}</Text>
+              <Text style={styles.statLabel}>Watched</Text>
+            </View>
+          )}
           <View style={styles.statDivider} />
           <View style={styles.statTile}>
             <Text style={styles.statValue}>{stats.reviewCount}</Text>
@@ -172,6 +193,13 @@ export default function UserProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      <WatchedFilmsSheet
+        visible={watchedVisible}
+        clerkId={clerkId}
+        username={user.username ?? 'Their'}
+        onClose={() => setWatchedVisible(false)}
+      />
     </View>
   );
 }

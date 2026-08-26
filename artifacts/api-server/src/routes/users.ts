@@ -15,7 +15,7 @@ import {
   blocksTable,
   reportsTable,
 } from "@workspace/db";
-import { UpdatePushTokenBody } from "@workspace/api-zod";
+import { UpdatePushTokenBody, ListMoviesResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
 import { z } from "zod";
@@ -331,6 +331,47 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
     },
     publicPlaylists,
   });
+});
+
+// ── GET /users/:id/watched ───────────────────────────────────────────────────
+// Another user's watched films. Gated on a MUTUAL accepted follow (both
+// directions — i.e. "Film Pals") rather than the one-way accepted-follower
+// gate used for playlists: individual watched films are more personal than
+// a curated public playlist, so this uses the stricter bar.
+
+router.get("/users/:id/watched", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const targetId = String(req.params.id ?? "").trim();
+  if (!targetId) {
+    res.status(400).json({ error: "id path param is required" });
+    return;
+  }
+
+  if (targetId !== clerkUserId) {
+    const [theyFollowMe, iFollowThem] = await Promise.all([
+      db
+        .select({ id: followsTable.id })
+        .from(followsTable)
+        .where(and(eq(followsTable.followerId, targetId), eq(followsTable.followeeId, clerkUserId), eq(followsTable.status, "accepted"))),
+      db
+        .select({ id: followsTable.id })
+        .from(followsTable)
+        .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, targetId), eq(followsTable.status, "accepted"))),
+    ]);
+
+    if (theyFollowMe.length === 0 || iFollowThem.length === 0) {
+      res.status(403).json({ error: "You can only see watched films for accounts that follow each other." });
+      return;
+    }
+  }
+
+  const movies = await db
+    .select()
+    .from(moviesTable)
+    .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true)))
+    .orderBy(desc(moviesTable.watchedAt));
+
+  res.json(ListMoviesResponse.parse({ movies }));
 });
 
 // ── PUT /users/push-token ─────────────────────────────────────────────────────

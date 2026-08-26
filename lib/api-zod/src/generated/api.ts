@@ -935,6 +935,45 @@ export const GetUserProfileResponse = zod.object({
 
 
 /**
+ * Only visible when both accounts follow each other (mutual — "Film Pals"), a stricter bar than the one-way accepted-follower gate used for playlists, since individual watched films are more personal.
+ * @summary Get another user's watched films
+ */
+export const GetUserWatchedParams = zod.object({
+  "id": zod.coerce.string().describe('Clerk user ID whose watched films to view')
+})
+
+export const getUserWatchedResponseMoviesItemRatingMax = 5;
+
+
+
+export const GetUserWatchedResponse = zod.object({
+  "movies": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})),
+  "rating": zod.number().min(1).max(getUserWatchedResponseMoviesItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+}))
+})
+
+
+/**
  * @summary Get the authenticated user's following and follower lists
  */
 export const getFollowsResponseFollowingItemDisplayInitialsMax = 5;

@@ -2609,6 +2609,84 @@ export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfi
 
 
 
+export const getGetUserWatchedUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/watched`
+}
+
+/**
+ * Only visible when both accounts follow each other (mutual — "Film Pals"), a stricter bar than the one-way accepted-follower gate used for playlists, since individual watched films are more personal.
+ * @summary Get another user's watched films
+ */
+export const getUserWatched = async (id: string, options?: RequestInit): Promise<ListMoviesResponse> => {
+
+  return customFetch<ListMoviesResponse>(getGetUserWatchedUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserWatchedQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/watched`
+    ] as const;
+    }
+
+
+export const getGetUserWatchedQueryOptions = <TData = Awaited<ReturnType<typeof getUserWatched>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserWatched>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserWatchedQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserWatched>>> = ({ signal }) => getUserWatched(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserWatched>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserWatchedQueryResult = NonNullable<Awaited<ReturnType<typeof getUserWatched>>>
+export type GetUserWatchedQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get another user's watched films
+ */
+
+export function useGetUserWatched<TData = Awaited<ReturnType<typeof getUserWatched>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserWatched>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserWatchedQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetFollowsUrl = () => {
 
 

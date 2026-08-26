@@ -733,6 +733,36 @@ paths:
         "404":
           description: Not found
 
+  /users/{id}/watched:
+    get:
+      operationId: getUserWatched
+      tags: [users]
+      summary: Get another user's watched films
+      description: >
+        Only visible when both accounts follow each other (mutual — "Film
+        Pals"), a stricter bar than the one-way accepted-follower gate used
+        for playlists, since individual watched films are more personal.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Clerk user ID whose watched films to view
+      responses:
+        "200":
+          description: Watched films
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMoviesResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Not mutually followed
+        "404":
+          description: Not found
+
   /follows:
     get:
       operationId: getFollows
