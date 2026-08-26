@@ -80,13 +80,15 @@ async function downloadVideo(videoUrl: string): Promise<string> {
   // string, which eliminates command-injection risk entirely.
   const args = [
     // Prefer a modest resolution — we only need on-screen text to be legible,
-    // not full quality, and this keeps the upload/processing fast.
-    "-f", "best[height<=480][ext=mp4]/best[height<=480]/best",
+    // not full quality, and a smaller file downloads, uploads, and gets
+    // processed by Gemini faster. 360p still reads large title-card/countdown
+    // text fine, which is all this last-resort fallback exists for.
+    "-f", "best[height<=360][ext=mp4]/best[height<=360]/best",
     "--recode-video", "mp4",
     // Skip anything longer than 10 minutes — short-form list content this
     // fallback targets is almost always well under that.
     "--match-filter", "duration<600",
-    "--max-filesize", "60M",
+    "--max-filesize", "30M",
     "--no-playlist",
     "--quiet",
     "-o", outPath,

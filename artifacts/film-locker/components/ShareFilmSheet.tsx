@@ -19,6 +19,7 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -38,7 +39,6 @@ import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -440,7 +440,7 @@ function BulkAddPanel({
   }
 
   return (
-    <KeyboardAwareScrollViewCompat contentContainerStyle={ppStyles.root}>
+    <ScrollView contentContainerStyle={ppStyles.root} keyboardShouldPersistTaps="handled">
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
       <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
 
@@ -496,7 +496,7 @@ function BulkAddPanel({
           {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
       </View>
-    </KeyboardAwareScrollViewCompat>
+    </ScrollView>
   );
 }
 
@@ -649,7 +649,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
         longer needs an inner tap-swallowing wrapper either — taps on it
         simply don't land on the separate backdrop element.
       */}
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         <View
           style={[
@@ -837,7 +837,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
             )}
             </ErrorBoundary>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

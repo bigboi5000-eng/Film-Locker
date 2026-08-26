@@ -75,7 +75,11 @@ async function downloadAudio(videoUrl: string): Promise<string> {
   const args = [
     "-x",
     "--audio-format", "mp3",
-    "--audio-quality", "5",
+    // Lower VBR quality (0=best, 9=worst) than before — Gemini only needs
+    // to make out speech, not reproduce it faithfully, so a smaller/faster
+    // encode costs nothing in extraction accuracy while cutting encode and
+    // upload time for this step.
+    "--audio-quality", "7",
     "--no-playlist",
     "--quiet",
     "-o", outPath,

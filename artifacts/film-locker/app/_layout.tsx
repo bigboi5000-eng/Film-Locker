@@ -18,6 +18,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react';
@@ -149,6 +150,10 @@ export default function RootLayout() {
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
         <ClerkLoaded>
           <SafeAreaProvider>
+            {/* App is light-themed only (see hooks/useColors.ts) — force
+                dark status bar icons rather than "auto", which would go
+                white-on-white whenever the device itself is in dark mode. */}
+            <StatusBar style="dark" />
             <ErrorBoundary>
               <QueryClientProvider client={queryClient}>
                 <GestureHandlerRootView style={{ flex: 1 }}>

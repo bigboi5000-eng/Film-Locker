@@ -60,31 +60,26 @@ function SectionSkeleton() {
 function SectionHeader({
   title,
   section,
+  seeAllHref,
   actionLabel,
   onAction,
-  onTitlePress,
 }: {
   title: string;
   section?: string;
+  /** A direct route for the "See All" link, for sections that aren't under /discover/. */
+  seeAllHref?: string;
   actionLabel?: string;
   onAction?: () => void;
-  /** Makes the title itself tappable — used for "Playlists" → the full Playlists hub. */
-  onTitlePress?: () => void;
 }) {
   const router = useRouter();
+  const seeAllTarget = section ? `/discover/${section}` : seeAllHref;
   return (
     <View style={styles.sectionHeader}>
-      {onTitlePress ? (
-        <TouchableOpacity onPress={onTitlePress} activeOpacity={0.7}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-        </TouchableOpacity>
-      ) : (
-        <Text style={styles.sectionTitle}>{title}</Text>
-      )}
-      {section ? (
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {seeAllTarget ? (
         <TouchableOpacity
           style={styles.seeAllBtn}
-          onPress={() => router.push(`/discover/${section}` as never)}
+          onPress={() => router.push(seeAllTarget as never)}
           activeOpacity={0.7}
           hitSlop={8}
         >
@@ -264,12 +259,7 @@ export default function HomeScreen() {
         {/* Playlists — only when signed in */}
         {isSignedIn && (
           <View style={styles.section}>
-            <SectionHeader
-              title="📋 Playlists"
-              actionLabel="New"
-              onAction={() => setCreatePlaylistVisible(true)}
-              onTitlePress={() => router.push('/playlists')}
-            />
+            <SectionHeader title="📋 Playlists" seeAllHref="/playlists" />
             {playlists.length === 0 ? (
               <TouchableOpacity
                 style={styles.emptyPlaylistCard}

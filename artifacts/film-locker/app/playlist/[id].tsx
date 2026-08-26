@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, TextInput, Switch, Modal,
-  Platform,
+  Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +28,6 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
-import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
 
@@ -161,11 +160,16 @@ function EditSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={editStyles.overlay}>
+      {/* KeyboardAvoidingView wraps the whole overlay (not just an inner
+          ScrollView) so the sheet itself shrinks/moves above the keyboard —
+          a bottom-anchored sheet's ScrollView scrolling its own content
+          isn't enough on its own, since the sheet's position is otherwise
+          independent of keyboard state. */}
+      <KeyboardAvoidingView style={editStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableOpacity style={editStyles.backdrop} onPress={onClose} activeOpacity={1} />
         <View style={editStyles.sheet}>
           <View style={editStyles.handle} />
-          <KeyboardAwareScrollViewCompat contentContainerStyle={editStyles.scrollContent}>
+          <ScrollView contentContainerStyle={editStyles.scrollContent} keyboardShouldPersistTaps="handled">
             <Text style={editStyles.title}>Edit Playlist</Text>
 
             <Text style={editStyles.label}>Name</Text>
@@ -226,9 +230,9 @@ function EditSheet({
               <Ionicons name="trash-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
               <Text style={editStyles.deleteBtnText}>Delete Playlist</Text>
             </TouchableOpacity>
-          </KeyboardAwareScrollViewCompat>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

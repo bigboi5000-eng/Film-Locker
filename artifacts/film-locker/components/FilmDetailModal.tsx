@@ -14,6 +14,7 @@ import {
   Linking,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -334,7 +335,7 @@ function ReportSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={reportStyles.overlay}>
+      <KeyboardAvoidingView style={reportStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableOpacity style={reportStyles.backdrop} onPress={handleClose} activeOpacity={1} />
         <View style={reportStyles.sheet}>
           <View style={reportStyles.handle} />
@@ -364,7 +365,7 @@ function ReportSheet({
             <Text style={reportStyles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -498,6 +499,7 @@ function CommunitySection({
     try {
       await postComment({ tmdbId, data: { body: text } });
       setCommentText('');
+      Keyboard.dismiss();
       await resetComments();
     } catch {
       Alert.alert('Error', 'Could not post your comment.');
@@ -987,6 +989,7 @@ export function FilmDetailModal({
   savedMovie,
 }: FilmDetailModalProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   const [optimisticRating, setOptimisticRating] = useState<number | null | undefined>(undefined);
@@ -1086,10 +1089,13 @@ export function FilmDetailModal({
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast({ title: 'Added to Watchlist', subtitle: `"${title}" is now in your watchlist.`, variant: 'success' });
       handleClose();
+      // Always land back on the Watchlist tab, regardless of which screen
+      // this film was added from (Home, Discover, a playlist, etc.).
+      router.push('/(tabs)/watchlist');
     } catch {
       showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
     }
-  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose]);
+  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, router]);
 
   return (
     <Modal
@@ -1103,8 +1109,11 @@ export function FilmDetailModal({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.root, { paddingTop: insets.top }]}>
-          {/* Close button */}
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose} hitSlop={12}>
+          {/* Close button — top offset includes the safe-area inset so it
+              sits below the status bar rather than under it (which also
+              made it untappable, since the opaque status bar was
+              intercepting the touch before it reached the button). */}
+          <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 12 }]} onPress={handleClose} hitSlop={12}>
             <Ionicons name="close" size={22} color="#111827" />
           </TouchableOpacity>
 

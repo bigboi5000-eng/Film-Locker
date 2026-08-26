@@ -10,7 +10,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
-  ScrollView, ActivityIndicator, TextInput,
+  ScrollView, ActivityIndicator, TextInput, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,7 +22,6 @@ import {
 } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
-import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { webInputReset } from '@/lib/webInputReset';
 
 interface AddToPlaylistSheetProps {
@@ -78,7 +77,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
 
   return (
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={[styles.sheet, { backgroundColor: colors.background }]}>
           <View style={styles.handleContainer}>
@@ -94,7 +93,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
             </TouchableOpacity>
           </View>
 
-          <KeyboardAwareScrollViewCompat contentContainerStyle={styles.scrollContent}>
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             {playlists.length > 0 && (
               <>
                 <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>ADD TO EXISTING</Text>
@@ -148,9 +147,9 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                 {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.newCreateText}>Create</Text>}
               </TouchableOpacity>
             </View>
-          </KeyboardAwareScrollViewCompat>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

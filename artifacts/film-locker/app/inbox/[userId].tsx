@@ -407,7 +407,7 @@ export default function InboxThreadScreen() {
   // up — the chat feed above it (flex: 1) shrinks to make room rather than
   // the panel covering it, so whatever's being sent stays visible.
   const composerHeight = useRef(new Animated.Value(0)).current;
-  const COMPOSER_OPEN_HEIGHT = 300;
+  const COMPOSER_OPEN_HEIGHT = 330;
 
   useEffect(() => {
     Animated.timing(composerHeight, {
