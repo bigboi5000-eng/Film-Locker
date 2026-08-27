@@ -68,11 +68,16 @@ app.use(
   })),
 );
 
-// General rate limit — 120 requests per 15 min per IP
+// General rate limit — 400 requests per 15 min per IP.
+// Was 120, which is easy for one active session to exceed legitimately: the
+// notifications badge alone polls every 30s (30/15min), and normal tab
+// navigation fires several list/count queries per screen — a few minutes of
+// real use can rack up well past 120 with no abuse involved, silently
+// 429-ing whatever request happens to land next (e.g. a "create playlist").
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 120,
+    max: 400,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many requests — please try again later." },

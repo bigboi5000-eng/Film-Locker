@@ -19,6 +19,7 @@ import {
   useCreatePlaylist,
   useAddPlaylistItem,
   getGetMyPlaylistsQueryKey,
+  ApiError,
 } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
@@ -70,8 +71,9 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
       showToast({ title: `Added to "${name}"`, variant: 'success' });
       setNewName('');
       onClose();
-    } catch {
-      showToast({ title: 'Could not create playlist', variant: 'error' });
+    } catch (err) {
+      const detail = err instanceof ApiError ? (err.data as { error?: string } | null)?.error : undefined;
+      showToast({ title: 'Could not create playlist', subtitle: detail, variant: 'error' });
     }
   }, [newName, createPlaylist, addItem, tmdbId, title, posterUrl, queryClient, showToast, onClose]);
 
