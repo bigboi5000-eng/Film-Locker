@@ -21,17 +21,25 @@
  *        walls keep much of it out) — step 1 below regularly finds nothing
  *        for Instagram posts that this step picks up directly from the page.
  *
- *   1. Gemini + Google Search grounding (skipped for Instagram):
+ *   1. Gemini + Google Search grounding (skipped for Instagram and TikTok):
  *        Gemini searches Google to find out what the URL is about, then
  *        identifies any films referenced. Fallback for content the direct
  *        scrape above couldn't reach (private/login-walled pages) or
- *        platforms without a specific scraper. Skipped entirely for
- *        Instagram — Google's index of Instagram is too sparse for this to
- *        reliably find anything, and grounding-by-search asks Gemini to
- *        guess at content it can't verify rather than analyse content it
- *        was actually given. Instagram goes straight from step 0.5 to the
- *        audio/video steps below, where Gemini analyses real downloaded
- *        content instead of searching for the URL.
+ *        platforms without a specific scraper. Skipped for Instagram —
+ *        Google's index of Instagram is too sparse for this to reliably
+ *        find anything, and grounding-by-search asks Gemini to guess at
+ *        content it can't verify rather than analyse content it was
+ *        actually given. Also skipped for TikTok: TikTok's anti-bot checks
+ *        frequently block the step-0.5 scrape when it runs from a cloud
+ *        server IP (the same class of block Instagram gets), which used to
+ *        route nearly every TikTok link through this step — and Google
+ *        Search grounding has a much stricter, separate quota from Gemini's
+ *        plain calls, shared across every user and platform. Burning it on
+ *        TikTok links starved other platforms that actually depend on it
+ *        (Twitter/X, Facebook, generic sites) once it ran out for the day.
+ *        TikTok is well supported by yt-dlp, so it goes straight from step
+ *        0.5 to the audio/video steps below instead, which is also a more
+ *        reliable signal than a web search guessing at the post's content.
  *
  *   2. yt-dlp audio fallback:
  *        Downloads the audio track, sends it to Gemini 2.5 Flash via the
@@ -247,7 +255,7 @@ export async function processSocialLink(
     warn?.({ url, err }, "processSocialLink: page caption scrape failed — falling back to Gemini URL grounding");
   }
 
-  // ── Step 1: Gemini + Google Search grounding (skipped for Instagram) ─────
+  // ── Step 1: Gemini + Google Search grounding (skipped for Instagram/TikTok) ─
   // Gemini looks up what this URL is about and extracts film references.
   // Fallback for content the direct scrape above couldn't reach.
   //
@@ -259,9 +267,18 @@ export async function processSocialLink(
   // (see geminiUrlAnalyzer.ts's FOUND/NOT_FOUND guard). Gemini's job here is
   // to understand actual post content handed to it (caption text, or the
   // downloaded audio/video in steps 2-3 below), not to search the web for
-  // the URL. For Instagram, an empty/failed caption scrape goes straight to
-  // the audio fallback instead.
-  if (detectPlatform(url) !== "instagram") {
+  // the URL.
+  //
+  // TikTok is also excluded: its anti-bot checks routinely block the free
+  // step-0.5 scrape from a cloud server IP, which used to send nearly every
+  // TikTok link through this step — and this grounding call draws from a
+  // separate, much stricter Google Search quota than Gemini's plain calls,
+  // shared across every user and platform. Letting TikTok burn through it
+  // starved platforms that actually need it (Twitter/X, Facebook, generic
+  // sites) once the daily cap was hit. TikTok downloads reliably via
+  // yt-dlp, so it goes straight to the audio/video steps below instead.
+  const skipGrounding = detectPlatform(url) === "instagram" || detectPlatform(url) === "tiktok";
+  if (!skipGrounding) {
     try {
       const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
       warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
@@ -277,7 +294,7 @@ export async function processSocialLink(
       warn?.({ url, err }, "processSocialLink: Gemini URL analysis failed — falling back to audio");
     }
   } else {
-    warn?.({ url }, "processSocialLink: Instagram URL — skipping Gemini search grounding, going straight to audio");
+    warn?.({ url }, "processSocialLink: Instagram/TikTok URL — skipping Gemini search grounding, going straight to audio");
   }
 
   // ── Step 2: yt-dlp audio fallback ────────────────────────────────────────
