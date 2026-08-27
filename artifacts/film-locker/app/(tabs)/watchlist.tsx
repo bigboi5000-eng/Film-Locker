@@ -257,27 +257,18 @@ export default function WatchlistScreen() {
       const result = await processLink({ data: { url: trimmed, dryRun: true } });
       setSearchQuery('');
       const matches = result.matches ?? [];
-      if (matches.length === 0) {
-        showToast({
-          title: 'No Films Found',
-          subtitle:
-            result.source === 'none'
-              ? 'Could not extract any titles from this link.'
-              : `Processed via ${result.source} — no recognizable titles found.`,
-          variant: 'error',
-        });
-        return;
-      }
-      if (Platform.OS !== 'web') {
+      if (matches.length > 0 && Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      // Zero matches still opens the sheet — its "No film identified" state
+      // offers a manual TMDB search so the flow isn't a dead end.
       setResultMatches(matches);
       setResultListTitle(result.listTitle ?? null);
       setShowResultSheet(true);
     } catch {
       Alert.alert('Error', 'Could not process the link. Please try again.');
     }
-  }, [searchQuery, isProcessingLink, processLink, showToast]);
+  }, [searchQuery, isProcessingLink, processLink]);
 
   // AI bar submit — renders as a plain tappable results list (top 5, no
   // Gemini prose) below the bar, the same as a TMDB search result list.

@@ -30,10 +30,14 @@ import {
   useGetMyPlaylists,
   useCreatePlaylist,
   useAddPlaylistItem,
+  useSearchMovies,
   getListMoviesQueryKey,
   getGetMyPlaylistsQueryKey,
+  getSearchMoviesQueryKey,
+  ApiError,
   type GeminiMovieMatch,
   type Playlist,
+  type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
@@ -405,8 +409,9 @@ function BulkAddPanel({
     try {
       const pl = await createPlaylist({ data: { name, isPublic: false } }) as Playlist;
       await addAllToPlaylist(pl.id);
-    } catch {
-      showToast({ title: 'Could not create playlist', variant: 'error' });
+    } catch (err) {
+      const detail = err instanceof ApiError ? (err.data as { error?: string } | null)?.error : undefined;
+      showToast({ title: 'Could not create playlist', subtitle: detail, variant: 'error' });
     }
   }, [newName, createPlaylist, addAllToPlaylist, showToast]);
 
@@ -559,6 +564,142 @@ const crashStyles = StyleSheet.create({
   closeBtnText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
 
+// ── Manual search fallback ──────────────────────────────────────────────────
+// Shown when Gemini couldn't identify a film from the shared link — lets the
+// user type the title themselves and add it straight to their watchlist,
+// rather than the flow being a dead end.
+
+function ManualFilmSearch() {
+  const colors = useColors();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const { mutateAsync: addMovie } = useAddMovie();
+
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  const [addingId, setAddingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data, isFetching } = useSearchMovies(
+    { q: debouncedQuery },
+    { query: { enabled: debouncedQuery.length >= 2, queryKey: getSearchMoviesQueryKey({ q: debouncedQuery }) } }
+  );
+  const results = data?.movies ?? [];
+
+  const handleAdd = useCallback(async (movie: TmdbMovieCard) => {
+    setAddingId(movie.tmdbId);
+    try {
+      await addMovie({
+        data: {
+          tmdbId: movie.tmdbId,
+          title: movie.title,
+          releaseYear: movie.releaseYear,
+          posterUrl: movie.posterUrl,
+          overview: movie.overview,
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+      setAddedIds((prev) => new Set(prev).add(movie.tmdbId));
+    } catch {
+      showToast({ title: `Could not add "${movie.title}"`, variant: 'error' });
+    } finally {
+      setAddingId(null);
+    }
+  }, [addMovie, queryClient, showToast]);
+
+  return (
+    <View style={manualSearchStyles.wrap}>
+      <View style={[manualSearchStyles.divider, { backgroundColor: colors.border }]} />
+      <Text style={[manualSearchStyles.label, { color: colors.mutedForeground }]}>
+        SEARCH FOR IT YOURSELF
+      </Text>
+      <View style={[manualSearchStyles.searchRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <TextInput
+          style={[manualSearchStyles.searchInput, { color: colors.foreground }, webInputReset]}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Type the film's title…"
+          placeholderTextColor="#9CA3AF"
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {isFetching ? (
+        <ActivityIndicator color="#0066FF" style={{ marginTop: 14 }} />
+      ) : debouncedQuery.length >= 2 && results.length === 0 ? (
+        <Text style={[manualSearchStyles.emptyText, { color: colors.mutedForeground }]}>
+          No films found for "{debouncedQuery}"
+        </Text>
+      ) : (
+        results.map((movie) => {
+          const added = addedIds.has(movie.tmdbId);
+          return (
+            <View key={movie.tmdbId} style={[manualSearchStyles.filmRow, { borderBottomColor: colors.border }]}>
+              {movie.posterUrl ? (
+                <Image source={{ uri: movie.posterUrl }} style={manualSearchStyles.filmPoster} contentFit="cover" />
+              ) : (
+                <View style={[manualSearchStyles.filmPoster, manualSearchStyles.filmPosterFallback]}>
+                  <Ionicons name="film-outline" size={16} color="#D1D5DB" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[manualSearchStyles.filmTitle, { color: colors.foreground }]} numberOfLines={1}>
+                  {movie.title}
+                </Text>
+                {movie.releaseYear ? (
+                  <Text style={[manualSearchStyles.filmYear, { color: colors.mutedForeground }]}>{movie.releaseYear}</Text>
+                ) : null}
+              </View>
+              {added ? (
+                <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+              ) : addingId === movie.tmdbId ? (
+                <ActivityIndicator color="#0066FF" size="small" />
+              ) : (
+                <TouchableOpacity onPress={() => handleAdd(movie)} hitSlop={8}>
+                  <Ionicons name="add-circle-outline" size={26} color="#0066FF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+}
+
+const manualSearchStyles = StyleSheet.create({
+  wrap: { marginTop: 8, width: '100%' },
+  divider: { height: StyleSheet.hairlineWidth, marginBottom: 20 },
+  label: { fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.8, marginBottom: 10 },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, height: 42,
+  },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular' },
+  emptyText: { fontSize: 13, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 16 },
+  filmRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, marginTop: 4,
+  },
+  filmPoster: { width: 36, height: 52, borderRadius: 6 },
+  filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  filmTitle: { fontSize: 14, fontFamily: 'Inter_500Medium' },
+  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
+});
+
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
 export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
@@ -692,7 +833,14 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
               />
             ) : candidates.length === 0 ? (
               <>
-                <View style={styles.scrollContent}>
+                <ScrollView
+                  // flexShrink, not flex:1 — see the comment on the single-film
+                  // ScrollView below for why flex:1 collapses this to zero height.
+                  style={{ flexShrink: 1 }}
+                  contentContainerStyle={styles.scrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
                   <View style={styles.emptyState}>
                     <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
                     <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No film identified</Text>
@@ -700,7 +848,8 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       Try sharing a post with a visible film title or caption.
                     </Text>
                   </View>
-                </View>
+                  <ManualFilmSearch />
+                </ScrollView>
                 <View style={[styles.footer, { borderTopColor: colors.border }]}>
                   <TouchableOpacity
                     style={[styles.returnBtn, { backgroundColor: colors.muted }]}
@@ -894,7 +1043,8 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 48,
+    paddingTop: 32,
+    paddingBottom: 20,
     paddingHorizontal: 32,
     gap: 12,
   },
