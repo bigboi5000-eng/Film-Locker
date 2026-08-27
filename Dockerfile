@@ -10,9 +10,15 @@ FROM node:24-slim
 COPY --from=deno_bin /deno /usr/local/bin/deno
 RUN chmod a+rx /usr/local/bin/deno
 
+# yt-dlp_linux (not the plain "yt-dlp" zipapp, which needs the system's
+# Python to run) is a PyInstaller-built standalone binary that bundles
+# curl_cffi, which TikTok's extractor needs to impersonate a real browser's
+# TLS fingerprint — without it, yt-dlp warns "no impersonate target is
+# available" and TikTok rejects the plain request outright ("Unexpected
+# response from webpage request").
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg curl ca-certificates python3 \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
