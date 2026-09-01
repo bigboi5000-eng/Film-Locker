@@ -10,6 +10,7 @@ import {
   AiExtractResponse,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
+  ExtractFromImageBody,
   RecommendMoviesBody,
   RecommendMoviesResponse,
   GetMovieDetailsParams,
@@ -34,6 +35,7 @@ import { cached } from "../../lib/cache";
 const DISCOVERY_CACHE_TTL_MS = 20 * 60 * 1000;
 import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
+import { extractMoviesFromImage } from "../../lib/imageExtractor";
 import { getRecommendations } from "../../lib/geminiRecommender";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 
@@ -306,6 +308,64 @@ router.post("/movies/process-social-link", requireAuth, async (req, res): Promis
   );
 
   res.json(ProcessSocialLinkResponse.parse(result));
+});
+
+// POST /movies/extract-from-image — read films out of a supplied photo/screenshot
+router.post("/movies/extract-from-image", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = ExtractFromImageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dryRun = Boolean(parsed.data.dryRun);
+  const { imageBase64, mimeType } = parsed.data;
+  req.log.info({ mimeType, bytes: imageBase64.length, dryRun }, "extract-from-image: start");
+
+  let extraction;
+  try {
+    extraction = await extractMoviesFromImage(imageBase64, mimeType);
+  } catch (err) {
+    req.log.warn({ err }, "extract-from-image: Gemini image extraction failed");
+    // A bad or oversized image is the caller's problem to fix; anything else
+    // (Gemini being down or out of quota) is not, but from here both look the
+    // same to the user, so return the empty-result shape the client already
+    // handles rather than an error it would have to special-case.
+    res.json(
+      ProcessSocialLinkResponse.parse({
+        source: "none",
+        text: null,
+        matches: [],
+        saved: [],
+        listTitle: null,
+      })
+    );
+    return;
+  }
+
+  const { matches, saved, listTitle } = await enrichAndSaveMatches(
+    extraction.movies,
+    (data, msg) => req.log.warn(data, msg),
+    dryRun,
+    clerkUserId,
+    extraction.list_title
+  );
+
+  req.log.info(
+    { matches: matches.length, saved: saved.length, listTitle },
+    "extract-from-image: complete"
+  );
+
+  res.json(
+    ProcessSocialLinkResponse.parse({
+      source: matches.length > 0 ? "image" : "none",
+      text: null,
+      matches,
+      saved,
+      listTitle,
+    })
+  );
 });
 
 // POST /movies/recommend — natural-language film/TV recommendation (dry-run or save)

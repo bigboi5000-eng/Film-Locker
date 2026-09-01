@@ -165,6 +165,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProcessSocialLinkResponse"
 
+  /movies/extract-from-image:
+    post:
+      operationId: extractFromImage
+      tags: [movies]
+      summary: >
+        Extract films from a photo or screenshot the user supplies — a poster
+        or cinema listing photographed in the wild, or a screenshot of a post
+        whose titles are printed in the image rather than written in its
+        caption. Gemini reads the image directly; nothing is scraped, so this
+        works for content the link-based pipeline cannot reach.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractFromImageBody"
+      responses:
+        "200":
+          description: Extraction complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessSocialLinkResponse"
+        "400":
+          description: Missing, oversized, or unsupported image
+        "401":
+          description: Unauthorized
+
   /movies/recommend:
     post:
       operationId: recommendMovies
@@ -1470,7 +1498,10 @@ components:
       properties:
         source:
           type: string
-          enum: [caption, audio, video, none]
+          description: >
+            How the films were found. "image" is used by
+            /movies/extract-from-image, which shares this response shape.
+          enum: [caption, audio, video, image, none]
         text:
           type: string
           nullable: true
@@ -1493,6 +1524,27 @@ components:
         - matches
         - saved
         - listTitle
+
+    ExtractFromImageBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: >
+            Raw base64-encoded image bytes, with no `data:` URI prefix.
+            Capped at 12MB decoded.
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/jpg, image/png, image/webp, image/heic, image/heif]
+        dryRun:
+          type: boolean
+          description: >
+            When true, identify films from the image but do NOT save them to
+            the locker — same confirmation-first behaviour as
+            /movies/process-social-link.
+      required:
+        - imageBase64
+        - mimeType
 
     RecommendBody:
       type: object

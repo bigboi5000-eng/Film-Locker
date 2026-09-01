@@ -142,6 +142,9 @@ export interface ProcessSocialLinkBody {
   dryRun?: boolean;
 }
 
+/**
+ * How the films were found. "image" is used by /movies/extract-from-image, which shares this response shape.
+ */
 export type ProcessSocialLinkResponseSource = typeof ProcessSocialLinkResponseSource[keyof typeof ProcessSocialLinkResponseSource];
 
 
@@ -149,16 +152,38 @@ export const ProcessSocialLinkResponseSource = {
   caption: 'caption',
   audio: 'audio',
   video: 'video',
+  image: 'image',
   none: 'none',
 } as const;
 
 export interface ProcessSocialLinkResponse {
+  /** How the films were found. "image" is used by /movies/extract-from-image, which shares this response shape. */
   source: ProcessSocialLinkResponseSource;
   text?: string | null;
   matches: GeminiMovieMatch[];
   saved: Movie[];
   /** Suggested playlist name when the source was a curated/ranked list of films (e.g. "Top 10 Horror Films of All Time"), null otherwise. */
   listTitle: string | null;
+}
+
+export type ExtractFromImageBodyMimeType = typeof ExtractFromImageBodyMimeType[keyof typeof ExtractFromImageBodyMimeType];
+
+
+export const ExtractFromImageBodyMimeType = {
+  'image/jpeg': 'image/jpeg',
+  'image/jpg': 'image/jpg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+  'image/heic': 'image/heic',
+  'image/heif': 'image/heif',
+} as const;
+
+export interface ExtractFromImageBody {
+  /** Raw base64-encoded image bytes, with no `data:` URI prefix. Capped at 12MB decoded. */
+  imageBase64: string;
+  mimeType: ExtractFromImageBodyMimeType;
+  /** When true, identify films from the image but do NOT save them to the locker — same confirmation-first behaviour as /movies/process-social-link. */
+  dryRun?: boolean;
 }
 
 export interface RecommendBody {

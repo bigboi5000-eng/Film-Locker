@@ -22,6 +22,7 @@ import {
   useListMovies,
   useDeleteMovie,
   useProcessSocialLink,
+  useExtractFromImage,
   useRecommendMovies,
   useSearchMovies,
   getListMoviesQueryKey,
@@ -35,6 +36,7 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 import { confirmDestructive } from '@/lib/confirm';
+import { pickImageFromLibrary, takeFilmPhoto, type PickResult } from '@/lib/pickFilmImage';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -210,6 +212,7 @@ export default function WatchlistScreen() {
   const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies();
   const { mutateAsync: deleteMovie } = useDeleteMovie();
   const { mutateAsync: processLink, isPending: isProcessingLink } = useProcessSocialLink();
+  const { mutateAsync: extractFromImage, isPending: isExtractingImage } = useExtractFromImage();
   const { mutateAsync: recommend, isPending: isRecommending } = useRecommendMovies();
 
   // TMDB search — only fires when query has ≥ 2 chars.
@@ -269,6 +272,60 @@ export default function WatchlistScreen() {
       Alert.alert('Error', 'Could not process the link. Please try again.');
     }
   }, [searchQuery, isProcessingLink, processLink]);
+
+  // Identify films from a photo or screenshot — a poster or listing shot in
+  // the wild, or a post whose titles are printed in the image rather than
+  // written in its caption (which the link pipeline can't read). Results go
+  // through the same confirmation sheet as a shared link.
+  const runImageExtraction = useCallback(async (result: PickResult) => {
+    if (!result.ok) {
+      if (result.reason === 'permission-denied') {
+        showToast({
+          title: 'Permission needed',
+          subtitle: 'Allow photo access in Settings to identify films from an image.',
+          variant: 'error',
+        });
+      } else if (result.reason === 'unreadable') {
+        showToast({ title: 'Could not read that image', variant: 'error' });
+      }
+      // 'cancelled' is the user changing their mind — say nothing.
+      return;
+    }
+
+    try {
+      const response = await extractFromImage({
+        data: {
+          imageBase64: result.image.base64,
+          mimeType: result.image.mimeType,
+          dryRun: true,
+        },
+      });
+
+      const matches = response.matches ?? [];
+      if (matches.length > 0 && Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      // Zero matches still opens the sheet — its "No film identified" state
+      // offers a manual search, same as the link flow.
+      setResultMatches(matches);
+      setResultListTitle(response.listTitle ?? null);
+      setShowResultSheet(true);
+    } catch {
+      Alert.alert('Error', 'Could not read films from that image. Please try again.');
+    }
+  }, [extractFromImage, showToast]);
+
+  const handlePickImage = useCallback(() => {
+    Alert.alert(
+      'Identify films from an image',
+      'Photograph a poster or listing, or pick a screenshot of a post.',
+      [
+        { text: 'Take a photo', onPress: () => { void takeFilmPhoto().then(runImageExtraction); } },
+        { text: 'Choose from library', onPress: () => { void pickImageFromLibrary().then(runImageExtraction); } },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }, [runImageExtraction]);
 
   // AI bar submit — renders as a plain tappable results list (top 5, no
   // Gemini prose) below the bar, the same as a TMDB search result list.
@@ -503,6 +560,18 @@ export default function WatchlistScreen() {
                 <Ionicons name="close-circle" size={18} color="#9CA3AF" />
               </TouchableOpacity>
             )}
+            {/* Identify films from a photo or screenshot. Sits where a lens
+                icon sits in a search bar, and only while the field is empty,
+                so it never competes with the clear/submit controls. */}
+            {searchQuery.length === 0 && (
+              <TouchableOpacity onPress={handlePickImage} disabled={isExtractingImage} hitSlop={8}>
+                {isExtractingImage ? (
+                  <ActivityIndicator color="#0066FF" size="small" />
+                ) : (
+                  <Ionicons name="camera-outline" size={20} color="#0066FF" />
+                )}
+              </TouchableOpacity>
+            )}
             {looksLikeUrl(searchQuery.trim()) && (
               <TouchableOpacity onPress={handleSubmit} disabled={isProcessingLink} hitSlop={8}>
                 {isProcessingLink ? (
@@ -522,9 +591,13 @@ export default function WatchlistScreen() {
           <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
-      {(isProcessingLink || isRecommending) && (
+      {(isProcessingLink || isRecommending || isExtractingImage) && (
         <Text style={styles.processingHint}>
-          {isProcessingLink ? 'Extracting films via Gemini…' : 'Asking Gemini for a recommendation…'}
+          {isProcessingLink
+            ? 'Extracting films via Gemini…'
+            : isExtractingImage
+              ? 'Reading films from your image…'
+              : 'Asking Gemini for a recommendation…'}
         </Text>
       )}
 

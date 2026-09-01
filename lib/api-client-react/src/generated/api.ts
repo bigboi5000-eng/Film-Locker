@@ -28,6 +28,7 @@ import type {
   BlockUserResponse,
   ConversationFeedItem,
   CreatePlaylistBody,
+  ExtractFromImageBody,
   FilmComment,
   FilmCommentsResponse,
   FilmCommunityScore,
@@ -666,6 +667,78 @@ export const useProcessSocialLink = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getProcessSocialLinkMutationOptions(options));
+    }
+
+export const getExtractFromImageUrl = () => {
+
+
+
+
+  return `/api/movies/extract-from-image`
+}
+
+/**
+ * @summary Extract films from a photo or screenshot the user supplies — a poster or cinema listing photographed in the wild, or a screenshot of a post whose titles are printed in the image rather than written in its caption. Gemini reads the image directly; nothing is scraped, so this works for content the link-based pipeline cannot reach.
+
+ */
+export const extractFromImage = async (extractFromImageBody: ExtractFromImageBody, options?: RequestInit): Promise<ProcessSocialLinkResponse> => {
+
+  return customFetch<ProcessSocialLinkResponse>(getExtractFromImageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(extractFromImageBody)
+  }
+);}
+
+
+
+
+export const getExtractFromImageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractFromImage>>, TError,{data: BodyType<ExtractFromImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof extractFromImage>>, TError,{data: BodyType<ExtractFromImageBody>}, TContext> => {
+
+const mutationKey = ['extractFromImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractFromImage>>, {data: BodyType<ExtractFromImageBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  extractFromImage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExtractFromImageMutationResult = NonNullable<Awaited<ReturnType<typeof extractFromImage>>>
+    export type ExtractFromImageMutationBody = BodyType<ExtractFromImageBody>
+    export type ExtractFromImageMutationError = ErrorType<void>
+
+    /**
+ * @summary Extract films from a photo or screenshot the user supplies — a poster or cinema listing photographed in the wild, or a screenshot of a post whose titles are printed in the image rather than written in its caption. Gemini reads the image directly; nothing is scraped, so this works for content the link-based pipeline cannot reach.
+
+ */
+export const useExtractFromImage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractFromImage>>, TError,{data: BodyType<ExtractFromImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof extractFromImage>>,
+        TError,
+        {data: BodyType<ExtractFromImageBody>},
+        TContext
+      > => {
+      return useMutation(getExtractFromImageMutationOptions(options));
     }
 
 export const getRecommendMoviesUrl = () => {

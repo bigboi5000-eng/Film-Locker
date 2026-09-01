@@ -200,7 +200,7 @@ export const processSocialLinkResponseSavedItemRatingMax = 5;
 
 
 export const ProcessSocialLinkResponse = zod.object({
-  "source": zod.enum(['caption', 'audio', 'video', 'none']),
+  "source": zod.enum(['caption', 'audio', 'video', 'image', 'none']).describe('How the films were found. \"image\" is used by \/movies\/extract-from-image, which shares this response shape.\n'),
   "text": zod.string().nullish(),
   "matches": zod.array(zod.object({
   "movie_title": zod.string(),
@@ -231,6 +231,60 @@ export const ProcessSocialLinkResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "rating": zod.number().min(1).max(processSocialLinkResponseSavedItemRatingMax).nullish(),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+})),
+  "listTitle": zod.string().nullable().describe('Suggested playlist name when the source was a curated\/ranked list of films (e.g. \"Top 10 Horror Films of All Time\"), null otherwise.\n')
+})
+
+
+/**
+ * @summary Extract films from a photo or screenshot the user supplies — a poster or cinema listing photographed in the wild, or a screenshot of a post whose titles are printed in the image rather than written in its caption. Gemini reads the image directly; nothing is scraped, so this works for content the link-based pipeline cannot reach.
+
+ */
+export const ExtractFromImageBody = zod.object({
+  "imageBase64": zod.string().describe('Raw base64-encoded image bytes, with no `data:` URI prefix. Capped at 12MB decoded.\n'),
+  "mimeType": zod.enum(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']),
+  "dryRun": zod.boolean().optional().describe('When true, identify films from the image but do NOT save them to the locker — same confirmation-first behaviour as \/movies\/process-social-link.\n')
+})
+
+export const extractFromImageResponseSavedItemRatingMax = 5;
+
+
+
+export const ExtractFromImageResponse = zod.object({
+  "source": zod.enum(['caption', 'audio', 'video', 'image', 'none']).describe('How the films were found. \"image\" is used by \/movies\/extract-from-image, which shares this response shape.\n'),
+  "text": zod.string().nullish(),
+  "matches": zod.array(zod.object({
+  "movie_title": zod.string(),
+  "release_year": zod.string(),
+  "confidence_score": zod.number(),
+  "tmdb_id": zod.number().nullish(),
+  "poster_url": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "overview": zod.string().nullish(),
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
+}).describe('Single movie reference extracted by Gemini, with confidence score')),
+  "saved": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})),
+  "rating": zod.number().min(1).max(extractFromImageResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()

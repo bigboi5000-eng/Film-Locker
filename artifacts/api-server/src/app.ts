@@ -54,6 +54,13 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 // CORS — allow credentials so Clerk session cookies work in browser previews
 app.use(cors({ credentials: true, origin: true }));
 
+// A base64-encoded photo is far past express.json()'s 100kb default, so this
+// one route gets its own larger parser. It must be mounted BEFORE the general
+// one below: whichever parser runs first populates req.body, and the second
+// then sees it is already parsed and skips. Mounting it per-route keeps the
+// larger ceiling off every other endpoint.
+app.use("/api/movies/extract-from-image", express.json({ limit: "16mb" }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -96,6 +103,7 @@ const heavyLimit = rateLimit({
 app.use("/api/movies/process-social-link", heavyLimit);
 app.use("/api/movies/ai-extract", heavyLimit);
 app.use("/api/movies/recommend", heavyLimit);
+app.use("/api/movies/extract-from-image", heavyLimit);
 
 app.use("/api", router);
 
