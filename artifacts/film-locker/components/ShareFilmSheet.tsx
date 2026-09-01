@@ -296,6 +296,35 @@ const selectStyles = StyleSheet.create({
 
 type BulkAddMode = 'playlist' | 'watchlist' | 'both';
 
+/**
+ * How many add-requests to have in flight at once during a bulk add.
+ * Enough that the wait stops scaling with list length, capped so a long
+ * countdown ("Top 50…") doesn't open fifty sockets at once from a phone.
+ */
+const BULK_ADD_CONCURRENCY = 6;
+
+/** Runs `fn` over `items` with at most `limit` in flight; order is irrelevant here. */
+async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]);
+      }
+    })
+  );
+
+  return results;
+}
+
 function BulkAddPanel({
   candidates,
   mode,
@@ -326,23 +355,29 @@ function BulkAddPanel({
 
   const playlists = data?.playlists ?? [];
 
+  // Films are added concurrently rather than one awaited request at a time:
+  // a ten-film list was ten sequential round trips from the phone, so the
+  // wait grew with the length of the list for no reason — each add is
+  // independent, and the server tolerates them arriving in any order.
   const addAllToWatchlistOnly = useCallback(async () => {
-    let added = 0;
-    for (const m of candidates) {
-      if (!m.tmdb_id) continue;
+    const addable = candidates.filter((m) => m.tmdb_id);
+
+    const results = await mapWithLimit(addable, BULK_ADD_CONCURRENCY, async (m) => {
       try {
         await addMovie({
           data: {
-            tmdbId: m.tmdb_id,
+            tmdbId: m.tmdb_id!,
             title: m.title ?? m.movie_title,
             releaseYear: m.release_year,
             posterUrl: m.poster_url ?? '',
             overview: m.overview ?? '',
           },
         });
-        added++;
-      } catch { /* already in watchlist — skip */ }
-    }
+        return true;
+      } catch { return false; /* already in watchlist — skip */ }
+    });
+    const added = results.filter(Boolean).length;
+
     await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
     setAddingTo(null);
     setDone(true);
@@ -361,26 +396,30 @@ function BulkAddPanel({
 
   const addAllToPlaylist = useCallback(async (playlistId: number) => {
     setAddingTo(playlistId);
-    let added = 0;
-    for (const m of candidates) {
-      if (!m.tmdb_id) continue;
+    const addable = candidates.filter((m) => m.tmdb_id);
+
+    // Concurrent for the same reason as addAllToWatchlistOnly above — and in
+    // "both" mode each film's two writes go together, so a film's playlist
+    // and watchlist entries still can't end up half-done independently.
+    const results = await mapWithLimit(addable, BULK_ADD_CONCURRENCY, async (m) => {
+      let addedToPlaylist = false;
       try {
         await addItem({
           id: playlistId,
           data: {
-            tmdbId: m.tmdb_id,
+            tmdbId: m.tmdb_id!,
             filmTitle: m.title ?? m.movie_title,
             posterUrl: m.poster_url ?? '',
           },
         });
-        added++;
+        addedToPlaylist = true;
       } catch { /* already in playlist — skip */ }
 
       if (alsoAddToWatchlist) {
         try {
           await addMovie({
             data: {
-              tmdbId: m.tmdb_id,
+              tmdbId: m.tmdb_id!,
               title: m.title ?? m.movie_title,
               releaseYear: m.release_year,
               posterUrl: m.poster_url ?? '',
@@ -389,7 +428,11 @@ function BulkAddPanel({
           });
         } catch { /* already in watchlist — skip */ }
       }
-    }
+
+      return addedToPlaylist;
+    });
+    const added = results.filter(Boolean).length;
+
     await queryClient.invalidateQueries({ queryKey: getGetMyPlaylistsQueryKey() });
     if (alsoAddToWatchlist) {
       await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });

@@ -40,6 +40,41 @@ type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 const CONFIDENCE_THRESHOLD = 0.45;
 
 /**
+ * How many TMDB requests to have in flight at once.
+ *
+ * A "Top 10" share arrives as ten titles, and looking them up one after
+ * another made the wait scale linearly with list length — the dominant cost
+ * once Gemini had already answered. TMDB's own limit is far above this;
+ * the cap is here to stay a considerate client, not because it's the
+ * bottleneck.
+ */
+const TMDB_CONCURRENCY = 8;
+
+/**
+ * Like `items.map(fn)` awaited in parallel, but with at most `limit` calls
+ * in flight. Results stay in input order regardless of completion order.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+/**
  * TMDB enrichment + DB upsert for a pre-extracted list of movie matches.
  *
  * Fetches full details (director, cast, genres, language, watch providers)
@@ -65,41 +100,63 @@ export async function enrichAndSaveMatches(
     }))
     .sort((a, b) => b.confidence_score - a.confidence_score);
 
-  const seenTmdb = new Set<number>();
-  const saved: SavedMovie[] = [];
-  const enrichedMatches: EnrichedMatch[] = [];
+  // ── Pass 1: TMDB lookups, in parallel ──────────────────────────────────
+  // Index-aligned with `sanitised`; null means "no usable TMDB match", either
+  // because the match was below the confidence threshold, the search found
+  // nothing, or the search itself failed.
+  const hits = await mapWithConcurrency(sanitised, TMDB_CONCURRENCY, async (match) => {
+    if (!(match.confidence_score >= CONFIDENCE_THRESHOLD)) return null;
+    try {
+      return (await searchTmdb(match.movie_title))[0] ?? null;
+    } catch (err) {
+      warn?.({ match, err }, "pipeline: TMDB search failed for match");
+      return null;
+    }
+  });
 
-  for (const match of sanitised) {
-    if (!(match.confidence_score >= CONFIDENCE_THRESHOLD)) {
+  // ── Pass 2: assemble matches in order, and pick out what to save ────────
+  // Sequential and cheap (no I/O), so result ordering and de-duplication stay
+  // exactly as before — highest confidence first, first occurrence of a given
+  // TMDB id wins.
+  const seenTmdb = new Set<number>();
+  const enrichedMatches: EnrichedMatch[] = [];
+  const toSave: NonNullable<(typeof hits)[number]>[] = [];
+
+  sanitised.forEach((match, i) => {
+    const hit = hits[i];
+
+    if (!hit) {
       enrichedMatches.push({ ...match, tmdb_id: null });
-      continue;
+      return;
     }
 
+    // In dry-run mode include TMDB card data so the UI can show a film card
+    // without a separate fetch.
+    enrichedMatches.push({
+      ...match,
+      tmdb_id: hit.tmdbId,
+      poster_url: hit.posterUrl,
+      title: hit.title,
+      overview: hit.overview,
+    });
+
+    if (seenTmdb.has(hit.tmdbId)) return;
+    seenTmdb.add(hit.tmdbId);
+    toSave.push(hit);
+  });
+
+  // ── Skip all DB writes in dry-run mode ─────────────────────────────────
+  if (dryRun) {
+    return { matches: enrichedMatches, saved: [], listTitle };
+  }
+
+  // ── Pass 3: details fetch + upsert per film, also in parallel ───────────
+  // Note a deliberate difference from the previous sequential version: a
+  // failure here leaves the film in `matches` with its TMDB id, and only
+  // absent from `saved`. Identification did succeed — it was the write that
+  // didn't — so reporting the film as unidentified would be wrong.
+  const savedOrNull = await mapWithConcurrency(toSave, TMDB_CONCURRENCY, async (hit) => {
     try {
-      const hits = await searchTmdb(match.movie_title);
-      const hit = hits[0];
-
-      if (!hit) {
-        enrichedMatches.push({ ...match, tmdb_id: null });
-        continue;
-      }
-
-      // In dry-run mode include TMDB card data so the UI can show a film card
-      // without a separate fetch.
-      enrichedMatches.push({
-        ...match,
-        tmdb_id: hit.tmdbId,
-        poster_url: hit.posterUrl,
-        title: hit.title,
-        overview: hit.overview,
-      });
-
-      if (seenTmdb.has(hit.tmdbId)) continue;
-      seenTmdb.add(hit.tmdbId);
-
-      // ── Skip all DB writes in dry-run mode ───────────────────────────────
-      if (dryRun) continue;
-
       // Fetch full details (director, cast, genres, language, watch providers)
       const details = await fetchMovieDetails(hit.tmdbId).catch((err) => {
         warn?.({ err, tmdbId: hit.tmdbId }, "pipeline: fetchMovieDetails failed — using basic data");
@@ -126,7 +183,7 @@ export async function enrichAndSaveMatches(
       //     (never touch rating / isWatched / watchedAt).
       //   - Existing row + details fetch failed: do nothing so we don't
       //     regress existing metadata to empty strings/arrays.
-      let movie: typeof moviesTable.$inferSelect | undefined;
+      let movie: SavedMovie | undefined;
 
       if (details) {
         ([movie] = await db
@@ -168,12 +225,14 @@ export async function enrichAndSaveMatches(
         }
       }
 
-      if (movie) saved.push(movie);
+      return movie ?? null;
     } catch (err) {
-      warn?.({ match, err }, "pipeline: TMDB/DB step failed for match");
-      enrichedMatches.push({ ...match, tmdb_id: null });
+      warn?.({ tmdbId: hit.tmdbId, err }, "pipeline: save step failed for match");
+      return null;
     }
-  }
+  });
+
+  const saved = savedOrNull.filter((m): m is SavedMovie => m !== null);
 
   return { matches: enrichedMatches, saved, listTitle };
 }

@@ -1,4 +1,5 @@
 import type { WatchProvider } from "@workspace/db";
+import { cached } from "./cache";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
@@ -212,22 +213,44 @@ export async function enrichCandidates(
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
+/**
+ * A title's search results barely move, and the same handful of films get
+ * looked up over and over — across users sharing the same viral post, and
+ * within a single share when the identify step and the save step both run.
+ * An hour is long enough to collapse all of that and short enough that a
+ * newly-added film shows up the same session.
+ */
+const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
+
 export async function searchTmdb(query: string): Promise<TmdbCandidate[]> {
-  const apiKey = getApiKey();
-  const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`;
+  const normalised = query.trim().toLowerCase();
+  if (!normalised) return [];
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
-  }
+  return cached(
+    `tmdb:search:${normalised}`,
+    SEARCH_CACHE_TTL_MS,
+    async () => {
+      const apiKey = getApiKey();
+      const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`;
 
-  const data = (await res.json()) as TmdbSearchResponse;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
+      }
 
-  return data.results
-    .filter((m) => m.poster_path)
-    .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 3)
-    .map(movieToCandidate);
+      const data = (await res.json()) as TmdbSearchResponse;
+
+      return data.results
+        .filter((m) => m.poster_path)
+        .sort((a, b) => b.popularity - a.popularity)
+        .slice(0, 3)
+        .map(movieToCandidate);
+    },
+    // Never remember a miss: a film TMDB hasn't indexed yet, or a title
+    // Gemini garbled, would otherwise stay "not found" for the full hour
+    // even after a retry would have worked.
+    { shouldCache: (results) => results.length > 0 },
+  );
 }
 
 // ── Full details (credits + watch providers) ──────────────────────────────────
@@ -244,6 +267,29 @@ export async function searchTmdb(query: string): Promise<TmdbCandidate[]> {
 export async function fetchMovieDetails(
   tmdbId: number,
   region: string = DEFAULT_REGION
+): Promise<TmdbMovieDetails | null> {
+  // Three upstream requests per call, and the same films recur constantly —
+  // a shared post identified by several users, or one list mentioning a film
+  // twice. Cached per region since watch providers differ by country.
+  // Nulls (the details request itself failing) are not cached, so a blip
+  // doesn't stick.
+  return cached(
+    `tmdb:details:${tmdbId}:${region}`,
+    DETAILS_CACHE_TTL_MS,
+    () => fetchMovieDetailsUncached(tmdbId, region),
+    { shouldCache: (result) => result !== null },
+  );
+}
+
+/**
+ * Watch providers are the part of this payload that actually changes (a film
+ * leaving Netflix), so this is shorter than the search TTL.
+ */
+const DETAILS_CACHE_TTL_MS = 30 * 60 * 1000;
+
+async function fetchMovieDetailsUncached(
+  tmdbId: number,
+  region: string
 ): Promise<TmdbMovieDetails | null> {
   const apiKey = getApiKey();
 

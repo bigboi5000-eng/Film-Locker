@@ -91,10 +91,15 @@ export async function uploadAndAnalyzeMedia(
 
       let fileState = uploadedFile.state ?? "PROCESSING";
 
+      // Re-check before sleeping, not after. Sleeping first charged every
+      // single extraction a full poll interval even when the file was
+      // already ACTIVE by the time the upload call returned — which for the
+      // short clips this handles is the common case, not the exception.
       while (fileState === "PROCESSING" && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         const refreshed = await ai.files.get({ name: uploadedFileName! });
         fileState = (refreshed.state as string) ?? "PROCESSING";
+        if (fileState !== "PROCESSING") break;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
 
       if (fileState === "FAILED") {
