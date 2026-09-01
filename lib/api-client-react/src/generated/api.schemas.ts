@@ -84,14 +84,6 @@ export interface TmdbMovieDetailsResponse {
   tmdbVoteCount: number;
 }
 
-export interface MovieCandidate {
-  tmdbId: number;
-  title: string;
-  releaseYear: string;
-  posterUrl: string;
-  overview: string;
-}
-
 /**
  * Single movie reference extracted by Gemini, with confidence score
  */
@@ -133,14 +125,6 @@ export interface AddMovieBody {
   releaseYear: string;
   posterUrl: string;
   overview: string;
-}
-
-export interface ParseCaptionBody {
-  caption: string;
-}
-
-export interface ParseCaptionResponse {
-  candidates: MovieCandidate[];
 }
 
 export interface AiExtractBody {

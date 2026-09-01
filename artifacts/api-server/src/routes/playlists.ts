@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { and, eq, ilike, desc, count, sql, or } from "drizzle-orm";
 import { db, playlistsTable, playlistItemsTable, usersTable, followsTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { isBlockedEitherWay } from "../lib/blocks";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -169,31 +170,70 @@ router.get("/playlists/public", async (req, res): Promise<void> => {
 
 // ── GET /playlists/:id ────────────────────────────────────────────────────
 // Returns playlist metadata + all items.
-// Public playlists are accessible to anyone; private ones require ownership.
+//
+// Visibility must match GET /playlists/public exactly, since this endpoint
+// returns strictly more than the search list does (every item, not just a
+// cover strip) and playlist ids are sequential integers — anything this
+// route hands out anonymously is trivially enumerable. Two independent
+// gates, same as the search query:
+//   1. The playlist itself must be public (or you own it).
+//   2. If the OWNER's account is private, only the owner or an accepted
+//      follower may see it — a public playlist does not punch a hole
+//      through a private account.
+// A block in either direction hides it entirely, reported as 404 so the
+// block isn't disclosed.
 
 router.get("/playlists/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [playlist] = await db
-    .select()
+  const [row] = await db
+    .select({ playlist: playlistsTable, ownerIsPrivate: usersTable.isPrivate })
     .from(playlistsTable)
+    .innerJoin(usersTable, eq(usersTable.clerkId, playlistsTable.userId))
     .where(eq(playlistsTable.id, id));
 
-  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+  if (!row) { res.status(404).json({ error: "Playlist not found" }); return; }
+  const { playlist, ownerIsPrivate } = row;
 
-  // Auth check for private playlists.
   // requireAuth isn't used on this route (public playlists must stay
   // accessible without a token), so read the Clerk session directly —
   // req.auth is a function in @clerk/express (req.auth()), not a plain
   // object; reading req.auth.userId off the function itself always
   // returns undefined, which previously locked owners out of their own
   // private playlists.
-  if (!playlist.isPublic) {
-    const clerkUserId = getAuth(req)?.userId;
-    if (!clerkUserId || clerkUserId !== playlist.userId) {
+  const clerkUserId = getAuth(req)?.userId ?? null;
+  const isOwner = clerkUserId !== null && clerkUserId === playlist.userId;
+
+  if (!isOwner) {
+    if (!playlist.isPublic) {
       res.status(403).json({ error: "Private playlist" });
       return;
+    }
+
+    if (await isBlockedEitherWay(clerkUserId ?? "", playlist.userId)) {
+      res.status(404).json({ error: "Playlist not found" });
+      return;
+    }
+
+    if (ownerIsPrivate) {
+      const accepted = clerkUserId
+        ? await db
+            .select({ id: followsTable.id })
+            .from(followsTable)
+            .where(
+              and(
+                eq(followsTable.followerId, clerkUserId),
+                eq(followsTable.followeeId, playlist.userId),
+                eq(followsTable.status, "accepted")
+              )
+            )
+        : [];
+
+      if (accepted.length === 0) {
+        res.status(403).json({ error: "This account is private." });
+        return;
+      }
     }
   }
 

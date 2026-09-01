@@ -138,24 +138,6 @@ export const SearchMoviesResponse = zod.object({
 
 
 /**
- * @summary Parse a social media caption and find matching movies via TMDB
- */
-export const ParseCaptionBody = zod.object({
-  "caption": zod.string()
-})
-
-export const ParseCaptionResponse = zod.object({
-  "candidates": zod.array(zod.object({
-  "tmdbId": zod.number(),
-  "title": zod.string(),
-  "releaseYear": zod.string(),
-  "posterUrl": zod.string(),
-  "overview": zod.string()
-}))
-})
-
-
-/**
  * @summary Use Gemini AI to extract movie references from text, enrich each with TMDB data, and automatically save them to the locker.
 
  */

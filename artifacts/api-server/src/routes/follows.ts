@@ -101,13 +101,24 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
 
   const status = target.isPrivate ? "pending" : "accepted";
 
-  // Idempotent — a repeat follow/request while one already exists just
-  // returns the existing row's actual status rather than erroring.
-  const [inserted] = await db
-    .insert(followsTable)
-    .values({ followerId: clerkUserId, followeeId, status })
-    .onConflictDoNothing()
-    .returning();
+  // Idempotent, but not a plain no-op on conflict: a request left "pending"
+  // against an account that has since gone public would otherwise stay
+  // pending forever, with the UI stuck on "Requested" and re-tapping Follow
+  // changing nothing — the only escape being cancel-then-follow. So when the
+  // target is public now, an existing row is promoted to "accepted".
+  // A row that is already "accepted" is never demoted back to "pending" when
+  // the target turns private: existing followers keep their access, which is
+  // how going private behaves everywhere else in the app.
+  const insert = db.insert(followsTable).values({ followerId: clerkUserId, followeeId, status });
+
+  const [inserted] = await (status === "accepted"
+    ? insert.onConflictDoUpdate({
+        target: [followsTable.followerId, followsTable.followeeId],
+        set: { status: "accepted" },
+        setWhere: eq(followsTable.status, "pending"),
+      })
+    : insert.onConflictDoNothing()
+  ).returning();
 
   const row =
     inserted ??

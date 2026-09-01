@@ -64,6 +64,7 @@
  */
 
 import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
+import { isPubliclyFetchableUrl } from "./safeUrl";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import { extractMoviesFromAudio } from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
@@ -212,11 +213,27 @@ export async function processSocialLink(
     }
   }
 
+  // Everything past this point either fetches `url` from the server or hands
+  // it to yt-dlp, so this is the one place to establish it points somewhere
+  // public. The request body only checks the URL is well-formed, which
+  // accepts loopback, link-local (cloud metadata), Railway's private network
+  // and file:// — see safeUrl.ts.
+  if (!isPubliclyFetchableUrl(url)) {
+    warn?.({ url }, "processSocialLink: refusing non-public URL");
+    return { source: "none", text: null, matches: [], saved: [], listTitle: null };
+  }
+
   // A share.google link with no useful title hint (or one Gemini didn't
   // recognize) still needs resolving before the search-URL fast path below
   // has a chance — see resolveShareGoogleLink() for why.
   const resolvedUrl = await resolveShareGoogleLink(url);
   if (resolvedUrl !== url) {
+    // Re-check after following redirects — the destination is chosen by
+    // whoever the link points at, not by the check above.
+    if (!isPubliclyFetchableUrl(resolvedUrl)) {
+      warn?.({ url, resolvedUrl }, "processSocialLink: redirect resolved to a non-public URL — refusing");
+      return { source: "none", text: null, matches: [], saved: [], listTitle: null };
+    }
     warn?.({ url, resolvedUrl }, "processSocialLink: resolved share.google redirect");
     url = resolvedUrl;
   }

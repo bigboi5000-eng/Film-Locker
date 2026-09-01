@@ -120,25 +120,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/SearchMoviesResponse"
 
-  /movies/parse-caption:
-    post:
-      operationId: parseCaption
-      tags: [movies]
-      summary: Parse a social media caption and find matching movies via TMDB
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ParseCaptionBody"
-      responses:
-        "200":
-          description: Candidate movies found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ParseCaptionResponse"
-
   /movies/ai-extract:
     post:
       operationId: aiExtract
@@ -1339,26 +1320,6 @@ components:
         - tmdbRating
         - tmdbVoteCount
 
-    MovieCandidate:
-      type: object
-      properties:
-        tmdbId:
-          type: integer
-        title:
-          type: string
-        releaseYear:
-          type: string
-        posterUrl:
-          type: string
-        overview:
-          type: string
-      required:
-        - tmdbId
-        - title
-        - releaseYear
-        - posterUrl
-        - overview
-
     GeminiMovieMatch:
       type: object
       description: Single movie reference extracted by Gemini, with confidence score
@@ -1464,24 +1425,6 @@ components:
         - releaseYear
         - posterUrl
         - overview
-
-    ParseCaptionBody:
-      type: object
-      properties:
-        caption:
-          type: string
-      required:
-        - caption
-
-    ParseCaptionResponse:
-      type: object
-      properties:
-        candidates:
-          type: array
-          items:
-            $ref: "#/components/schemas/MovieCandidate"
-      required:
-        - candidates
 
     AiExtractBody:
       type: object

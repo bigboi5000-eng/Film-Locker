@@ -48,8 +48,6 @@ import type {
   NotificationThreadResponse,
   NotificationUsersResponse,
   NotificationsResponse,
-  ParseCaptionBody,
-  ParseCaptionResponse,
   PatchRatingBody,
   PatchWatchedBody,
   Playlist,
@@ -525,76 +523,6 @@ export function useSearchMovies<TData = Awaited<ReturnType<typeof searchMovies>>
 
 
 
-
-export const getParseCaptionUrl = () => {
-
-
-
-
-  return `/api/movies/parse-caption`
-}
-
-/**
- * @summary Parse a social media caption and find matching movies via TMDB
- */
-export const parseCaption = async (parseCaptionBody: ParseCaptionBody, options?: RequestInit): Promise<ParseCaptionResponse> => {
-
-  return customFetch<ParseCaptionResponse>(getParseCaptionUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(parseCaptionBody)
-  }
-);}
-
-
-
-
-export const getParseCaptionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext> => {
-
-const mutationKey = ['parseCaption'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof parseCaption>>, {data: BodyType<ParseCaptionBody>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  parseCaption(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ParseCaptionMutationResult = NonNullable<Awaited<ReturnType<typeof parseCaption>>>
-    export type ParseCaptionMutationBody = BodyType<ParseCaptionBody>
-    export type ParseCaptionMutationError = ErrorType<unknown>
-
-    /**
- * @summary Parse a social media caption and find matching movies via TMDB
- */
-export const useParseCaption = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof parseCaption>>,
-        TError,
-        {data: BodyType<ParseCaptionBody>},
-        TContext
-      > => {
-      return useMutation(getParseCaptionMutationOptions(options));
-    }
 
 export const getAiExtractUrl = () => {
 

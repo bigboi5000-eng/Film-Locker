@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, avg, count, desc, inArray } from "drizzle-orm";
+import { and, eq, avg, count, desc, notInArray, or, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { db, filmCommunityRatingsTable, filmCommentsTable, usersTable, followsTable } from "@workspace/db";
 import {
@@ -139,6 +139,34 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
 
   const clerkUserId: string | undefined = getAuth(req)?.userId ?? undefined;
 
+  // Visibility is resolved in SQL rather than by filtering the fetched page
+  // in JS. Filtering afterwards silently shrinks pages (a page whose authors
+  // are all hidden comes back empty) and makes `hasMore` describe the
+  // unfiltered result, so the client can't tell an exhausted list from a
+  // fully-hidden page. Both gates below therefore go into the WHERE clause,
+  // where LIMIT/OFFSET see the same rows the viewer will:
+  //   • blocks (either direction) hide the author entirely
+  //   • a private author's comments are visible only to themselves and to
+  //     their accepted followers
+  const blockedIds = clerkUserId ? await getMutualBlockSet(clerkUserId) : new Set<string>();
+
+  const visibleToViewer = and(
+    eq(filmCommentsTable.tmdbId, tmdbId),
+    blockedIds.size > 0 ? notInArray(filmCommentsTable.userId, [...blockedIds]) : undefined,
+    or(
+      eq(usersTable.isPrivate, false),
+      clerkUserId ? eq(filmCommentsTable.userId, clerkUserId) : undefined,
+      clerkUserId
+        ? sql`EXISTS (
+            SELECT 1 FROM ${followsTable}
+            WHERE ${followsTable.followerId} = ${clerkUserId}
+              AND ${followsTable.followeeId} = ${filmCommentsTable.userId}
+              AND ${followsTable.status} = 'accepted'
+          )`
+        : undefined
+    )
+  );
+
   // Fetch comments with user profile join, plus that author's own community
   // rating for this film (if they've left one) so it can show alongside
   // their comment.
@@ -152,11 +180,12 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
       updatedAt: filmCommentsTable.updatedAt,
       username: usersTable.username,
       avatarUrl: usersTable.avatarUrl,
-      isPrivate: usersTable.isPrivate,
       rating: filmCommunityRatingsTable.rating,
     })
     .from(filmCommentsTable)
-    .leftJoin(usersTable, eq(filmCommentsTable.userId, usersTable.clerkId))
+    // Inner, not left: a comment whose author row is missing has no privacy
+    // setting to evaluate, so it can't be shown safely.
+    .innerJoin(usersTable, eq(filmCommentsTable.userId, usersTable.clerkId))
     .leftJoin(
       filmCommunityRatingsTable,
       and(
@@ -164,7 +193,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
         eq(filmCommunityRatingsTable.userId, filmCommentsTable.userId)
       )
     )
-    .where(eq(filmCommentsTable.tmdbId, tmdbId))
+    .where(visibleToViewer)
     .orderBy(desc(filmCommentsTable.createdAt))
     .limit(PAGE_SIZE + 1)
     .offset(offset);
@@ -172,35 +201,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
   const hasMore = rows.length > PAGE_SIZE;
   const pageRows = rows.slice(0, PAGE_SIZE);
 
-  // Private authors' comments are followers-only — resolve which of this
-  // page's private authors the viewer has an accepted follow on.
-  const privateAuthorIds = [
-    ...new Set(pageRows.filter((r) => r.isPrivate && r.userId !== clerkUserId).map((r) => r.userId)),
-  ];
-  let followedPrivateAuthorIds = new Set<string>();
-  if (clerkUserId && privateAuthorIds.length > 0) {
-    const accepted = await db
-      .select({ followeeId: followsTable.followeeId })
-      .from(followsTable)
-      .where(
-        and(
-          eq(followsTable.followerId, clerkUserId),
-          eq(followsTable.status, "accepted"),
-          inArray(followsTable.followeeId, privateAuthorIds)
-        )
-      );
-    followedPrivateAuthorIds = new Set(accepted.map((a) => a.followeeId));
-  }
-
-  // Comments from anyone in a block relationship with the viewer (either
-  // direction) are hidden regardless of the author's privacy setting.
-  const blockedIds = clerkUserId ? await getMutualBlockSet(clerkUserId) : new Set<string>();
-
   const comments = pageRows
-    .filter((r) => !blockedIds.has(r.userId))
-    .filter(
-      (r) => !r.isPrivate || r.userId === clerkUserId || followedPrivateAuthorIds.has(r.userId)
-    )
     .map((r) => ({
       id: r.id,
       tmdbId: r.tmdbId,

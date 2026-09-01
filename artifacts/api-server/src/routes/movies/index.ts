@@ -5,8 +5,6 @@ import {
   ListMoviesResponse,
   AddMovieBody,
   AddMovieResponse,
-  ParseCaptionBody,
-  ParseCaptionResponse,
   DeleteMovieParams,
   AiExtractBody,
   AiExtractResponse,
@@ -34,7 +32,6 @@ import { cached } from "../../lib/cache";
 // don't re-fetch. Recommendations is per-user and lower-volume, so it's left
 // uncached for now.
 const DISCOVERY_CACHE_TTL_MS = 20 * 60 * 1000;
-import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
 import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
 import { getRecommendations } from "../../lib/geminiRecommender";
@@ -107,46 +104,6 @@ router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
     req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB detail fetch failed");
     res.status(502).json({ error: "Could not fetch movie details from TMDB" });
   }
-});
-
-// POST /movies/parse-caption — public (no saves, just TMDB search)
-router.post("/movies/parse-caption", async (req, res): Promise<void> => {
-  const parsed = ParseCaptionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const titleCandidates = await extractMovieTitlesAI(parsed.data.caption);
-  req.log.info(
-    { count: titleCandidates.length, candidates: titleCandidates },
-    "Extracted caption candidates (AI)"
-  );
-
-  const seen = new Set<number>();
-  const results: Array<{
-    tmdbId: number;
-    title: string;
-    releaseYear: string;
-    posterUrl: string;
-    overview: string;
-  }> = [];
-
-  for (const candidate of titleCandidates) {
-    try {
-      const hits = await searchTmdb(candidate);
-      for (const hit of hits) {
-        if (!seen.has(hit.tmdbId)) {
-          seen.add(hit.tmdbId);
-          results.push(hit);
-        }
-      }
-    } catch (err) {
-      req.log.warn({ candidate, err }, "TMDB search failed for candidate");
-    }
-  }
-
-  res.json(ParseCaptionResponse.parse({ candidates: results.slice(0, 24) }));
 });
 
 // ── Protected locker routes (require Clerk auth) ──────────────────────────────

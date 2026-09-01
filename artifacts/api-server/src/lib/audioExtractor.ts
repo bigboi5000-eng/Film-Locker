@@ -80,6 +80,13 @@ async function downloadAudio(videoUrl: string): Promise<string> {
     // encode costs nothing in extraction accuracy while cutting encode and
     // upload time for this step.
     "--audio-quality", "7",
+    // Same guards the video path uses. Without them a link to a multi-hour
+    // livestream VOD downloads at full rate until the timeout below fires,
+    // and the only bound on how much of Railway's fixed disk allowance that
+    // burns is how fast the network is — with concurrent requests each
+    // getting their own temp file.
+    "--match-filter", "duration<600",
+    "--max-filesize", "50M",
     "--no-playlist",
     "--quiet",
     "-o", outPath,

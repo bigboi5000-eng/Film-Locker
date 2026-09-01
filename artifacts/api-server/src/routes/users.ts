@@ -348,6 +348,15 @@ router.get("/users/:id/watched", requireAuth, async (req, res): Promise<void> =>
   }
 
   if (targetId !== clerkUserId) {
+    // Blocking already deletes the follow rows in both directions (see
+    // POST /blocks), so the mutual-follow gate below would fail anyway —
+    // but stated explicitly so this route doesn't silently depend on that
+    // side effect surviving future changes to what blocking does.
+    if (await isBlockedEitherWay(clerkUserId, targetId)) {
+      res.status(404).json({ error: "User not found." });
+      return;
+    }
+
     const [theyFollowMe, iFollowThem] = await Promise.all([
       db
         .select({ id: followsTable.id })
