@@ -19,6 +19,12 @@ const FIREWORK_COLORS = [
 /** Longest a burst can live, so the cleanup timer never cuts one short. */
 const MAX_BURST_MS = 1500;
 
+/** How long the opening finale runs before the display settles down. */
+const FINALE_MS = 4000;
+/** Salvo spacing during the finale, and after it settles. */
+const FINALE_SALVO_MS = 480;
+const CALM_SALVO_MS = 2600;
+
 interface Burst {
   id: number;
   x: number;
@@ -154,9 +160,17 @@ function Fireworks() {
   useEffect(() => {
     const timers = new Set<ReturnType<typeof setTimeout>>();
 
+    // The finale burns itself out after FINALE_MS and the display drops to a
+    // slow drift of small shells. Read as a phase rather than a stop: an
+    // empty sky would leave the screen looking broken to anyone still
+    // reading the feature list, and the loud version does not want watching
+    // for a whole minute.
+    let calm = false;
+
     const spawnOne = () => {
       const id = nextId.current++;
-      const big = Math.random() < 0.35;
+      // Big shells belong to the finale only.
+      const big = !calm && Math.random() < 0.35;
 
       const burst: Burst = {
         id,
@@ -165,10 +179,10 @@ function Fireworks() {
         // whole thing feels surrounded rather than decorated.
         y: 50 + Math.random() * (SCREEN_H * 0.62),
         colors: [pickColor(), pickColor()],
-        particleCount: big ? 26 : 16 + Math.floor(Math.random() * 6),
-        radius: big ? 95 + Math.random() * 45 : 55 + Math.random() * 35,
+        particleCount: big ? 26 : calm ? 11 + Math.floor(Math.random() * 5) : 16 + Math.floor(Math.random() * 6),
+        radius: big ? 95 + Math.random() * 45 : calm ? 42 + Math.random() * 26 : 55 + Math.random() * 35,
         duration: big ? 1150 + Math.random() * 300 : 850 + Math.random() * 250,
-        hasInnerRing: big || Math.random() < 0.3,
+        hasInnerRing: big || (!calm && Math.random() < 0.3),
       };
 
       setBursts((prev) => [...prev, burst]);
@@ -180,11 +194,13 @@ function Fireworks() {
       timers.add(cleanup);
     };
 
-    // Salvos rather than a metronome: most ticks fire one shell, some fire
-    // two or three in quick succession, which reads as chaotic rather than
-    // scheduled.
+    // Salvos rather than a metronome: during the finale most ticks fire one
+    // shell and some fire two or three in quick succession, which reads as
+    // chaotic rather than scheduled. Once calm, always a single shell.
     const salvo = () => {
       spawnOne();
+      if (calm) return;
+
       const extra = Math.random() < 0.45 ? 1 + Math.floor(Math.random() * 2) : 0;
       for (let i = 0; i < extra; i++) {
         const t = setTimeout(() => {
@@ -210,9 +226,20 @@ function Fireworks() {
     // driver, so the JS thread stays free — but it is still 140 views to
     // composite, and this is the first screen anyone sees, so the rate is
     // kept just off the maximum. Lower this number for more chaos.
-    const interval = setInterval(salvo, 480);
+    let interval = setInterval(salvo, FINALE_SALVO_MS);
+
+    const settle = setTimeout(() => {
+      calm = true;
+      clearInterval(interval);
+      interval = setInterval(salvo, CALM_SALVO_MS);
+      timers.delete(settle);
+    }, FINALE_MS);
+    timers.add(settle);
 
     return () => {
+      // `interval` is reassigned when the display settles, and this closes
+      // over the binding rather than the value, so it clears whichever one
+      // is currently running.
       clearInterval(interval);
       timers.forEach(clearTimeout);
     };
