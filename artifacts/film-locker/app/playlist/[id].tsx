@@ -8,6 +8,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import {
@@ -16,10 +17,13 @@ import {
   useDeletePlaylist,
   useRemovePlaylistItem,
   useAddPlaylistItem,
+  useFollowPlaylist,
+  useUnfollowPlaylist,
   useSearchMovies,
   useListMovies,
   getGetPlaylistQueryKey,
   getGetMyPlaylistsQueryKey,
+  getGetFollowedPlaylistsQueryKey,
   getSearchMoviesQueryKey,
   type PlaylistItem,
   type Movie,
@@ -317,6 +321,38 @@ export default function PlaylistScreen() {
     query: { queryKey: getGetPlaylistQueryKey(numericId), enabled: !isNaN(numericId) },
   });
 
+  // Everything that changes a playlist is owner-only. The server already
+  // enforces this — POST/DELETE of items and the playlist itself all 403 for
+  // anyone else — so this is about not offering controls that cannot work:
+  // a public playlist showed a stranger an edit button and "Hold to remove",
+  // both of which would only ever produce an error.
+  const { userId: myClerkId } = useAuth();
+  // Trust the server's own verdict where it has one; fall back to comparing
+  // ids while the response is still loading.
+  const isOwner = playlist?.isOwner ?? Boolean(playlist && myClerkId && playlist.userId === myClerkId);
+
+  const { mutateAsync: followPlaylist } = useFollowPlaylist();
+  const { mutateAsync: unfollowPlaylist } = useUnfollowPlaylist();
+  const [followBusy, setFollowBusy] = useState(false);
+
+  const handleToggleFollow = useCallback(async () => {
+    if (!playlist) return;
+    setFollowBusy(true);
+    try {
+      if (playlist.isFollowed) {
+        await unfollowPlaylist({ id: numericId });
+      } else {
+        await followPlaylist({ id: numericId });
+      }
+      await queryClient.invalidateQueries({ queryKey: getGetPlaylistQueryKey(numericId) });
+      await queryClient.invalidateQueries({ queryKey: getGetFollowedPlaylistsQueryKey() });
+    } catch {
+      Alert.alert('Error', playlist.isFollowed ? 'Could not unfollow this playlist.' : 'Could not follow this playlist.');
+    } finally {
+      setFollowBusy(false);
+    }
+  }, [playlist, numericId, followPlaylist, unfollowPlaylist, queryClient]);
+
   const { mutateAsync: updatePlaylist, isPending: saving } = useUpdatePlaylist();
   const { mutateAsync: deletePlaylist } = useDeletePlaylist();
   const { mutateAsync: removeItem } = useRemovePlaylistItem();
@@ -390,9 +426,9 @@ export default function PlaylistScreen() {
       releaseYear={savedByTmdbId.get(item.tmdbId)?.releaseYear ?? ''}
       posterUrl={item.posterUrl}
       onPress={() => openItemModal(item)}
-      onLongPress={() => handleRemove(item.tmdbId, item.filmTitle)}
+      onLongPress={isOwner ? () => handleRemove(item.tmdbId, item.filmTitle) : undefined}
     />
-  ), [savedByTmdbId, openItemModal, handleRemove]);
+  ), [savedByTmdbId, openItemModal, handleRemove, isOwner]);
 
   const items = playlist?.items ?? [];
   const existingTmdbIds = useMemo(() => new Set(items.map((item) => item.tmdbId)), [items]);
@@ -443,9 +479,30 @@ export default function PlaylistScreen() {
             </>
           )}
         </View>
-        <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn} activeOpacity={0.7}>
-          <Ionicons name="pencil-outline" size={20} color="#6B7280" />
-        </TouchableOpacity>
+        {isOwner ? (
+          <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn} activeOpacity={0.7}>
+            <Ionicons name="pencil-outline" size={20} color="#6B7280" />
+          </TouchableOpacity>
+        ) : playlist ? (
+          <TouchableOpacity
+            onPress={handleToggleFollow}
+            disabled={followBusy}
+            style={[styles.followBtn, playlist.isFollowed && styles.followingBtn]}
+            activeOpacity={0.8}
+          >
+            {followBusy ? (
+              <ActivityIndicator size="small" color={playlist.isFollowed ? '#374151' : '#FFFFFF'} />
+            ) : (
+              <Text style={[styles.followBtnText, playlist.isFollowed && styles.followingBtnText]}>
+                {playlist.isFollowed ? 'Following' : 'Follow'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          // Placeholder of the same width so the title stays optically centred
+          // between the back button and this edge while loading.
+          <View style={styles.editBtn} />
+        )}
       </View>
 
       {isLoading ? (
@@ -471,7 +528,7 @@ export default function PlaylistScreen() {
               <Text style={styles.sectionLabel}>
                 {filteredItems.length} FILM{filteredItems.length === 1 ? '' : 'S'}
               </Text>
-              <Text style={styles.sectionHint}>Hold to remove</Text>
+              {isOwner && <Text style={styles.sectionHint}>Hold to remove</Text>}
             </View>
           )}
 
@@ -494,7 +551,7 @@ export default function PlaylistScreen() {
         </>
       )}
 
-      {playlist && (
+      {playlist && isOwner && (
         <EditSheet
           visible={editVisible}
           playlistId={numericId}
@@ -542,6 +599,18 @@ const styles = StyleSheet.create({
   headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   headerMetaText: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
   editBtn: { padding: 8 },
+  followBtn: {
+    backgroundColor: '#0066FF',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 16,
+    minWidth: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followingBtn: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  followingBtnText: { color: '#374151' },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
   emptyTitle: { fontSize: 18, fontFamily: 'Inter_600SemiBold', color: '#374151' },

@@ -13,10 +13,12 @@ import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import {
   useGetMyPlaylists,
+  useGetFollowedPlaylists,
   useCreatePlaylist,
   useSearchPublicPlaylists,
   useSearchMovies,
   getGetMyPlaylistsQueryKey,
+  getGetFollowedPlaylistsQueryKey,
   getSearchPublicPlaylistsQueryKey,
   getSearchMoviesQueryKey,
   type Playlist,
@@ -40,6 +42,11 @@ export default function PlaylistsScreen() {
   });
   const { mutateAsync: createPlaylist, isPending: creating } = useCreatePlaylist();
   const myPlaylists = myData?.playlists ?? [];
+
+  const { data: followedData } = useGetFollowedPlaylists({
+    query: { queryKey: getGetFollowedPlaylistsQueryKey() },
+  });
+  const followedPlaylists = followedData?.playlists ?? [];
 
   const handleCreatePlaylist = useCallback(async (name: string, isPublic: boolean) => {
     try {
@@ -141,10 +148,12 @@ export default function PlaylistsScreen() {
             columnWrapperStyle={{ paddingHorizontal: 16, justifyContent: 'space-between' }}
             contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 24, gap: 16 }}
             ListEmptyComponent={
-              <TouchableOpacity style={styles.emptyCard} onPress={() => setCreateVisible(true)} activeOpacity={0.8}>
-                <Ionicons name="add-circle-outline" size={28} color="#0066FF" />
-                <Text style={styles.emptyCardText}>Create your first playlist</Text>
-              </TouchableOpacity>
+              followedPlaylists.length > 0 ? null : (
+                <TouchableOpacity style={styles.emptyCard} onPress={() => setCreateVisible(true)} activeOpacity={0.8}>
+                  <Ionicons name="add-circle-outline" size={28} color="#0066FF" />
+                  <Text style={styles.emptyCardText}>Create your first playlist</Text>
+                </TouchableOpacity>
+              )
             }
             renderItem={({ item }) => (
               <PlaylistCard
@@ -152,6 +161,25 @@ export default function PlaylistsScreen() {
                 onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: String(item.id) } })}
               />
             )}
+            // Playlists you follow but don't own. Separated rather than mixed
+            // in, because the two behave differently: these are read-only and
+            // change when their owner changes them.
+            ListFooterComponent={
+              followedPlaylists.length > 0 ? (
+                <View style={styles.followingSection}>
+                  <Text style={styles.followingLabel}>FOLLOWING</Text>
+                  <View style={styles.followingGrid}>
+                    {followedPlaylists.map((item) => (
+                      <PlaylistCard
+                        key={`fl-${item.id}`}
+                        playlist={item}
+                        onPress={() => router.push({ pathname: '/playlist/[id]', params: { id: String(item.id) } })}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : null
+            }
           />
         )
       ) : (
@@ -336,6 +364,16 @@ const styles = StyleSheet.create({
   filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
   filmTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827' },
   filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+
+  followingSection: { marginTop: 28, paddingHorizontal: 16 },
+  followingLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.8,
+    color: '#9CA3AF',
+    marginBottom: 12,
+  },
+  followingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
 
   emptyCard: {
     marginHorizontal: 16, height: 100, borderRadius: 12,

@@ -34,6 +34,7 @@ import type {
   FilmCommunityScore,
   FilmNotification,
   FollowBody,
+  FollowPlaylistResponse,
   FollowResponse,
   FollowsResponse,
   GetBlocksResponse,
@@ -3641,6 +3642,225 @@ export function useSearchPublicPlaylists<TData = Awaited<ReturnType<typeof searc
 
 
 
+
+export const getGetFollowedPlaylistsUrl = () => {
+
+
+
+
+  return `/api/playlists/followed`
+}
+
+/**
+ * Separate from GET /playlists, which is the set of playlists the caller can add films to. A followed playlist is read-only and reflects whatever its owner currently has in it. Playlists that have since been made private, or whose owner has gone private and no longer accepts this follower, are omitted.
+ * @summary Playlists the caller follows but does not own
+ */
+export const getFollowedPlaylists = async ( options?: RequestInit): Promise<PlaylistsResponse> => {
+
+  return customFetch<PlaylistsResponse>(getGetFollowedPlaylistsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFollowedPlaylistsQueryKey = () => {
+    return [
+    `/api/playlists/followed`
+    ] as const;
+    }
+
+
+export const getGetFollowedPlaylistsQueryOptions = <TData = Awaited<ReturnType<typeof getFollowedPlaylists>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFollowedPlaylists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFollowedPlaylistsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFollowedPlaylists>>> = ({ signal }) => getFollowedPlaylists({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFollowedPlaylists>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFollowedPlaylistsQueryResult = NonNullable<Awaited<ReturnType<typeof getFollowedPlaylists>>>
+export type GetFollowedPlaylistsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Playlists the caller follows but does not own
+ */
+
+export function useGetFollowedPlaylists<TData = Awaited<ReturnType<typeof getFollowedPlaylists>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFollowedPlaylists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFollowedPlaylistsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getFollowPlaylistUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/follow`
+}
+
+/**
+ * A follow is a reference rather than a copy — the follower always sees the owner's current contents, so the owner's later changes are reflected automatically.
+ * @summary Follow someone else's public playlist
+ */
+export const followPlaylist = async (id: number, options?: RequestInit): Promise<FollowPlaylistResponse> => {
+
+  return customFetch<FollowPlaylistResponse>(getFollowPlaylistUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getFollowPlaylistMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof followPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof followPlaylist>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['followPlaylist'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof followPlaylist>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  followPlaylist(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FollowPlaylistMutationResult = NonNullable<Awaited<ReturnType<typeof followPlaylist>>>
+
+    export type FollowPlaylistMutationError = ErrorType<void>
+
+    /**
+ * @summary Follow someone else's public playlist
+ */
+export const useFollowPlaylist = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof followPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof followPlaylist>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getFollowPlaylistMutationOptions(options));
+    }
+
+export const getUnfollowPlaylistUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/follow`
+}
+
+/**
+ * @summary Stop following a playlist
+ */
+export const unfollowPlaylist = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUnfollowPlaylistUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getUnfollowPlaylistMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unfollowPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unfollowPlaylist>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['unfollowPlaylist'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unfollowPlaylist>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  unfollowPlaylist(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnfollowPlaylistMutationResult = NonNullable<Awaited<ReturnType<typeof unfollowPlaylist>>>
+
+    export type UnfollowPlaylistMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Stop following a playlist
+ */
+export const useUnfollowPlaylist = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unfollowPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unfollowPlaylist>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getUnfollowPlaylistMutationOptions(options));
+    }
 
 export const getGetPlaylistUrl = (id: number,) => {
 

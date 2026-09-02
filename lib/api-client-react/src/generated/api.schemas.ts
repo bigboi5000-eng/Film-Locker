@@ -580,7 +580,16 @@ export interface PlaylistItem {
 
 export type PlaylistWithItems = Playlist & {
   items: PlaylistItem[];
+  /** Whether the caller owns this playlist. Only the owner may edit it, add or remove films, or delete it. */
+  isOwner: boolean;
+  /** Whether the caller follows this playlist. Always false for the owner, who does not follow their own. */
+  isFollowed: boolean;
 };
+
+export interface FollowPlaylistResponse {
+  playlistId: number;
+  isFollowed: boolean;
+}
 
 export interface PlaylistsResponse {
   playlists: Playlist[];

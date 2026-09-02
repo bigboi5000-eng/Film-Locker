@@ -1264,6 +1264,52 @@ export const SearchPublicPlaylistsResponse = zod.object({
 
 
 /**
+ * Separate from GET /playlists, which is the set of playlists the caller can add films to. A followed playlist is read-only and reflects whatever its owner currently has in it. Playlists that have since been made private, or whose owner has gone private and no longer accepts this follower, are omitted.
+ * @summary Playlists the caller follows but does not own
+ */
+export const GetFollowedPlaylistsResponse = zod.object({
+  "playlists": zod.array(zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isPublic": zod.boolean(),
+  "itemCount": zod.number(),
+  "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "ownerDisplayInitials": zod.string().nullish(),
+  "ownerAvatarUrl": zod.string().nullish()
+}))
+})
+
+
+/**
+ * A follow is a reference rather than a copy — the follower always sees the owner's current contents, so the owner's later changes are reflected automatically.
+ * @summary Follow someone else's public playlist
+ */
+export const FollowPlaylistParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const FollowPlaylistResponse = zod.object({
+  "playlistId": zod.number(),
+  "isFollowed": zod.boolean()
+})
+
+
+/**
+ * @summary Stop following a playlist
+ */
+export const UnfollowPlaylistParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UnfollowPlaylistResponse = zod.void()
+
+
+/**
  * @summary Get a playlist with its items
  */
 export const GetPlaylistParams = zod.object({
@@ -1291,7 +1337,9 @@ export const GetPlaylistResponse = zod.object({
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "addedAt": zod.coerce.date()
-}))
+})),
+  "isOwner": zod.boolean().describe('Whether the caller owns this playlist. Only the owner may edit it, add or remove films, or delete it.\n'),
+  "isFollowed": zod.boolean().describe('Whether the caller follows this playlist. Always false for the owner, who does not follow their own.\n')
 }))
 
 

@@ -11,6 +11,7 @@ import {
   filmCommunityRatingsTable,
   playlistsTable,
   playlistItemsTable,
+  playlistFollowsTable,
   feedbackTable,
   blocksTable,
   reportsTable,
@@ -180,6 +181,9 @@ router.delete("/users/me", requireAuth, async (req, res): Promise<void> => {
     // retained as a safety record — deleting your account shouldn't erase
     // evidence someone else submitted about your conduct.
     await tx.delete(reportsTable).where(eq(reportsTable.reporterId, clerkUserId));
+    // Follows of other people's playlists. Follows OF this user's playlists
+    // go with the playlists themselves, which cascade on delete below.
+    await tx.delete(playlistFollowsTable).where(eq(playlistFollowsTable.userId, clerkUserId));
     await tx.delete(filmCommentsTable).where(eq(filmCommentsTable.userId, clerkUserId));
     await tx.delete(filmCommunityRatingsTable).where(eq(filmCommunityRatingsTable.userId, clerkUserId));
     await tx.delete(playlistsTable).where(eq(playlistsTable.userId, clerkUserId));

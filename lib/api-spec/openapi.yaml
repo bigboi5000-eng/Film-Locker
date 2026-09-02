@@ -1044,6 +1044,69 @@ paths:
               schema:
                 $ref: "#/components/schemas/PlaylistsResponse"
 
+  /playlists/followed:
+    get:
+      operationId: getFollowedPlaylists
+      tags: [playlists]
+      summary: Playlists the caller follows but does not own
+      description: >
+        Separate from GET /playlists, which is the set of playlists the caller
+        can add films to. A followed playlist is read-only and reflects
+        whatever its owner currently has in it. Playlists that have since been
+        made private, or whose owner has gone private and no longer accepts
+        this follower, are omitted.
+      responses:
+        "200":
+          description: Followed playlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistsResponse"
+        "401":
+          description: Unauthorized
+
+  /playlists/{id}/follow:
+    post:
+      operationId: followPlaylist
+      tags: [playlists]
+      summary: Follow someone else's public playlist
+      description: >
+        A follow is a reference rather than a copy — the follower always sees
+        the owner's current contents, so the owner's later changes are
+        reflected automatically.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Now following
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowPlaylistResponse"
+        "400":
+          description: Your own playlist
+        "403":
+          description: Playlist is private, or its owner's account is
+        "404":
+          description: Not found
+    delete:
+      operationId: unfollowPlaylist
+      tags: [playlists]
+      summary: Stop following a playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: No longer following
+
   /playlists/{id}:
     get:
       operationId: getPlaylist
@@ -2302,8 +2365,31 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/PlaylistItem"
+            isOwner:
+              type: boolean
+              description: >
+                Whether the caller owns this playlist. Only the owner may edit
+                it, add or remove films, or delete it.
+            isFollowed:
+              type: boolean
+              description: >
+                Whether the caller follows this playlist. Always false for the
+                owner, who does not follow their own.
           required:
             - items
+            - isOwner
+            - isFollowed
+
+    FollowPlaylistResponse:
+      type: object
+      properties:
+        playlistId:
+          type: integer
+        isFollowed:
+          type: boolean
+      required:
+        - playlistId
+        - isFollowed
 
     PlaylistsResponse:
       type: object
