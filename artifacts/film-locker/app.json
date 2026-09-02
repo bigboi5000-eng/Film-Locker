@@ -21,6 +21,10 @@
       "backgroundColor": "#FFFFFF",
       "package": "com.filmlocker.app",
       "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0B0B0C"
+      },
       "gradleProperties": {
         "org.gradle.jvmargs": "-Xmx4g -XX:MaxMetaspaceSize=512m",
         "org.gradle.daemon": "false",
