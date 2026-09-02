@@ -110,6 +110,144 @@ function Fireworks() {
   );
 }
 
+// ── Floating film icons ──────────────────────────────────────────────────────
+
+/**
+ * Emoji that each evoke a well-known film without reproducing anyone's
+ * artwork — a lightsaber and a helmeted robot read as the films they belong
+ * to, while a drawn Vader helmet or Iron Man suit would be someone else's
+ * trademarked design sitting on our sign-up screen.
+ *
+ * Deliberately spans what the audience actually watches rather than only
+ * sci-fi and superheroes: the tiara, ballet shoe, bow, ruby slipper and
+ * handbag are as much a part of this list as the ray gun.
+ */
+const FLOATING_ICONS = [
+  '🤖', // the helmeted robot — sci-fi
+  '⚔️', // laser swords
+  '🕷️', // the wall-crawler
+  '👽', // first contact
+  '🚀', // space opera
+  '🦖', // the island of dinosaurs
+  '🦸‍♀️', // the amazon warrior
+  '👸', // fairy-tale heroines
+  '🩰', // the ballet thriller
+  '🏹', // the archer in the arena
+  '🧙‍♀️', // the witch, defying gravity
+  '👠', // the ruby slipper
+  '💍', // the one ring
+  '🎀', // the doll in the pink car
+  '👜', // the courtroom blonde
+  '🦋', // coming-of-age
+  '🌹', // the enchanted rose
+  '🕶️', // the red pill
+  '🍿', // the audience
+  '🎞️', // the medium itself
+];
+
+interface FloatingIcon {
+  id: number;
+  emoji: string;
+  startX: number;
+  size: number;
+  duration: number;
+  delay: number;
+  drift: number;
+  spin: number;
+}
+
+/**
+ * One icon drifting up the screen and fading as it goes.
+ *
+ * Everything here is transform/opacity only so it can run on the native
+ * driver — the sign-up screen is the first thing a new user sees, and this
+ * must not compete with the fireworks for JS-thread time.
+ */
+function FloatingFilmIcon({ icon }: { icon: FloatingIcon }) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: icon.duration,
+        delay: icon.delay,
+        useNativeDriver: true,
+      })
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [progress, icon.duration, icon.delay]);
+
+  // Rises from just below the screen to just above it.
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SCREEN_H * 0.92, -80],
+  });
+
+  // A lazy sideways sway on the way up, so they don't rise in straight lines.
+  const translateX = progress.interpolate({
+    inputRange: [0, 0.25, 0.5, 0.75, 1],
+    outputRange: [0, icon.drift, 0, -icon.drift, 0],
+  });
+
+  const rotate = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', `${icon.spin}deg`],
+  });
+
+  // Fade in on entry and back out before the top, so the loop restarting is
+  // never visible as a pop.
+  const opacity = progress.interpolate({
+    inputRange: [0, 0.12, 0.75, 1],
+    outputRange: [0, 0.5, 0.38, 0],
+  });
+
+  return (
+    <Animated.Text
+      style={[
+        styles.floatingIcon,
+        {
+          left: icon.startX,
+          fontSize: icon.size,
+          opacity,
+          transform: [{ translateY }, { translateX }, { rotate }],
+        },
+      ]}
+    >
+      {icon.emoji}
+    </Animated.Text>
+  );
+}
+
+function FloatingFilmIcons() {
+  // Built once so a re-render never reshuffles positions mid-flight.
+  const icons = useMemo<FloatingIcon[]>(
+    () =>
+      FLOATING_ICONS.map((emoji, i) => ({
+        id: i,
+        emoji,
+        startX: 12 + Math.random() * (SCREEN_W - 60),
+        size: 22 + Math.random() * 16,
+        duration: 14000 + Math.random() * 12000,
+        // Spread the entry times across the whole cycle so they trickle up
+        // continuously instead of arriving as one wave.
+        delay: Math.random() * 16000,
+        drift: 10 + Math.random() * 26,
+        spin: Math.random() < 0.5 ? -20 : 20,
+      })),
+    []
+  );
+
+  return (
+    <View style={styles.floatingLayer} pointerEvents="none">
+      {icons.map((icon) => (
+        <FloatingFilmIcon key={icon.id} icon={icon} />
+      ))}
+    </View>
+  );
+}
+
 // ── Feature highlights ───────────────────────────────────────────────────────
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; blurb: string }[] = [
@@ -195,6 +333,8 @@ export default function WelcomeScreen() {
 
   return (
     <LinearGradient colors={['#0B1220', '#111C33', '#0B1220']} style={styles.root}>
+      {/* Icons drift up behind the fireworks, which stay in the top band. */}
+      <FloatingFilmIcons />
       <Fireworks />
 
       <View style={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
@@ -234,6 +374,15 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
+  },
+  floatingLayer: {
+    ...StyleSheet.absoluteFillObject,
+    // Behind the content, which sits in the normal flow above it.
+    overflow: 'hidden',
+  },
+  floatingIcon: {
+    position: 'absolute',
+    top: 0,
   },
   content: {
     flex: 1,

@@ -68,9 +68,11 @@ const { height: SCREEN_H } = Dimensions.get('window');
 function FilmCard({
   match,
   onAdded,
+  onNotAMatch,
 }: {
   match: GeminiMovieMatch;
   onAdded: () => void;
+  onNotAMatch?: () => void;
 }) {
   const colors = useColors();
   const queryClient = useQueryClient();
@@ -144,21 +146,33 @@ function FilmCard({
             <Text style={cardStyles.addedText}>Added to Watchlist</Text>
           </View>
         ) : (
-          <TouchableOpacity
-            style={[cardStyles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={handleAdd}
-            disabled={isPending || !match.tmdb_id}
-            activeOpacity={0.8}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="bookmark-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={cardStyles.addBtnText}>Add to Watchlist</Text>
-              </>
+          <>
+            <TouchableOpacity
+              style={[cardStyles.addBtn, { backgroundColor: colors.primary }]}
+              onPress={handleAdd}
+              disabled={isPending || !match.tmdb_id}
+              activeOpacity={0.8}
+            >
+              {isPending ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="bookmark-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={cardStyles.addBtnText}>Add to Watchlist</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Wrong film? Swap it before adding, rather than adding the
+                wrong one and having to undo it in the watchlist. */}
+            {onNotAMatch && (
+              <TouchableOpacity onPress={onNotAMatch} hitSlop={6} style={cardStyles.notAMatchBtn}>
+                <Text style={[cardStyles.notAMatchText, { color: colors.mutedForeground }]}>
+                  Not a match?
+                </Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </>
         )}
       </View>
     </View>
@@ -213,6 +227,12 @@ const cardStyles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
   },
+  notAMatchBtn: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 2 },
+  notAMatchText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    textDecorationLine: 'underline',
+  },
   addedRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -232,10 +252,12 @@ function FilmSelectRow({
   match,
   selected,
   onToggle,
+  onNotAMatch,
 }: {
   match: GeminiMovieMatch;
   selected: boolean;
   onToggle: () => void;
+  onNotAMatch?: () => void;
 }) {
   const colors = useColors();
   const displayTitle = match.title ?? match.movie_title;
@@ -266,6 +288,11 @@ function FilmSelectRow({
         {match.release_year ? (
           <Text style={[selectStyles.year, { color: colors.mutedForeground }]}>{match.release_year}</Text>
         ) : null}
+        {onNotAMatch && (
+          <TouchableOpacity onPress={onNotAMatch} hitSlop={6} style={selectStyles.notAMatchBtn}>
+            <Text style={[selectStyles.notAMatchText, { color: colors.mutedForeground }]}>Not a match?</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <Ionicons
         name={selected ? 'checkbox' : 'square-outline'}
@@ -290,6 +317,12 @@ const selectStyles = StyleSheet.create({
   info: { flex: 1 },
   title: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   year: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
+  notAMatchBtn: { alignSelf: 'flex-start', marginTop: 3, paddingVertical: 2 },
+  notAMatchText: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    textDecorationLine: 'underline',
+  },
 });
 
 // ── Bulk add panel (playlist / watchlist / both) — acts on the selected set ──
@@ -607,19 +640,28 @@ const crashStyles = StyleSheet.create({
   closeBtnText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
 
-// ── Manual search fallback ──────────────────────────────────────────────────
-// Shown when Gemini couldn't identify a film from the shared link — lets the
-// user type the title themselves and add it straight to their watchlist,
-// rather than the flow being a dead end.
+// ── Manual search ───────────────────────────────────────────────────────────
+// Serves two jobs, since they're the same interaction:
+//   • nothing was identified at all — type the title yourself rather than the
+//     flow being a dead end
+//   • a film was identified but matched to the wrong entry — pass onPicked to
+//     hand the chosen film back to the caller instead of adding it here
+// With no onPicked, results add straight to the watchlist.
 
-function ManualFilmSearch() {
+function ManualFilmSearch({
+  initialQuery = '',
+  onPicked,
+}: {
+  initialQuery?: string;
+  onPicked?: (movie: TmdbMovieCard) => void;
+}) {
   const colors = useColors();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const { mutateAsync: addMovie } = useAddMovie();
 
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery.trim());
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [addingId, setAddingId] = useState<number | null>(null);
 
@@ -635,6 +677,12 @@ function ManualFilmSearch() {
   const results = data?.movies ?? [];
 
   const handleAdd = useCallback(async (movie: TmdbMovieCard) => {
+    // Correction mode — the caller owns what happens to the chosen film.
+    if (onPicked) {
+      onPicked(movie);
+      return;
+    }
+
     setAddingId(movie.tmdbId);
     try {
       await addMovie({
@@ -653,13 +701,13 @@ function ManualFilmSearch() {
     } finally {
       setAddingId(null);
     }
-  }, [addMovie, queryClient, showToast]);
+  }, [onPicked, addMovie, queryClient, showToast]);
 
   return (
     <View style={manualSearchStyles.wrap}>
-      <View style={[manualSearchStyles.divider, { backgroundColor: colors.border }]} />
+      {!onPicked && <View style={[manualSearchStyles.divider, { backgroundColor: colors.border }]} />}
       <Text style={[manualSearchStyles.label, { color: colors.mutedForeground }]}>
-        SEARCH FOR IT YOURSELF
+        {onPicked ? 'SEARCH FOR THE RIGHT FILM' : 'SEARCH FOR IT YOURSELF'}
       </Text>
       <View style={[manualSearchStyles.searchRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
         <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
@@ -711,7 +759,11 @@ function ManualFilmSearch() {
                 <ActivityIndicator color="#0066FF" size="small" />
               ) : (
                 <TouchableOpacity onPress={() => handleAdd(movie)} hitSlop={8}>
-                  <Ionicons name="add-circle-outline" size={26} color="#0066FF" />
+                  <Ionicons
+                    name={onPicked ? 'checkmark-circle-outline' : 'add-circle-outline'}
+                    size={26}
+                    color="#0066FF"
+                  />
                 </TouchableOpacity>
               )}
             </View>
@@ -719,6 +771,67 @@ function ManualFilmSearch() {
         })
       )}
     </View>
+  );
+}
+
+/**
+ * "Not a match" correction sheet.
+ *
+ * Gemini reads a title off a caption or a still and we take TMDB's best hit
+ * for it, which is usually right but not always — remakes and shared titles
+ * are the common miss (a 1932 Scarface where the post meant 1983). This lets
+ * the user swap in the film they actually meant, pre-filled with the title
+ * that was extracted so the correction usually takes one tap.
+ *
+ * The picked film replaces the match in place, so it keeps its selection and
+ * flows on to whatever destination the user chooses — rather than being
+ * added somewhere separately and leaving the wrong one behind.
+ */
+function CorrectMatchSheet({
+  visible,
+  originalTitle,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  originalTitle: string;
+  onPick: (movie: TmdbMovieCard) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+
+  return (
+    <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: Platform.OS === 'ios' ? 34 : 20 }]}>
+          <View style={styles.handleContainer}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          </View>
+
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>Find the right film</Text>
+              <Text style={[styles.headerSub, { color: colors.mutedForeground }]} numberOfLines={2}>
+                Replacing "{originalTitle}"
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={8}>
+              <Ionicons name="close" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <ManualFilmSearch initialQuery={originalTitle} onPicked={onPick} />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -755,10 +868,50 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
   // for every share after it.
   const [openId, setOpenId] = useState(0);
 
+  // Films the user corrected via "Not a match?", keyed by the index of the
+  // match they replaced. Held as an overlay on `matches` rather than editing
+  // a copy of it, so a correction survives the parent re-rendering with the
+  // same props and the original extracted title stays available to pre-fill
+  // the search if they correct it again.
+  const [corrections, setCorrections] = useState<Record<number, TmdbMovieCard>>({});
+  // Which match the correction sheet is open for; null when closed.
+  const [correctingIndex, setCorrectingIndex] = useState<number | null>(null);
+
   // Candidates are matches that passed confidence threshold and have a TMDB id
-  const candidates = matches.filter(
-    (m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null
-  );
+  const candidates = matches
+    .map((m, i) => {
+      const corrected = corrections[i];
+      if (!corrected) return { ...m, sourceIndex: i };
+      return {
+        ...m,
+        sourceIndex: i,
+        tmdb_id: corrected.tmdbId,
+        title: corrected.title,
+        release_year: corrected.releaseYear,
+        poster_url: corrected.posterUrl,
+        overview: corrected.overview,
+        // A film the user picked themselves is certain by definition, and
+        // must clear the threshold below even if the original guess didn't.
+        confidence_score: 1,
+      };
+    })
+    .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null);
+
+  const handleCorrection = useCallback((movie: TmdbMovieCard) => {
+    setCorrections((prev) =>
+      correctingIndex === null ? prev : { ...prev, [correctingIndex]: movie }
+    );
+    // Carry the selection over to the replacement so a corrected film stays
+    // in the set the footer actions act on.
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const replaced = correctingIndex === null ? undefined : matches[correctingIndex];
+      if (replaced?.tmdb_id != null) next.delete(String(replaced.tmdb_id));
+      next.add(String(movie.tmdbId));
+      return next;
+    });
+    setCorrectingIndex(null);
+  }, [correctingIndex, matches]);
 
   // 3+ films offer the playlist/watchlist/both picker; 1-2 use the simpler
   // per-card "Add to Watchlist" flow below instead.
@@ -771,6 +924,8 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
       setAddedCount(0);
       setMultiMode(null);
       setOpenId((n) => n + 1);
+      setCorrections({});
+      setCorrectingIndex(null);
       setSelectedIds(new Set(matches
         .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null)
         .map((m) => String(m.tmdb_id))
@@ -815,6 +970,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
     : 'Gemini could not identify a film in this post';
 
   return (
+    <>
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
       {/*
         Two-layer overlay/backdrop, matching the sheet pattern already used
@@ -938,6 +1094,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       match={match}
                       selected={selectedIds.has(String(match.tmdb_id))}
                       onToggle={() => match.tmdb_id != null && toggleSelected(match.tmdb_id)}
+                      onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
                     />
                   ))}
                 </ScrollView>
@@ -998,6 +1155,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       key={`${match.tmdb_id ?? match.movie_title}-${i}`}
                       match={match}
                       onAdded={handleAdded}
+                      onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
                     />
                   ))}
                 </ScrollView>
@@ -1031,6 +1189,21 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+    {/* Sibling of the sheet above, not nested inside it: a Modal within a
+        Modal is unreliable on Android, and this file has already been the
+        source of one blank-sheet bug caused by Android modal layout. */}
+    <CorrectMatchSheet
+      visible={correctingIndex !== null}
+      // Pre-fill with the title Gemini actually read, not the title of the
+      // film it mismatched to — that's the thing the user is trying to find.
+      originalTitle={
+        correctingIndex === null ? '' : matches[correctingIndex]?.movie_title ?? ''
+      }
+      onPick={handleCorrection}
+      onClose={() => setCorrectingIndex(null)}
+    />
+    </>
   );
 }
 
