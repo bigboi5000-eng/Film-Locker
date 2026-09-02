@@ -31,4 +31,17 @@ RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @workspace/api-server run build
 
 ENV NODE_ENV=production
-CMD ["pnpm", "--filter", "@workspace/api-server", "run", "start"]
+
+# Apply pending migrations before serving, rather than leaving it as a manual
+# step run from a laptop against a pasted connection string. Railway already
+# holds the correct DATABASE_URL for this service, so the one environment that
+# is guaranteed to have working credentials is the one doing the work.
+#
+# Drizzle records which migrations it has applied, so this is a no-op on every
+# restart after the first. A failing migration takes the container down with
+# it, which is the outcome we want: serving requests against a schema the code
+# does not expect is worse than not serving them.
+#
+# `exec` on the server so it replaces the shell as PID 1 and still receives
+# SIGTERM from Railway on shutdown.
+CMD ["sh", "-c", "pnpm --filter @workspace/db run migrate && exec pnpm --filter @workspace/api-server run start"]
