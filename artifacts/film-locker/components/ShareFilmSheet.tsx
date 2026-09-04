@@ -5,7 +5,7 @@
  * Displays each identified film with poster/title, lets the user tap
  * "Add to Watchlist", and offers a "Return to [app]" action once done.
  */
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,13 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Animated,
   Dimensions,
   Platform,
   BackHandler,
   ActivityIndicator,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -30,13 +30,19 @@ import {
   useGetMyPlaylists,
   useCreatePlaylist,
   useAddPlaylistItem,
+  useSearchMovies,
   getListMoviesQueryKey,
   getGetMyPlaylistsQueryKey,
+  getSearchMoviesQueryKey,
+  ApiError,
   type GeminiMovieMatch,
   type Playlist,
+  type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
+import { webInputReset } from '@/lib/webInputReset';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -45,6 +51,14 @@ interface ShareFilmSheetProps {
   /** Suggested playlist name when the share was a curated/ranked list, e.g. "Top 10 Horror Films of All Time" */
   listTitle?: string | null;
   onClose: () => void;
+  /**
+   * Exit the app after the user is done — correct for the Android share-intent
+   * flow, which should return to whatever app the user shared from. Pass
+   * false when the sheet is opened from inside Film Locker itself (e.g. the
+   * watchlist screen's paste-link box), where "done" should just dismiss the
+   * sheet. Defaults to true to preserve the share-intent behavior.
+   */
+  exitAppOnReturn?: boolean;
 }
 
 const CONFIDENCE_THRESHOLD = 0.45;
@@ -54,9 +68,11 @@ const { height: SCREEN_H } = Dimensions.get('window');
 function FilmCard({
   match,
   onAdded,
+  onNotAMatch,
 }: {
   match: GeminiMovieMatch;
   onAdded: () => void;
+  onNotAMatch?: () => void;
 }) {
   const colors = useColors();
   const queryClient = useQueryClient();
@@ -130,21 +146,33 @@ function FilmCard({
             <Text style={cardStyles.addedText}>Added to Watchlist</Text>
           </View>
         ) : (
-          <TouchableOpacity
-            style={[cardStyles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={handleAdd}
-            disabled={isPending || !match.tmdb_id}
-            activeOpacity={0.8}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="bookmark-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={cardStyles.addBtnText}>Add to Watchlist</Text>
-              </>
+          <>
+            <TouchableOpacity
+              style={[cardStyles.addBtn, { backgroundColor: colors.primary }]}
+              onPress={handleAdd}
+              disabled={isPending || !match.tmdb_id}
+              activeOpacity={0.8}
+            >
+              {isPending ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="bookmark-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={cardStyles.addBtnText}>Add to Watchlist</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Wrong film? Swap it before adding, rather than adding the
+                wrong one and having to undo it in the watchlist. */}
+            {onNotAMatch && (
+              <TouchableOpacity onPress={onNotAMatch} hitSlop={6} style={cardStyles.notAMatchBtn}>
+                <Text style={[cardStyles.notAMatchText, { color: colors.mutedForeground }]}>
+                  Not a match?
+                </Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </>
         )}
       </View>
     </View>
@@ -199,6 +227,12 @@ const cardStyles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
   },
+  notAMatchBtn: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 2 },
+  notAMatchText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    textDecorationLine: 'underline',
+  },
   addedRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -218,10 +252,12 @@ function FilmSelectRow({
   match,
   selected,
   onToggle,
+  onNotAMatch,
 }: {
   match: GeminiMovieMatch;
   selected: boolean;
   onToggle: () => void;
+  onNotAMatch?: () => void;
 }) {
   const colors = useColors();
   const displayTitle = match.title ?? match.movie_title;
@@ -252,6 +288,11 @@ function FilmSelectRow({
         {match.release_year ? (
           <Text style={[selectStyles.year, { color: colors.mutedForeground }]}>{match.release_year}</Text>
         ) : null}
+        {onNotAMatch && (
+          <TouchableOpacity onPress={onNotAMatch} hitSlop={6} style={selectStyles.notAMatchBtn}>
+            <Text style={[selectStyles.notAMatchText, { color: colors.mutedForeground }]}>Not a match?</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <Ionicons
         name={selected ? 'checkbox' : 'square-outline'}
@@ -276,11 +317,46 @@ const selectStyles = StyleSheet.create({
   info: { flex: 1 },
   title: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   year: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
+  notAMatchBtn: { alignSelf: 'flex-start', marginTop: 3, paddingVertical: 2 },
+  notAMatchText: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    textDecorationLine: 'underline',
+  },
 });
 
 // ── Bulk add panel (playlist / watchlist / both) — acts on the selected set ──
 
 type BulkAddMode = 'playlist' | 'watchlist' | 'both';
+
+/**
+ * How many add-requests to have in flight at once during a bulk add.
+ * Enough that the wait stops scaling with list length, capped so a long
+ * countdown ("Top 50…") doesn't open fifty sockets at once from a phone.
+ */
+const BULK_ADD_CONCURRENCY = 6;
+
+/** Runs `fn` over `items` with at most `limit` in flight; order is irrelevant here. */
+async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]);
+      }
+    })
+  );
+
+  return results;
+}
 
 function BulkAddPanel({
   candidates,
@@ -307,29 +383,34 @@ function BulkAddPanel({
   const alsoAddToWatchlist = mode === 'both';
 
   const [newName, setNewName] = useState(initialName ?? '');
-  const [showNewInput, setShowNewInput] = useState(Boolean(initialName));
   const [addingTo, setAddingTo] = useState<number | 'watchlist' | null>(mode === 'watchlist' ? 'watchlist' : null);
   const [done, setDone] = useState(false);
 
   const playlists = data?.playlists ?? [];
 
+  // Films are added concurrently rather than one awaited request at a time:
+  // a ten-film list was ten sequential round trips from the phone, so the
+  // wait grew with the length of the list for no reason — each add is
+  // independent, and the server tolerates them arriving in any order.
   const addAllToWatchlistOnly = useCallback(async () => {
-    let added = 0;
-    for (const m of candidates) {
-      if (!m.tmdb_id) continue;
+    const addable = candidates.filter((m) => m.tmdb_id);
+
+    const results = await mapWithLimit(addable, BULK_ADD_CONCURRENCY, async (m) => {
       try {
         await addMovie({
           data: {
-            tmdbId: m.tmdb_id,
+            tmdbId: m.tmdb_id!,
             title: m.title ?? m.movie_title,
             releaseYear: m.release_year,
             posterUrl: m.poster_url ?? '',
             overview: m.overview ?? '',
           },
         });
-        added++;
-      } catch { /* already in watchlist — skip */ }
-    }
+        return true;
+      } catch { return false; /* already in watchlist — skip */ }
+    });
+    const added = results.filter(Boolean).length;
+
     await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
     setAddingTo(null);
     setDone(true);
@@ -348,26 +429,30 @@ function BulkAddPanel({
 
   const addAllToPlaylist = useCallback(async (playlistId: number) => {
     setAddingTo(playlistId);
-    let added = 0;
-    for (const m of candidates) {
-      if (!m.tmdb_id) continue;
+    const addable = candidates.filter((m) => m.tmdb_id);
+
+    // Concurrent for the same reason as addAllToWatchlistOnly above — and in
+    // "both" mode each film's two writes go together, so a film's playlist
+    // and watchlist entries still can't end up half-done independently.
+    const results = await mapWithLimit(addable, BULK_ADD_CONCURRENCY, async (m) => {
+      let addedToPlaylist = false;
       try {
         await addItem({
           id: playlistId,
           data: {
-            tmdbId: m.tmdb_id,
+            tmdbId: m.tmdb_id!,
             filmTitle: m.title ?? m.movie_title,
             posterUrl: m.poster_url ?? '',
           },
         });
-        added++;
+        addedToPlaylist = true;
       } catch { /* already in playlist — skip */ }
 
       if (alsoAddToWatchlist) {
         try {
           await addMovie({
             data: {
-              tmdbId: m.tmdb_id,
+              tmdbId: m.tmdb_id!,
               title: m.title ?? m.movie_title,
               releaseYear: m.release_year,
               posterUrl: m.poster_url ?? '',
@@ -376,7 +461,11 @@ function BulkAddPanel({
           });
         } catch { /* already in watchlist — skip */ }
       }
-    }
+
+      return addedToPlaylist;
+    });
+    const added = results.filter(Boolean).length;
+
     await queryClient.invalidateQueries({ queryKey: getGetMyPlaylistsQueryKey() });
     if (alsoAddToWatchlist) {
       await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
@@ -396,8 +485,9 @@ function BulkAddPanel({
     try {
       const pl = await createPlaylist({ data: { name, isPublic: false } }) as Playlist;
       await addAllToPlaylist(pl.id);
-    } catch {
-      showToast({ title: 'Could not create playlist', variant: 'error' });
+    } catch (err) {
+      const detail = err instanceof ApiError ? (err.data as { error?: string } | null)?.error : undefined;
+      showToast({ title: 'Could not create playlist', subtitle: detail, variant: 'error' });
     }
   }, [newName, createPlaylist, addAllToPlaylist, showToast]);
 
@@ -435,63 +525,58 @@ function BulkAddPanel({
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
       <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
 
-      {/* Existing playlists */}
-      {playlists.map((pl) => (
-        <TouchableOpacity
-          key={pl.id}
-          style={ppStyles.plRow}
-          onPress={() => addAllToPlaylist(pl.id)}
-          disabled={addingTo !== null}
-          activeOpacity={0.75}
-        >
-          <View style={ppStyles.plIcon}>
-            <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
-          </View>
-          <View style={ppStyles.plInfo}>
-            <Text style={ppStyles.plName}>{pl.name}</Text>
-            <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
-          </View>
-          {addingTo === pl.id ? (
-            <ActivityIndicator size="small" color="#0066FF" />
-          ) : (
-            <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
-          )}
-        </TouchableOpacity>
-      ))}
+      {/* Existing playlists — tap to add the selected films straight in */}
+      {playlists.length > 0 && (
+        <>
+          <Text style={ppStyles.sectionLabel}>ADD TO EXISTING</Text>
+          {playlists.map((pl) => (
+            <TouchableOpacity
+              key={pl.id}
+              style={ppStyles.plRow}
+              onPress={() => addAllToPlaylist(pl.id)}
+              disabled={addingTo !== null}
+              activeOpacity={0.75}
+            >
+              <View style={ppStyles.plIcon}>
+                <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
+              </View>
+              <View style={ppStyles.plInfo}>
+                <Text style={ppStyles.plName}>{pl.name}</Text>
+                <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
+              </View>
+              {addingTo === pl.id ? (
+                <ActivityIndicator size="small" color="#0066FF" />
+              ) : (
+                <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
+              )}
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
 
-      {/* Create new */}
-      {showNewInput ? (
-        <View style={ppStyles.newRow}>
-          <TextInput
-            style={ppStyles.newInput}
-            value={newName}
-            onChangeText={setNewName}
-            placeholder="New playlist name…"
-            placeholderTextColor="#9CA3AF"
-            autoFocus
-            maxLength={100}
-            returnKeyType="done"
-            onSubmitEditing={handleCreateAndAdd}
-          />
-          <TouchableOpacity
-            style={ppStyles.newCreate}
-            onPress={handleCreateAndAdd}
-            disabled={!newName.trim() || creating || addingTo !== null}
-            activeOpacity={0.8}
-          >
-            {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
-          </TouchableOpacity>
-        </View>
-      ) : (
+      {/* Create new — always visible, prefilled from the detected list title
+          (e.g. "Best Feel Good Movies") when there is one, but always editable. */}
+      <Text style={ppStyles.sectionLabel}>{playlists.length > 0 ? 'OR CREATE NEW' : 'NEW PLAYLIST'}</Text>
+      <View style={ppStyles.newRow}>
+        <TextInput
+          style={ppStyles.newInput}
+          value={newName}
+          onChangeText={setNewName}
+          placeholder="New playlist name…"
+          placeholderTextColor="#9CA3AF"
+          maxLength={100}
+          returnKeyType="done"
+          onSubmitEditing={handleCreateAndAdd}
+        />
         <TouchableOpacity
-          style={ppStyles.newBtn}
-          onPress={() => setShowNewInput(true)}
+          style={ppStyles.newCreate}
+          onPress={handleCreateAndAdd}
+          disabled={!newName.trim() || creating || addingTo !== null}
           activeOpacity={0.8}
         >
-          <Ionicons name="add" size={18} color="#0066FF" style={{ marginRight: 6 }} />
-          <Text style={ppStyles.newBtnText}>Create new playlist</Text>
+          {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
-      )}
+      </View>
     </ScrollView>
   );
 }
@@ -508,13 +593,16 @@ const ppStyles = StyleSheet.create({
   plInfo: { flex: 1 },
   plName: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
   plCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
-  newBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
-  newBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
-  newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
+  sectionLabel: {
+    fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF',
+    letterSpacing: 0.8, marginTop: 16, marginBottom: 4,
+  },
+  newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   newInput: {
     flex: 1, height: 40, paddingHorizontal: 12,
     backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB',
     fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    ...webInputReset,
   },
   newCreate: { backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
   newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
@@ -522,37 +610,322 @@ const ppStyles = StyleSheet.create({
   doneText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
 });
 
+// ── Crash fallback ────────────────────────────────────────────────────────────
+// Renders inside the sheet if anything below throws during render, instead of
+// leaving the Modal's dark backdrop on screen with nothing on top of it (the
+// "grey screen, nothing happens" report). Surfaces the actual error message
+// on-screen so a report of this includes the real cause, not just a screenshot
+// of a blank overlay.
+
+function SheetCrashFallback({ error, onClose }: { error: Error; onClose: () => void }) {
+  return (
+    <View style={crashStyles.wrap}>
+      <Ionicons name="warning-outline" size={40} color="#DC2626" />
+      <Text style={crashStyles.title}>Couldn't show these results</Text>
+      <Text style={crashStyles.message} selectable>
+        {error.message || 'Unknown error'}
+      </Text>
+      <TouchableOpacity style={crashStyles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+        <Text style={crashStyles.closeBtnText}>Close</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const crashStyles = StyleSheet.create({
+  wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 10 },
+  title: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#111827', textAlign: 'center' },
+  message: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center' },
+  closeBtn: { marginTop: 8, backgroundColor: '#EF4444', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
+  closeBtnText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+});
+
+// ── Manual search ───────────────────────────────────────────────────────────
+// Serves two jobs, since they're the same interaction:
+//   • nothing was identified at all — type the title yourself rather than the
+//     flow being a dead end
+//   • a film was identified but matched to the wrong entry — pass onPicked to
+//     hand the chosen film back to the caller instead of adding it here
+// With no onPicked, results add straight to the watchlist.
+
+function ManualFilmSearch({
+  initialQuery = '',
+  onPicked,
+}: {
+  initialQuery?: string;
+  onPicked?: (movie: TmdbMovieCard) => void;
+}) {
+  const colors = useColors();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const { mutateAsync: addMovie } = useAddMovie();
+
+  const [query, setQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery.trim());
+  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  const [addingId, setAddingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data, isFetching } = useSearchMovies(
+    { q: debouncedQuery },
+    { query: { enabled: debouncedQuery.length >= 2, queryKey: getSearchMoviesQueryKey({ q: debouncedQuery }) } }
+  );
+  const results = data?.movies ?? [];
+
+  const handleAdd = useCallback(async (movie: TmdbMovieCard) => {
+    // Correction mode — the caller owns what happens to the chosen film.
+    if (onPicked) {
+      onPicked(movie);
+      return;
+    }
+
+    setAddingId(movie.tmdbId);
+    try {
+      await addMovie({
+        data: {
+          tmdbId: movie.tmdbId,
+          title: movie.title,
+          releaseYear: movie.releaseYear,
+          posterUrl: movie.posterUrl,
+          overview: movie.overview,
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+      setAddedIds((prev) => new Set(prev).add(movie.tmdbId));
+    } catch {
+      showToast({ title: `Could not add "${movie.title}"`, variant: 'error' });
+    } finally {
+      setAddingId(null);
+    }
+  }, [onPicked, addMovie, queryClient, showToast]);
+
+  return (
+    <View style={manualSearchStyles.wrap}>
+      {!onPicked && <View style={[manualSearchStyles.divider, { backgroundColor: colors.border }]} />}
+      <Text style={[manualSearchStyles.label, { color: colors.mutedForeground }]}>
+        {onPicked ? 'SEARCH FOR THE RIGHT FILM' : 'SEARCH FOR IT YOURSELF'}
+      </Text>
+      <View style={[manualSearchStyles.searchRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <TextInput
+          style={[manualSearchStyles.searchInput, { color: colors.foreground }, webInputReset]}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Type the film's title…"
+          placeholderTextColor="#9CA3AF"
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {isFetching ? (
+        <ActivityIndicator color="#0066FF" style={{ marginTop: 14 }} />
+      ) : debouncedQuery.length >= 2 && results.length === 0 ? (
+        <Text style={[manualSearchStyles.emptyText, { color: colors.mutedForeground }]}>
+          No films found for "{debouncedQuery}"
+        </Text>
+      ) : (
+        results.map((movie) => {
+          const added = addedIds.has(movie.tmdbId);
+          return (
+            <View key={movie.tmdbId} style={[manualSearchStyles.filmRow, { borderBottomColor: colors.border }]}>
+              {movie.posterUrl ? (
+                <Image source={{ uri: movie.posterUrl }} style={manualSearchStyles.filmPoster} contentFit="cover" />
+              ) : (
+                <View style={[manualSearchStyles.filmPoster, manualSearchStyles.filmPosterFallback]}>
+                  <Ionicons name="film-outline" size={16} color="#D1D5DB" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[manualSearchStyles.filmTitle, { color: colors.foreground }]} numberOfLines={1}>
+                  {movie.title}
+                </Text>
+                {movie.releaseYear ? (
+                  <Text style={[manualSearchStyles.filmYear, { color: colors.mutedForeground }]}>{movie.releaseYear}</Text>
+                ) : null}
+              </View>
+              {added ? (
+                <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+              ) : addingId === movie.tmdbId ? (
+                <ActivityIndicator color="#0066FF" size="small" />
+              ) : (
+                <TouchableOpacity onPress={() => handleAdd(movie)} hitSlop={8}>
+                  <Ionicons
+                    name={onPicked ? 'checkmark-circle-outline' : 'add-circle-outline'}
+                    size={26}
+                    color="#0066FF"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+}
+
+/**
+ * "Not a match" correction sheet.
+ *
+ * Gemini reads a title off a caption or a still and we take TMDB's best hit
+ * for it, which is usually right but not always — remakes and shared titles
+ * are the common miss (a 1932 Scarface where the post meant 1983). This lets
+ * the user swap in the film they actually meant, pre-filled with the title
+ * that was extracted so the correction usually takes one tap.
+ *
+ * The picked film replaces the match in place, so it keeps its selection and
+ * flows on to whatever destination the user chooses — rather than being
+ * added somewhere separately and leaving the wrong one behind.
+ */
+function CorrectMatchSheet({
+  visible,
+  originalTitle,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  originalTitle: string;
+  onPick: (movie: TmdbMovieCard) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+
+  return (
+    <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: Platform.OS === 'ios' ? 34 : 20 }]}>
+          <View style={styles.handleContainer}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          </View>
+
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>Find the right film</Text>
+              <Text style={[styles.headerSub, { color: colors.mutedForeground }]} numberOfLines={2}>
+                Replacing "{originalTitle}"
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={8}>
+              <Ionicons name="close" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <ManualFilmSearch initialQuery={originalTitle} onPicked={onPick} />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const manualSearchStyles = StyleSheet.create({
+  wrap: { marginTop: 8, width: '100%' },
+  divider: { height: StyleSheet.hairlineWidth, marginBottom: 20 },
+  label: { fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.8, marginBottom: 10 },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, height: 42,
+  },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular' },
+  emptyText: { fontSize: 13, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 16 },
+  filmRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, marginTop: 4,
+  },
+  filmPoster: { width: 36, height: 52, borderRadius: 6 },
+  filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  filmTitle: { fontSize: 14, fontFamily: 'Inter_500Medium' },
+  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
+});
+
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
-export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFilmSheetProps) {
+export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
   const colors = useColors();
-  const slideAnim = useRef(new Animated.Value(0)).current;
   const [addedCount, setAddedCount] = useState(0);
   const [multiMode, setMultiMode] = useState<BulkAddMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Bumped every time the sheet opens fresh — remounts the ErrorBoundary below
+  // so a crash on one share doesn't permanently wedge the fallback UI in place
+  // for every share after it.
+  const [openId, setOpenId] = useState(0);
+
+  // Films the user corrected via "Not a match?", keyed by the index of the
+  // match they replaced. Held as an overlay on `matches` rather than editing
+  // a copy of it, so a correction survives the parent re-rendering with the
+  // same props and the original extracted title stays available to pre-fill
+  // the search if they correct it again.
+  const [corrections, setCorrections] = useState<Record<number, TmdbMovieCard>>({});
+  // Which match the correction sheet is open for; null when closed.
+  const [correctingIndex, setCorrectingIndex] = useState<number | null>(null);
 
   // Candidates are matches that passed confidence threshold and have a TMDB id
-  const candidates = matches.filter(
-    (m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null
-  );
+  const candidates = matches
+    .map((m, i) => {
+      const corrected = corrections[i];
+      if (!corrected) return { ...m, sourceIndex: i };
+      return {
+        ...m,
+        sourceIndex: i,
+        tmdb_id: corrected.tmdbId,
+        title: corrected.title,
+        release_year: corrected.releaseYear,
+        poster_url: corrected.posterUrl,
+        overview: corrected.overview,
+        // A film the user picked themselves is certain by definition, and
+        // must clear the threshold below even if the original guess didn't.
+        confidence_score: 1,
+      };
+    })
+    .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null);
 
-  const isMultiFilm = candidates.length > 1;
+  const handleCorrection = useCallback((movie: TmdbMovieCard) => {
+    setCorrections((prev) =>
+      correctingIndex === null ? prev : { ...prev, [correctingIndex]: movie }
+    );
+    // Carry the selection over to the replacement so a corrected film stays
+    // in the set the footer actions act on.
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const replaced = correctingIndex === null ? undefined : matches[correctingIndex];
+      if (replaced?.tmdb_id != null) next.delete(String(replaced.tmdb_id));
+      next.add(String(movie.tmdbId));
+      return next;
+    });
+    setCorrectingIndex(null);
+  }, [correctingIndex, matches]);
+
+  // 3+ films offer the playlist/watchlist/both picker; 1-2 use the simpler
+  // per-card "Add to Watchlist" flow below instead.
+  const isMultiFilm = candidates.length > 2;
   const selectedCandidates = candidates.filter((m) => selectedIds.has(String(m.tmdb_id)));
-
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: visible ? 1 : 0,
-      useNativeDriver: true,
-      tension: 60,
-      friction: 11,
-    }).start();
-  }, [visible, slideAnim]);
 
   // Reset state when sheet opens for a new share — default selection is "all".
   useEffect(() => {
     if (visible) {
       setAddedCount(0);
       setMultiMode(null);
+      setOpenId((n) => n + 1);
+      setCorrections({});
+      setCorrectingIndex(null);
       setSelectedIds(new Set(matches
         .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null)
         .map((m) => String(m.tmdb_id))
@@ -576,15 +949,15 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
 
   const handleReturn = useCallback(() => {
     onClose();
-    setTimeout(() => {
-      BackHandler.exitApp();
-    }, 200);
-  }, [onClose]);
+    if (exitAppOnReturn) {
+      setTimeout(() => {
+        BackHandler.exitApp();
+      }, 200);
+    }
+  }, [onClose, exitAppOnReturn]);
 
-  const translateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [SCREEN_H, 0],
-  });
+  const doneLabel = exitAppOnReturn ? 'Return to previous app' : 'Done';
+  const skipLabel = exitAppOnReturn ? 'Return without adding' : 'Close';
 
   const allAdded = candidates.length > 0 && addedCount >= candidates.length;
 
@@ -597,21 +970,36 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
     : 'Gemini could not identify a film in this post';
 
   return (
-    <Modal transparent visible={visible} onRequestClose={onClose} animationType="none">
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
-        <Animated.View
+    <>
+    <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
+      {/*
+        Two-layer overlay/backdrop, matching the sheet pattern already used
+        elsewhere in this app (app/(tabs)/index.tsx, app/playlist/[id].tsx,
+        FilmDetailModal's report sheet, ShareToFriendSheet). The dim backdrop
+        is an absolutely-positioned SIBLING of the sheet, not a flex:1
+        wrapper around it — a transparent Android Modal's native root
+        doesn't reliably report a definite size to Yoga, so folding the
+        background color and tap-to-close handler into the same flex:1 node
+        that also sized the sheet (the previous structure here) could
+        resolve the sheet to zero height. Combined with `sheet`'s
+        overflow:'hidden' below, a zero-height resolution wouldn't just
+        squash the content, it would clip it away entirely — leaving only
+        the dim backdrop with nothing on top of it. Because the backdrop is
+        now a sibling rather than a parent, the sheet's own content no
+        longer needs an inner tap-swallowing wrapper either — taps on it
+        simply don't land on the separate backdrop element.
+      */}
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View
           style={[
             styles.sheet,
             {
               backgroundColor: colors.background,
-              transform: [{ translateY }],
               paddingBottom: Platform.OS === 'ios' ? 34 : 20,
             },
           ]}
         >
-          {/* Prevent inner taps from closing the sheet */}
-          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }}>
-
             {/* Handle bar */}
             <View style={styles.handleContainer}>
               <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -628,7 +1016,12 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
               </TouchableOpacity>
             </View>
 
-            {/* Content */}
+            {/* Content — wrapped so a render error shows a real message instead
+                of leaving the backdrop blank with nothing on top of it. */}
+            <ErrorBoundary
+              key={openId}
+              FallbackComponent={({ error }) => <SheetCrashFallback error={error} onClose={onClose} />}
+            >
             {multiMode !== null ? (
               /* Bulk add panel — acts on whatever was checked in the selection list */
               <BulkAddPanel
@@ -639,7 +1032,14 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
               />
             ) : candidates.length === 0 ? (
               <>
-                <View style={styles.scrollContent}>
+                <ScrollView
+                  // flexShrink, not flex:1 — see the comment on the single-film
+                  // ScrollView below for why flex:1 collapses this to zero height.
+                  style={{ flexShrink: 1 }}
+                  contentContainerStyle={styles.scrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
                   <View style={styles.emptyState}>
                     <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
                     <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No film identified</Text>
@@ -647,7 +1047,8 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                       Try sharing a post with a visible film title or caption.
                     </Text>
                   </View>
-                </View>
+                  <ManualFilmSearch />
+                </ScrollView>
                 <View style={[styles.footer, { borderTopColor: colors.border }]}>
                   <TouchableOpacity
                     style={[styles.returnBtn, { backgroundColor: colors.muted }]}
@@ -656,7 +1057,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                   >
                     <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
                     <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
-                      Return without adding
+                      {skipLabel}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -665,7 +1066,9 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
               <>
                 {/* Selection checklist — every film defaults to selected */}
                 <ScrollView
-                  style={{ flex: 1 }}
+                  // flexShrink, not flex:1 — see the comment on the single-film
+                  // ScrollView below for why flex:1 collapses this to zero height.
+                  style={{ flexShrink: 1 }}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={false}
                 >
@@ -691,6 +1094,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                       match={match}
                       selected={selectedIds.has(String(match.tmdb_id))}
                       onToggle={() => match.tmdb_id != null && toggleSelected(match.tmdb_id)}
+                      onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
                     />
                   ))}
                 </ScrollView>
@@ -732,7 +1136,17 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
               <>
                 {/* Single film — unchanged inline add-to-watchlist flow */}
                 <ScrollView
-                  style={{ flex: 1 }}
+                  // flexShrink (not flex:1 / flexGrow) — flex:1 sets
+                  // flexBasis:0, which contributes nothing to `sheet`'s
+                  // content-based auto-height when the sheet never grows
+                  // large enough to hit its maxHeight cap (e.g. a single
+                  // film card). That's the exact bug: header/footer (plain,
+                  // unflexed views) rendered fine while this collapsed to
+                  // zero height in between them. flexShrink keeps the
+                  // default content-based flexBasis, so short content sizes
+                  // correctly, while still shrinking to fit once a long
+                  // list (3+ films) pushes the sheet past its cap.
+                  style={{ flexShrink: 1 }}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={false}
                 >
@@ -741,6 +1155,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                       key={`${match.tmdb_id ?? match.movie_title}-${i}`}
                       match={match}
                       onAdded={handleAdded}
+                      onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
                     />
                   ))}
                 </ScrollView>
@@ -753,7 +1168,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                       activeOpacity={0.85}
                     >
                       <Ionicons name="arrow-back" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.returnBtnText}>Return to previous app</Text>
+                      <Text style={styles.returnBtnText}>{doneLabel}</Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
@@ -763,26 +1178,47 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose }: ShareFi
                     >
                       <Ionicons name="arrow-back" size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
                       <Text style={[styles.returnBtnText, { color: colors.mutedForeground }]}>
-                        Return without adding
+                        {skipLabel}
                       </Text>
                     </TouchableOpacity>
                   )}
                 </View>
               </>
             )}
-
-          </TouchableOpacity>
-        </Animated.View>
-      </TouchableOpacity>
+            </ErrorBoundary>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
+
+    {/* Sibling of the sheet above, not nested inside it: a Modal within a
+        Modal is unreliable on Android, and this file has already been the
+        source of one blank-sheet bug caused by Android modal layout. */}
+    <CorrectMatchSheet
+      visible={correctingIndex !== null}
+      // Pre-fill with the title Gemini actually read, not the title of the
+      // film it mismatched to — that's the thing the user is trying to find.
+      originalTitle={
+        correctingIndex === null ? '' : matches[correctingIndex]?.movie_title ?? ''
+      }
+      onPick={handleCorrection}
+      onClose={() => setCorrectingIndex(null)}
+    />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  // overlay lays the sheet out (flex:1, bottom-aligned); backdrop is an
+  // absolutely-positioned sibling that only paints the dim tint and handles
+  // tap-to-close. See the comment above this component's return for why
+  // these are split rather than merged into one flex:1 node.
+  overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
     maxHeight: SCREEN_H * 0.85,
@@ -823,7 +1259,8 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 48,
+    paddingTop: 32,
+    paddingBottom: 20,
     paddingHorizontal: 32,
     gap: 12,
   },

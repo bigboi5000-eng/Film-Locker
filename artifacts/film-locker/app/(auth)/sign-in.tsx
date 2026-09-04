@@ -15,6 +15,9 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { webInputReset } from '@/lib/webInputReset';
+import { useToast } from '@/components/ToastProvider';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -32,6 +35,7 @@ export default function SignInScreen() {
   const { isSignedIn } = useAuth();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,9 +76,12 @@ export default function SignInScreen() {
   const handleOAuth = useCallback(async (strategy: 'oauth_google' | 'oauth_apple') => {
     setOauthLoading(strategy === 'oauth_google' ? 'google' : 'apple');
     try {
+      // An explicit path makes the redirect URI more specific — Android's
+      // Custom Tabs sometimes report a false "dismiss" for a bare scheme
+      // redirect even after the OAuth provider actually completed.
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy,
-        redirectUrl: AuthSession.makeRedirectUri(),
+        redirectUrl: AuthSession.makeRedirectUri({ path: 'oauth-native-callback' }),
       });
       if (createdSessionId) {
         await setActive!({
@@ -84,20 +91,31 @@ export default function SignInScreen() {
             router.replace('/(tabs)');
           },
         });
+      } else {
+        // The flow was dismissed/cancelled without an error — most often
+        // Android reporting the redirect as a dismiss even though sign-in
+        // may have completed in the browser. Let the user know explicitly
+        // rather than leaving them wondering why nothing happened.
+        showToast({
+          title: 'Sign-in did not complete',
+          subtitle: 'Please try again.',
+          variant: 'error',
+        });
       }
     } catch (err) {
       console.error('OAuth error:', err);
+      showToast({ title: 'Sign-in failed', subtitle: 'Please try again.', variant: 'error' });
     } finally {
       setOauthLoading(null);
     }
-  }, [startSSOFlow, router]);
+  }, [startSSOFlow, router, showToast]);
 
   // MFA verification step
   if (signIn.status === 'needs_client_trust') {
     return (
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.inner}>
-          <Text style={styles.logo}>FILM LOCKER</Text>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.subtitle}>We sent a verification code to {email}</Text>
           <TextInput
@@ -138,10 +156,7 @@ export default function SignInScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
           {/* Branding */}
-          <View style={styles.brandRow}>
-            <View style={styles.brandDot} />
-            <Text style={styles.logo}>FILM LOCKER</Text>
-          </View>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
 
@@ -252,9 +267,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { flexGrow: 1, justifyContent: 'center' },
   inner: { paddingHorizontal: 24, paddingVertical: 48 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
-  brandDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#0066FF' },
-  logo: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
+  logoImage: { width: 200, height: 85, marginBottom: 24, alignSelf: 'flex-start' },
   title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 6 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 28 },
   label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151', marginBottom: 6 },
@@ -269,6 +282,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     marginBottom: 14,
+    ...webInputReset,
   },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 46 },

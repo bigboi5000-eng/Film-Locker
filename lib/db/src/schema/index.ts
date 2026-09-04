@@ -4,3 +4,5 @@ export * from "./community";
 export * from "./notifications";
 export * from "./follows";
 export * from "./playlists";
+export * from "./feedback";
+export * from "./safety";

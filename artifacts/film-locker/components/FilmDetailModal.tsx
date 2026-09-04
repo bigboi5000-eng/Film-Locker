@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,12 @@ import {
   Linking,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@clerk/expo';
@@ -34,8 +36,11 @@ import {
   useGetNotificationUsers,
   getGetNotificationUsersQueryKey,
   useSendNotification,
+  useBlockUser,
+  useSubmitReport,
   getGetFilmCommunityScoreQueryKey,
   getGetFilmCommentsQueryKey,
+  getGetFollowsQueryKey,
   getListMoviesQueryKey,
   type Movie,
   type TmdbMovieCard,
@@ -43,6 +48,11 @@ import {
   type FilmComment,
   type NotificationUser,
 } from '@workspace/api-client-react';
+import { confirmDestructive } from '@/lib/confirm';
+import { webInputReset } from '@/lib/webInputReset';
+import { getDeviceRegion } from '@/lib/region';
+import { useToast } from '@/components/ToastProvider';
+import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
@@ -224,42 +234,70 @@ function CommunityStars({ value }: { value: number | null | undefined }) {
 function CommentRow({
   comment,
   onDelete,
+  onReport,
 }: {
   comment: FilmComment;
   onDelete: (id: number) => void;
+  onReport: (comment: FilmComment) => void;
 }) {
+  const router = useRouter();
   const initials = (comment.username ?? comment.userId.slice(0, 2)).slice(0, 2).toUpperCase();
   const timeAgo = formatRelative(new Date(comment.createdAt));
+  const goToProfile = () => router.push(`/user/${comment.userId}`);
 
   return (
     <View style={commentStyles.row}>
       {/* Avatar */}
-      {comment.avatarUrl ? (
-        <Image
-          source={{ uri: comment.avatarUrl }}
-          style={commentStyles.avatar}
-          contentFit="cover"
-        />
-      ) : (
-        <View style={[commentStyles.avatar, commentStyles.avatarFallback]}>
-          <Text style={commentStyles.avatarText}>{initials}</Text>
-        </View>
-      )}
+      <TouchableOpacity onPress={goToProfile} activeOpacity={0.7}>
+        {comment.avatarUrl ? (
+          <Image
+            source={{ uri: comment.avatarUrl }}
+            style={commentStyles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[commentStyles.avatar, commentStyles.avatarFallback]}>
+            <Text style={commentStyles.avatarText}>{initials}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
 
       {/* Body */}
       <View style={{ flex: 1 }}>
         <View style={commentStyles.metaRow}>
-          <Text style={commentStyles.username}>
-            {comment.username ?? 'Anonymous'}
-          </Text>
+          <TouchableOpacity onPress={goToProfile} activeOpacity={0.7}>
+            <Text style={commentStyles.username}>
+              {comment.username ?? 'Anonymous'}
+            </Text>
+          </TouchableOpacity>
+          {comment.rating != null && (
+            <View style={commentStyles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Ionicons
+                  key={n}
+                  name={comment.rating! >= n ? 'star' : 'star-outline'}
+                  size={11}
+                  color="#FF8C00"
+                />
+              ))}
+            </View>
+          )}
           <Text style={commentStyles.time}>{timeAgo}</Text>
-          {comment.isOwn && (
+          {comment.isOwn ? (
             <TouchableOpacity
               onPress={() => onDelete(comment.id)}
               hitSlop={10}
               style={commentStyles.deleteBtn}
             >
               <Ionicons name="trash-outline" size={14} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => onReport(comment)}
+              hitSlop={10}
+              style={commentStyles.deleteBtn}
+            >
+              <Ionicons name="flag-outline" size={14} color="#9CA3AF" />
             </TouchableOpacity>
           )}
         </View>
@@ -268,6 +306,99 @@ function CommentRow({
     </View>
   );
 }
+
+// ── Report sheet — lets you report a comment/user with an optional reason,
+// or block the user outright. No in-app moderation queue yet; a report is
+// emailed to the developer best-effort and always saved server-side. ──
+
+function ReportSheet({
+  visible,
+  targetUsername,
+  onSubmit,
+  onBlock,
+  onClose,
+  submitting,
+}: {
+  visible: boolean;
+  targetUsername: string;
+  onSubmit: (reason: string) => void;
+  onBlock: () => void;
+  onClose: () => void;
+  submitting: boolean;
+}) {
+  const [reason, setReason] = useState('');
+
+  const handleClose = useCallback(() => {
+    setReason('');
+    onClose();
+  }, [onClose]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <KeyboardAvoidingView style={reportStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity style={reportStyles.backdrop} onPress={handleClose} activeOpacity={1} />
+        <View style={reportStyles.sheet}>
+          <View style={reportStyles.handle} />
+          <Text style={reportStyles.title}>Report {targetUsername}</Text>
+          <TextInput
+            style={reportStyles.input}
+            value={reason}
+            onChangeText={(t) => setReason(t.slice(0, 1000))}
+            placeholder="What's wrong with this? (required)"
+            placeholderTextColor="#9CA3AF"
+            multiline
+            maxLength={1000}
+            textAlignVertical="top"
+          />
+          <TouchableOpacity
+            style={[reportStyles.submitBtn, (!reason.trim() || submitting) && reportStyles.btnDisabled]}
+            onPress={() => onSubmit(reason.trim())}
+            disabled={!reason.trim() || submitting}
+            activeOpacity={0.85}
+          >
+            {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={reportStyles.blockBtn} onPress={onBlock} activeOpacity={0.85}>
+            <Text style={reportStyles.blockBtnText}>Block {targetUsername}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleClose} style={reportStyles.cancelBtn} activeOpacity={0.7}>
+            <Text style={reportStyles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const reportStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
+  title: { fontSize: 17, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 12 },
+  input: {
+    minHeight: 80, maxHeight: 140, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontFamily: 'Inter_400Regular',
+    color: '#111827', backgroundColor: '#F9FAFB', marginBottom: 12,
+    ...webInputReset,
+  },
+  submitBtn: {
+    backgroundColor: '#0066FF', borderRadius: 10, paddingVertical: 13,
+    alignItems: 'center', marginBottom: 10,
+  },
+  btnDisabled: { opacity: 0.5 },
+  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  blockBtn: {
+    borderRadius: 10, paddingVertical: 13, alignItems: 'center',
+    borderWidth: 1, borderColor: '#FCA5A5', marginBottom: 10,
+  },
+  blockBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#DC2626' },
+  cancelBtn: { alignItems: 'center', paddingVertical: 8 },
+  cancelBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+});
 
 function formatRelative(date: Date): string {
   const now = Date.now();
@@ -282,13 +413,19 @@ function formatRelative(date: Date): string {
   return date.toLocaleDateString();
 }
 
+function formatVoteCount(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return String(count);
+}
+
 const commentStyles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   avatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
   avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
   username: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  ratingRow: { flexDirection: 'row', gap: 1 },
   time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
   deleteBtn: { marginLeft: 'auto' },
   body: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#374151', lineHeight: 20 },
@@ -304,16 +441,20 @@ function CommunitySection({
   isLoggedIn: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [commentText, setCommentText] = useState('');
   const [page, setPage] = useState(1);
   // Accumulated comments across all loaded pages
   const [allComments, setAllComments] = useState<FilmComment[]>([]);
+  const [reportTarget, setReportTarget] = useState<FilmComment | null>(null);
 
   const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId);
   const { data: commentsData, isLoading: commentsLoading } = useGetFilmComments(tmdbId, { page });
   const { mutateAsync: submitRating, isPending: ratingPending } = useSetFilmCommunityRating();
   const { mutateAsync: postComment, isPending: commentPending } = usePostFilmComment();
   const { mutateAsync: deleteComment } = useDeleteFilmComment();
+  const { mutateAsync: submitReport, isPending: reportPending } = useSubmitReport();
+  const { mutateAsync: blockUser } = useBlockUser();
 
   // Append newly fetched page into accumulated list (dedup by id)
   React.useEffect(() => {
@@ -358,6 +499,7 @@ function CommunitySection({
     try {
       await postComment({ tmdbId, data: { body: text } });
       setCommentText('');
+      Keyboard.dismiss();
       await resetComments();
     } catch {
       Alert.alert('Error', 'Could not post your comment.');
@@ -366,24 +508,53 @@ function CommunitySection({
 
   const handleDeleteComment = useCallback(
     async (id: number) => {
-      Alert.alert('Delete comment', 'Remove this comment?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteComment({ tmdbId, id });
-              await resetComments();
-            } catch {
-              Alert.alert('Error', 'Could not delete comment.');
-            }
-          },
-        },
-      ]);
+      confirmDestructive('Remove this comment?', 'Delete', async () => {
+        try {
+          await deleteComment({ tmdbId, id });
+          await resetComments();
+        } catch {
+          Alert.alert('Error', 'Could not delete comment.');
+        }
+      });
     },
     [deleteComment, tmdbId, resetComments]
   );
+
+  const handleSubmitReport = useCallback(
+    async (reason: string) => {
+      if (!reportTarget || !reason.trim()) return;
+      try {
+        await submitReport({
+          data: { reportedUserId: reportTarget.userId, reason, commentId: reportTarget.id },
+        });
+        setReportTarget(null);
+        showToast({ title: 'Report submitted', subtitle: "Thanks for flagging it — we'll take a look.", variant: 'success' });
+      } catch {
+        showToast({ title: 'Could not submit report', variant: 'error' });
+      }
+    },
+    [reportTarget, submitReport, showToast]
+  );
+
+  const handleBlockFromReport = useCallback(() => {
+    if (!reportTarget) return;
+    const username = reportTarget.username ?? 'this user';
+    confirmDestructive(
+      `Block ${username}? They won't be able to follow, message, or see your comments, and you won't see theirs.`,
+      'Block',
+      async () => {
+        try {
+          await blockUser({ data: { blockedId: reportTarget.userId } });
+          setReportTarget(null);
+          await resetComments();
+          await queryClient.invalidateQueries({ queryKey: getGetFollowsQueryKey() });
+          showToast({ title: `Blocked ${username}`, variant: 'success' });
+        } catch {
+          showToast({ title: 'Could not block this user', variant: 'error' });
+        }
+      }
+    );
+  }, [reportTarget, blockUser, resetComments, queryClient, showToast]);
 
   const userRating = score?.userRating ?? null;
   const average = score?.average ?? null;
@@ -486,7 +657,7 @@ function CommunitySection({
       ) : (
         <>
           {comments.map((c) => (
-            <CommentRow key={c.id} comment={c} onDelete={handleDeleteComment} />
+            <CommentRow key={c.id} comment={c} onDelete={handleDeleteComment} onReport={setReportTarget} />
           ))}
           {hasMore && (
             <TouchableOpacity
@@ -498,6 +669,15 @@ function CommunitySection({
           )}
         </>
       )}
+
+      <ReportSheet
+        visible={reportTarget !== null}
+        targetUsername={reportTarget?.username ?? 'this user'}
+        onSubmit={handleSubmitReport}
+        onBlock={handleBlockFromReport}
+        onClose={() => setReportTarget(null)}
+        submitting={reportPending}
+      />
     </View>
   );
 }
@@ -558,6 +738,7 @@ const communityStyles = StyleSheet.create({
     color: '#111827',
     minHeight: 60,
     maxHeight: 120,
+    ...webInputReset,
   },
   composeFooter: {
     flexDirection: 'row',
@@ -808,15 +989,18 @@ export function FilmDetailModal({
   savedMovie,
 }: FilmDetailModalProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   const [optimisticRating, setOptimisticRating] = useState<number | null | undefined>(undefined);
   const [optimisticWatched, setOptimisticWatched] = useState<boolean | undefined>(undefined);
   const [recommendVisible, setRecommendVisible] = useState(false);
+  const [addToPlaylistVisible, setAddToPlaylistVisible] = useState(false);
 
   // Fetch full TMDB details — parent only renders this component when a movie
   // is selected, so the hook always runs against a valid tmdbId.
-  const { data: details, isLoading } = useGetMovieDetails(tmdbId);
+  const region = useMemo(() => getDeviceRegion(), []);
+  const { data: details, isLoading } = useGetMovieDetails(tmdbId, { region });
 
   // Use Clerk auth state — works for both saved and unsaved films
   const { isSignedIn } = useAuth();
@@ -832,6 +1016,7 @@ export function FilmDetailModal({
   const { mutateAsync: patchWatched, isPending: isWatchingPending } = usePatchWatched();
   const { mutateAsync: patchRating, isPending: isRatingPending } = usePatchRating();
   const { mutateAsync: addMovie, isPending: isAddingPending } = useAddMovie();
+  const { showToast } = useToast();
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
@@ -849,6 +1034,8 @@ export function FilmDetailModal({
   const displayLanguage = details?.language ?? '';
   const displayProviders = details?.watchProviders ?? [];
   const displayOverview = details?.overview || overview;
+  const displayTmdbRating = details?.tmdbRating ?? null;
+  const displayTmdbVoteCount = details?.tmdbVoteCount ?? 0;
 
   const handleRating = useCallback(
     async (n: number) => {
@@ -881,6 +1068,12 @@ export function FilmDetailModal({
     }
   }, [savedMovie, currentWatched, patchWatched, invalidate]);
 
+  const handleClose = useCallback(() => {
+    setOptimisticRating(undefined);
+    setOptimisticWatched(undefined);
+    onClose();
+  }, [onClose]);
+
   const handleAddToWatchlist = useCallback(async () => {
     try {
       await addMovie({
@@ -894,23 +1087,21 @@ export function FilmDetailModal({
       });
       await invalidate();
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Added!', `"${title}" has been added to your Watchlist.`);
+      showToast({ title: 'Added to Watchlist', subtitle: `"${title}" is now in your watchlist.`, variant: 'success' });
+      handleClose();
+      // Always land back on the Watchlist tab, regardless of which screen
+      // this film was added from (Home, Discover, a playlist, etc.).
+      router.push('/(tabs)/watchlist');
     } catch {
-      Alert.alert('Error', 'Could not add this film to your Watchlist.');
+      showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
     }
-  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate]);
-
-  const handleClose = useCallback(() => {
-    setOptimisticRating(undefined);
-    setOptimisticWatched(undefined);
-    onClose();
-  }, [onClose]);
+  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, router]);
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
       onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
@@ -918,8 +1109,11 @@ export function FilmDetailModal({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.root, { paddingTop: insets.top }]}>
-          {/* Close button */}
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+          {/* Close button — top offset includes the safe-area inset so it
+              sits below the status bar rather than under it (which also
+              made it untappable, since the opaque status bar was
+              intercepting the touch before it reached the button). */}
+          <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 12 }]} onPress={handleClose} hitSlop={12}>
             <Ionicons name="close" size={22} color="#111827" />
           </TouchableOpacity>
 
@@ -960,6 +1154,16 @@ export function FilmDetailModal({
                   <Text style={styles.loadingText}>Loading details…</Text>
                 </View>
               )}
+
+              {displayTmdbRating != null ? (
+                <View style={styles.metaRow}>
+                  <Ionicons name="star" size={15} color="#F59E0B" style={styles.metaIcon} />
+                  <Text style={styles.metaLabel}>TMDB Rating</Text>
+                  <Text style={styles.metaValue}>
+                    {displayTmdbRating.toFixed(1)}/10 · {formatVoteCount(displayTmdbVoteCount)} votes
+                  </Text>
+                </View>
+              ) : null}
 
               {displayDirector ? (
                 <View style={styles.metaRow}>
@@ -1022,6 +1226,11 @@ export function FilmDetailModal({
                   <Text style={styles.synopsisText}>{displayOverview}</Text>
                 </View>
               ) : null}
+
+              {/* ── Community Section — Film Locker's own ratings and
+                  written comments. The TMDB rating above is just a number;
+                  this is the only place actual written opinions live. ── */}
+              <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
 
               {/* Divider */}
               <View style={styles.divider} />
@@ -1108,8 +1317,22 @@ export function FilmDetailModal({
                 </TouchableOpacity>
               )}
 
-              {/* ── Community Section ── */}
-              <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
+              {/* Add to Playlist — shown whenever the user is signed in */}
+              {isLoggedIn && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonRecommend]}
+                  onPress={() => setAddToPlaylistVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="list-outline"
+                    size={20}
+                    color="#0066FF"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.actionButtonRecommendText}>Add to Playlist</Text>
+                </TouchableOpacity>
+              )}
 
             </View>
           </ScrollView>
@@ -1122,6 +1345,15 @@ export function FilmDetailModal({
         onClose={() => setRecommendVisible(false)}
         tmdbId={tmdbId}
         filmTitle={title}
+        posterUrl={posterUrl}
+      />
+
+      {/* Add to Playlist sheet */}
+      <AddToPlaylistSheet
+        visible={addToPlaylistVisible}
+        onClose={() => setAddToPlaylistVisible(false)}
+        tmdbId={tmdbId}
+        title={title}
         posterUrl={posterUrl}
       />
     </Modal>

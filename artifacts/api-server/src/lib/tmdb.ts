@@ -1,4 +1,5 @@
 import type { WatchProvider } from "@workspace/db";
+import { cached } from "./cache";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
@@ -19,6 +20,8 @@ interface TmdbMovie {
 interface TmdbMovieDetail extends TmdbMovie {
   genres: Array<{ id: number; name: string }>;
   original_language: string;
+  vote_average: number;
+  vote_count: number;
 }
 
 interface TmdbSearchResponse {
@@ -38,14 +41,26 @@ interface TmdbProviderEntry {
 }
 
 interface TmdbProvidersResponse {
-  results: {
-    US?: {
+  // Keyed by every country TMDB/JustWatch has data for in one response —
+  // no region query param on this endpoint, you just pick the country key.
+  results: Record<
+    string,
+    {
       link?: string;
       flatrate?: TmdbProviderEntry[];
       rent?: TmdbProviderEntry[];
       buy?: TmdbProviderEntry[];
-    };
-  };
+    }
+  >;
+}
+
+/** Default region when the caller doesn't specify one. */
+export const DEFAULT_REGION = "US";
+
+/** Loose sanitization — just enough to avoid passing junk through to TMDB. */
+export function normalizeRegion(input: unknown): string {
+  const s = typeof input === "string" ? input.trim().toUpperCase() : "";
+  return /^[A-Z]{2}$/.test(s) ? s : DEFAULT_REGION;
 }
 
 export interface TmdbCandidate {
@@ -55,6 +70,10 @@ export interface TmdbCandidate {
   posterUrl: string;
   overview: string;
   genres: string[];
+  language?: string;
+  director?: string;
+  cast?: string[];
+  watchProviders?: WatchProvider[];
 }
 
 export interface TmdbMovieDetails extends TmdbCandidate {
@@ -63,6 +82,12 @@ export interface TmdbMovieDetails extends TmdbCandidate {
   genres: string[];
   language: string;
   watchProviders: WatchProvider[];
+  // TMDB's own aggregate rating (0-10, from their user base) — free on the
+  // same details response, distinct from Film Locker's own community
+  // ratings/comments and distinct from (unavailable) IMDb/Rotten Tomatoes
+  // scores, which TMDB has no access to.
+  tmdbRating: number | null;
+  tmdbVoteCount: number;
 }
 
 // ── Genre map (stable TMDB list — no API call needed) ─────────────────────────
@@ -93,6 +118,16 @@ export function getReleaseYear(releaseDate: string): string {
   return releaseDate.split("-")[0] ?? "";
 }
 
+/** Full language name via Intl when possible, falling back to the raw ISO code. */
+function languageName(langCode: string | undefined): string | undefined {
+  if (!langCode) return undefined;
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(langCode) ?? langCode;
+  } catch {
+    return langCode; // Intl not available in this runtime
+  }
+}
+
 function movieToCandidate(m: TmdbMovie): TmdbCandidate {
   return {
     tmdbId: m.id,
@@ -101,40 +136,160 @@ function movieToCandidate(m: TmdbMovie): TmdbCandidate {
     posterUrl: getPosterUrl(m.poster_path),
     overview: m.overview ?? "",
     genres: (m.genre_ids ?? []).map((id) => TMDB_GENRE_MAP[id]).filter(Boolean) as string[],
+    language: languageName(m.original_language),
   };
+}
+
+/**
+ * Fills in director/cast/watchProviders for a list of candidates (genre and
+ * language are already free on the list response — see movieToCandidate).
+ * Used for discovery lists (trending, new releases, recommendations) so the
+ * Director/Actor/Streaming filters on those screens have real options
+ * instead of always showing "No data yet". Runs one credits + one
+ * watch-providers request per movie, all in parallel; a single movie's
+ * failure just leaves that movie's fields empty rather than failing the list.
+ */
+export async function enrichCandidates(
+  candidates: TmdbCandidate[],
+  region: string = DEFAULT_REGION
+): Promise<TmdbCandidate[]> {
+  const apiKey = getApiKey();
+  const okJson = async <T>(res: Response): Promise<T> => {
+    if (!res.ok) throw new Error(`TMDB ${res.url} → ${res.status} ${res.statusText}`);
+    return res.json() as Promise<T>;
+  };
+
+  return Promise.all(
+    candidates.map(async (c) => {
+      const [creditsResult, providersResult] = await Promise.allSettled([
+        fetch(`${TMDB_BASE}/movie/${c.tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
+          okJson<TmdbCredits>(r)
+        ),
+        fetch(`${TMDB_BASE}/movie/${c.tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
+          okJson<TmdbProvidersResponse>(r)
+        ),
+      ]);
+
+      let director: string | undefined;
+      let cast: string[] | undefined;
+      if (creditsResult.status === "fulfilled") {
+        director = creditsResult.value.crew.find((cr) => cr.job === "Director")?.name;
+        cast = creditsResult.value.cast
+          .sort((a, b) => a.order - b.order)
+          .slice(0, 10)
+          .map((cr) => cr.name);
+      }
+
+      let watchProviders: WatchProvider[] | undefined;
+      if (providersResult.status === "fulfilled") {
+        const us = providersResult.value.results?.[region];
+        const juswatchLink = us?.link;
+        type TypedEntry = TmdbProviderEntry & { _type: WatchProvider["type"] };
+        const raw: TypedEntry[] = [
+          ...(us?.flatrate ?? []).map((p) => ({ ...p, _type: "flatrate" as const })),
+          ...(us?.rent ?? []).map((p) => ({ ...p, _type: "rent" as const })),
+          ...(us?.buy ?? []).map((p) => ({ ...p, _type: "buy" as const })),
+        ];
+        const seen = new Set<number>();
+        watchProviders = raw
+          .filter((p) => {
+            if (seen.has(p.provider_id)) return false;
+            seen.add(p.provider_id);
+            return true;
+          })
+          .map((p) => ({
+            provider_id: p.provider_id,
+            provider_name: p.provider_name,
+            logo_url: getPosterUrl(p.logo_path),
+            type: p._type,
+            ...(juswatchLink ? { link: juswatchLink } : {}),
+          }));
+      }
+
+      return { ...c, director, cast, watchProviders };
+    })
+  );
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
+/**
+ * A title's search results barely move, and the same handful of films get
+ * looked up over and over — across users sharing the same viral post, and
+ * within a single share when the identify step and the save step both run.
+ * An hour is long enough to collapse all of that and short enough that a
+ * newly-added film shows up the same session.
+ */
+const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
+
 export async function searchTmdb(query: string): Promise<TmdbCandidate[]> {
-  const apiKey = getApiKey();
-  const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`;
+  const normalised = query.trim().toLowerCase();
+  if (!normalised) return [];
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
-  }
+  return cached(
+    `tmdb:search:${normalised}`,
+    SEARCH_CACHE_TTL_MS,
+    async () => {
+      const apiKey = getApiKey();
+      const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`;
 
-  const data = (await res.json()) as TmdbSearchResponse;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
+      }
 
-  return data.results
-    .filter((m) => m.poster_path)
-    .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 3)
-    .map(movieToCandidate);
+      const data = (await res.json()) as TmdbSearchResponse;
+
+      return data.results
+        .filter((m) => m.poster_path)
+        .sort((a, b) => b.popularity - a.popularity)
+        .slice(0, 3)
+        .map(movieToCandidate);
+    },
+    // Never remember a miss: a film TMDB hasn't indexed yet, or a title
+    // Gemini garbled, would otherwise stay "not found" for the full hour
+    // even after a retry would have worked.
+    { shouldCache: (results) => results.length > 0 },
+  );
 }
 
 // ── Full details (credits + watch providers) ──────────────────────────────────
 
 /**
- * Fetch full movie details from TMDB including director, top cast,
- * genre names, original language, and US streaming watch providers.
+ * Fetch full movie details from TMDB including director, top cast, genre
+ * names, original language, and streaming watch providers for `region`
+ * (defaults to US — TMDB/JustWatch track availability per country, so a
+ * film's US streaming lineup can be completely different from its UK one).
  *
  * All three sub-requests run in parallel. Individual failures are
  * tolerated — the result falls back to empty values for that field.
  */
 export async function fetchMovieDetails(
-  tmdbId: number
+  tmdbId: number,
+  region: string = DEFAULT_REGION
+): Promise<TmdbMovieDetails | null> {
+  // Three upstream requests per call, and the same films recur constantly —
+  // a shared post identified by several users, or one list mentioning a film
+  // twice. Cached per region since watch providers differ by country.
+  // Nulls (the details request itself failing) are not cached, so a blip
+  // doesn't stick.
+  return cached(
+    `tmdb:details:${tmdbId}:${region}`,
+    DETAILS_CACHE_TTL_MS,
+    () => fetchMovieDetailsUncached(tmdbId, region),
+    { shouldCache: (result) => result !== null },
+  );
+}
+
+/**
+ * Watch providers are the part of this payload that actually changes (a film
+ * leaving Netflix), so this is shorter than the search TTL.
+ */
+const DETAILS_CACHE_TTL_MS = 30 * 60 * 1000;
+
+async function fetchMovieDetailsUncached(
+  tmdbId: number,
+  region: string
 ): Promise<TmdbMovieDetails | null> {
   const apiKey = getApiKey();
 
@@ -190,10 +345,10 @@ export async function fetchMovieDetails(
     /* Intl not available in this runtime — use raw code */
   }
 
-  // US watch providers: flatrate (subscription) → rent → buy, preserving type
+  // Watch providers for `region`: flatrate (subscription) → rent → buy, preserving type
   let watchProviders: WatchProvider[] = [];
   if (providersResult.status === "fulfilled") {
-    const us = providersResult.value.results?.US;
+    const us = providersResult.value.results?.[region];
     const juswatchLink = us?.link;
 
     type TypedEntry = TmdbProviderEntry & { _type: WatchProvider['type'] };
@@ -219,6 +374,12 @@ export async function fetchMovieDetails(
       }));
   }
 
+  // TMDB's own aggregate rating (their user base's average vote) — already
+  // on this same details response, no extra request needed. Treat a
+  // zero-vote film as "no rating" rather than a literal 0/10.
+  const tmdbRating = details.vote_count > 0 ? Math.round(details.vote_average * 10) / 10 : null;
+  const tmdbVoteCount = details.vote_count ?? 0;
+
   return {
     tmdbId: details.id,
     title: details.title,
@@ -230,6 +391,8 @@ export async function fetchMovieDetails(
     genres,
     language,
     watchProviders,
+    tmdbRating,
+    tmdbVoteCount,
   };
 }
 
@@ -266,10 +429,10 @@ export async function fetchTrending(): Promise<TmdbCandidate[]> {
     .map(movieToCandidate);
 }
 
-export async function fetchNowPlaying(): Promise<TmdbCandidate[]> {
+export async function fetchNowPlaying(region: string = DEFAULT_REGION): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
   const res = await fetch(
-    `${TMDB_BASE}/movie/now_playing?api_key=${apiKey}&language=en-US&region=US`
+    `${TMDB_BASE}/movie/now_playing?api_key=${apiKey}&language=en-US&region=${region}`
   );
   if (!res.ok) throw new Error(`TMDB now_playing failed: ${res.status}`);
   const data = (await res.json()) as TmdbSearchResponse;

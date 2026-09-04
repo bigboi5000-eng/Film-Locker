@@ -7,26 +7,30 @@
     "icon": "./assets/images/icon.png",
     "scheme": "film-locker",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#FFFFFF"
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF0DB"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.filmlocker.app"
     },
     "android": {
       "backgroundColor": "#FFFFFF",
       "package": "com.filmlocker.app",
       "versionCode": 1,
-      "intentFilters": [
-        {
-          "action": "SEND",
-          "data": [{ "mimeType": "text/plain" }],
-          "category": ["DEFAULT"]
-        }
-      ]
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FAF0DB"
+      },
+      "gradleProperties": {
+        "org.gradle.jvmargs": "-Xmx4g -XX:MaxMetaspaceSize=512m",
+        "org.gradle.daemon": "false",
+        "android.useAndroidX": "true",
+        "android.enableJetifier": "true"
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -43,10 +47,38 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#0066FF",
           "defaultChannel": "default",
           "sounds": []
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "packagingOptions": {
+              "pickFirst": [
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+              ]
+            }
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Film Locker needs access to your photos so you can pick a screenshot or poster and have the films in it identified.",
+          "cameraPermission": "Film Locker needs access to your camera so you can photograph a poster or cinema listing and have the films on it identified."
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "disableIOS": true,
+          "androidIntentFilters": [
+            "text/*"
+          ]
         }
       ]
     ],

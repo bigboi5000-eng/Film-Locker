@@ -21,11 +21,25 @@
  *        walls keep much of it out) — step 1 below regularly finds nothing
  *        for Instagram posts that this step picks up directly from the page.
  *
- *   1. Gemini + Google Search grounding:
+ *   1. Gemini + Google Search grounding (skipped for Instagram and TikTok):
  *        Gemini searches Google to find out what the URL is about, then
  *        identifies any films referenced. Fallback for content the direct
  *        scrape above couldn't reach (private/login-walled pages) or
- *        platforms without a specific scraper.
+ *        platforms without a specific scraper. Skipped for Instagram —
+ *        Google's index of Instagram is too sparse for this to reliably
+ *        find anything, and grounding-by-search asks Gemini to guess at
+ *        content it can't verify rather than analyse content it was
+ *        actually given. Also skipped for TikTok: TikTok's anti-bot checks
+ *        frequently block the step-0.5 scrape when it runs from a cloud
+ *        server IP (the same class of block Instagram gets), which used to
+ *        route nearly every TikTok link through this step — and Google
+ *        Search grounding has a much stricter, separate quota from Gemini's
+ *        plain calls, shared across every user and platform. Burning it on
+ *        TikTok links starved other platforms that actually depend on it
+ *        (Twitter/X, Facebook, generic sites) once it ran out for the day.
+ *        TikTok is well supported by yt-dlp, so it goes straight from step
+ *        0.5 to the audio/video steps below instead, which is also a more
+ *        reliable signal than a web search guessing at the post's content.
  *
  *   2. yt-dlp audio fallback:
  *        Downloads the audio track, sends it to Gemini 2.5 Flash via the
@@ -49,7 +63,8 @@
  *   "none"      — all steps returned empty
  */
 
-import { fetchPageCaption } from "./pageCaptionScraper";
+import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
+import { isPubliclyFetchableUrl } from "./safeUrl";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import { extractMoviesFromAudio } from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
@@ -94,17 +109,66 @@ function extractUrlFromMixedText(input: string): { url: string; titleHint: strin
 // ── Search URL helpers ────────────────────────────────────────────────────────
 
 /**
+ * share.google links are Google's short-link redirector for shared search
+ * results — the actual destination is almost always a real
+ * google.com/search?q=... page, which extractSearchQuery() below already
+ * handles reliably. Without resolving the redirect first, a share.google
+ * link falls through to page-caption scraping, Gemini URL grounding, and
+ * yt-dlp — none of which have anything real to find on a redirect-only
+ * link (yt-dlp in particular gets an outright 429 from Google itself when
+ * it tries to treat the short link as a video page, unrelated to any
+ * Gemini quota).
+ */
+async function resolveShareGoogleLink(url: string): Promise<string> {
+  try {
+    const { hostname } = new URL(url);
+    if (!hostname.toLowerCase().endsWith("share.google")) return url;
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+    void res.body?.cancel?.();
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * If the URL is a Google or Bing search results page, return the search query.
  * Otherwise return null so the caller proceeds to Gemini URL analysis.
  *
  * Examples:
  *   https://www.google.com/search?q=inception+2010   → "inception 2010"
  *   https://www.bing.com/search?q=parasite+film      → "parasite film"
+ *
+ * Also handles Google's automated-traffic block page
+ * (google.com/sorry/index?continue=<the real URL you were headed to>&...) —
+ * server-side requests to Google Search get this instead of real results
+ * disturbingly often. We can't get past the CAPTCHA, but the block page's
+ * own `continue` param already contains the real destination URL — including
+ * its `q=` search query — so the query is recoverable without ever loading
+ * the actual search page.
  */
 function extractSearchQuery(url: string): string | null {
   try {
     const u = new URL(url);
     const h = u.hostname.toLowerCase();
+
+    if (h.includes("google.") && u.pathname.startsWith("/sorry")) {
+      const dest = u.searchParams.get("continue");
+      if (!dest) return null;
+      try {
+        const destUrl = new URL(dest);
+        return destUrl.searchParams.get("q") ?? destUrl.searchParams.get("query") ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     const isSearch =
       (h.includes("google.") && u.pathname.startsWith("/search")) ||
       (h.includes("bing.com") && u.pathname.startsWith("/search"));
@@ -137,7 +201,7 @@ export async function processSocialLink(
     if (mixed.titleHint) {
       warn?.({ url, titleHint: mixed.titleHint }, "processSocialLink: mixed-text share detected — trying title as search query first");
       try {
-        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId);
+        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId, true);
         if (matches.length > 0) {
           warn?.({ matchCount: matches.length }, "processSocialLink: title text pipeline succeeded");
           return { source: "caption", text: mixed.titleHint, matches, saved, listTitle };
@@ -149,12 +213,37 @@ export async function processSocialLink(
     }
   }
 
+  // Everything past this point either fetches `url` from the server or hands
+  // it to yt-dlp, so this is the one place to establish it points somewhere
+  // public. The request body only checks the URL is well-formed, which
+  // accepts loopback, link-local (cloud metadata), Railway's private network
+  // and file:// — see safeUrl.ts.
+  if (!isPubliclyFetchableUrl(url)) {
+    warn?.({ url }, "processSocialLink: refusing non-public URL");
+    return { source: "none", text: null, matches: [], saved: [], listTitle: null };
+  }
+
+  // A share.google link with no useful title hint (or one Gemini didn't
+  // recognize) still needs resolving before the search-URL fast path below
+  // has a chance — see resolveShareGoogleLink() for why.
+  const resolvedUrl = await resolveShareGoogleLink(url);
+  if (resolvedUrl !== url) {
+    // Re-check after following redirects — the destination is chosen by
+    // whoever the link points at, not by the check above.
+    if (!isPubliclyFetchableUrl(resolvedUrl)) {
+      warn?.({ url, resolvedUrl }, "processSocialLink: redirect resolved to a non-public URL — refusing");
+      return { source: "none", text: null, matches: [], saved: [], listTitle: null };
+    }
+    warn?.({ url, resolvedUrl }, "processSocialLink: resolved share.google redirect");
+    url = resolvedUrl;
+  }
+
   // ── Step 0: Google / Bing search URL (fast path) ──────────────────────────
   const searchQuery = extractSearchQuery(url);
   if (searchQuery) {
     warn?.({ url, searchQuery }, "processSocialLink: search URL detected — running text pipeline on query");
     try {
-      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId);
+      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId, true);
       warn?.({ matchCount: matches.length }, "processSocialLink: search query pipeline complete");
       return { source: "caption", text: searchQuery, matches, saved, listTitle };
     } catch (err) {
@@ -183,22 +272,46 @@ export async function processSocialLink(
     warn?.({ url, err }, "processSocialLink: page caption scrape failed — falling back to Gemini URL grounding");
   }
 
-  // ── Step 1: Gemini + Google Search grounding ──────────────────────────────
+  // ── Step 1: Gemini + Google Search grounding (skipped for Instagram/TikTok) ─
   // Gemini looks up what this URL is about and extracts film references.
   // Fallback for content the direct scrape above couldn't reach.
-  try {
-    const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
-    warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
+  //
+  // Instagram is deliberately excluded: Google's index of Instagram is
+  // unreliable (login walls keep most of it out), so this step is asking
+  // Gemini to search for something it usually can't find — and when it
+  // can't verify a match it has previously substituted plausible-sounding
+  // content from the creator's other posts instead of reporting nothing
+  // (see geminiUrlAnalyzer.ts's FOUND/NOT_FOUND guard). Gemini's job here is
+  // to understand actual post content handed to it (caption text, or the
+  // downloaded audio/video in steps 2-3 below), not to search the web for
+  // the URL.
+  //
+  // TikTok is also excluded: its anti-bot checks routinely block the free
+  // step-0.5 scrape from a cloud server IP, which used to send nearly every
+  // TikTok link through this step — and this grounding call draws from a
+  // separate, much stricter Google Search quota than Gemini's plain calls,
+  // shared across every user and platform. Letting TikTok burn through it
+  // starved platforms that actually need it (Twitter/X, Facebook, generic
+  // sites) once the daily cap was hit. TikTok downloads reliably via
+  // yt-dlp, so it goes straight to the audio/video steps below instead.
+  const skipGrounding = detectPlatform(url) === "instagram" || detectPlatform(url) === "tiktok";
+  if (!skipGrounding) {
+    try {
+      const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
+      warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
 
-    if (matches.length > 0) {
-      const { matches: enriched, saved, listTitle: enrichedListTitle } =
-        await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
-      return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
+      if (matches.length > 0) {
+        const { matches: enriched, saved, listTitle: enrichedListTitle } =
+          await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
+        return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
+      }
+
+      warn?.({ url }, "processSocialLink: Gemini URL analysis returned no matches — falling back to audio");
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: Gemini URL analysis failed — falling back to audio");
     }
-
-    warn?.({ url }, "processSocialLink: Gemini URL analysis returned no matches — falling back to audio");
-  } catch (err) {
-    warn?.({ url, err }, "processSocialLink: Gemini URL analysis failed — falling back to audio");
+  } else {
+    warn?.({ url }, "processSocialLink: Instagram/TikTok URL — skipping Gemini search grounding, going straight to audio");
   }
 
   // ── Step 2: yt-dlp audio fallback ────────────────────────────────────────

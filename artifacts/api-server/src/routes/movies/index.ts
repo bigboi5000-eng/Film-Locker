@@ -5,13 +5,14 @@ import {
   ListMoviesResponse,
   AddMovieBody,
   AddMovieResponse,
-  ParseCaptionBody,
-  ParseCaptionResponse,
   DeleteMovieParams,
   AiExtractBody,
   AiExtractResponse,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
+  ExtractFromImageBody,
+  RecommendMoviesBody,
+  RecommendMoviesResponse,
   GetMovieDetailsParams,
   GetMovieDetailsResponse,
   PatchWatchedParams,
@@ -23,10 +24,19 @@ import {
   SearchMoviesResponse,
   GetRecommendationsResponse,
 } from "@workspace/api-zod";
-import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations } from "../../lib/tmdb";
-import { extractMovieTitlesAI } from "../../lib/aiCaptionParser";
-import { runMoviePipeline } from "../../lib/moviePipeline";
+import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations, enrichCandidates, normalizeRegion, type TmdbCandidate } from "../../lib/tmdb";
+import { cached } from "../../lib/cache";
+
+// Trending/new-releases are identical for every user, and each load fans out
+// to ~40 extra TMDB requests via enrichCandidates (credits + watch-providers
+// per movie) — cache the enriched result so concurrent/repeat page loads
+// don't re-fetch. Recommendations is per-user and lower-volume, so it's left
+// uncached for now.
+const DISCOVERY_CACHE_TTL_MS = 20 * 60 * 1000;
+import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline";
 import { processSocialLink } from "../../lib/processSocialLink";
+import { extractMoviesFromImage } from "../../lib/imageExtractor";
+import { getRecommendations } from "../../lib/geminiRecommender";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -36,7 +46,10 @@ const router: IRouter = Router();
 // GET /movies/trending
 router.get("/movies/trending", async (req, res): Promise<void> => {
   try {
-    const movies = await fetchTrending();
+    const region = normalizeRegion(req.query.region);
+    const movies = await cached(`trending:${region}`, DISCOVERY_CACHE_TTL_MS, async () =>
+      enrichCandidates(await fetchTrending(), region)
+    );
     res.json(GetTrendingResponse.parse({ movies }));
   } catch (err) {
     req.log.error({ err }, "trending: TMDB fetch failed");
@@ -47,7 +60,10 @@ router.get("/movies/trending", async (req, res): Promise<void> => {
 // GET /movies/new-releases
 router.get("/movies/new-releases", async (req, res): Promise<void> => {
   try {
-    const movies = await fetchNowPlaying();
+    const region = normalizeRegion(req.query.region);
+    const movies = await cached(`new-releases:${region}`, DISCOVERY_CACHE_TTL_MS, async () =>
+      enrichCandidates(await fetchNowPlaying(region), region)
+    );
     res.json(GetNewReleasesResponse.parse({ movies }));
   } catch (err) {
     req.log.error({ err }, "new-releases: TMDB fetch failed");
@@ -79,7 +95,8 @@ router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const details = await fetchMovieDetails(params.data.tmdbId);
+    const region = normalizeRegion(req.query.region);
+    const details = await fetchMovieDetails(params.data.tmdbId, region);
     if (!details) {
       res.status(404).json({ error: "Movie not found on TMDB" });
       return;
@@ -89,46 +106,6 @@ router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
     req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB detail fetch failed");
     res.status(502).json({ error: "Could not fetch movie details from TMDB" });
   }
-});
-
-// POST /movies/parse-caption — public (no saves, just TMDB search)
-router.post("/movies/parse-caption", async (req, res): Promise<void> => {
-  const parsed = ParseCaptionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const titleCandidates = await extractMovieTitlesAI(parsed.data.caption);
-  req.log.info(
-    { count: titleCandidates.length, candidates: titleCandidates },
-    "Extracted caption candidates (AI)"
-  );
-
-  const seen = new Set<number>();
-  const results: Array<{
-    tmdbId: number;
-    title: string;
-    releaseYear: string;
-    posterUrl: string;
-    overview: string;
-  }> = [];
-
-  for (const candidate of titleCandidates) {
-    try {
-      const hits = await searchTmdb(candidate);
-      for (const hit of hits) {
-        if (!seen.has(hit.tmdbId)) {
-          seen.add(hit.tmdbId);
-          results.push(hit);
-        }
-      }
-    } catch (err) {
-      req.log.warn({ candidate, err }, "TMDB search failed for candidate");
-    }
-  }
-
-  res.json(ParseCaptionResponse.parse({ candidates: results.slice(0, 24) }));
 });
 
 // ── Protected locker routes (require Clerk auth) ──────────────────────────────
@@ -163,13 +140,7 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
     );
 
     const seen = new Set<number>();
-    const recommendations: Array<{
-      tmdbId: number;
-      title: string;
-      releaseYear: string;
-      posterUrl: string;
-      overview: string;
-    }> = [];
+    const recommendations: TmdbCandidate[] = [];
 
     for (const result of results) {
       if (result.status === "rejected") continue;
@@ -181,7 +152,9 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
       }
     }
 
-    res.json(GetRecommendationsResponse.parse({ movies: recommendations.slice(0, 20) }));
+    const region = normalizeRegion(req.query.region);
+    const enriched = await enrichCandidates(recommendations.slice(0, 20), region);
+    res.json(GetRecommendationsResponse.parse({ movies: enriched }));
   } catch (err) {
     req.log.error({ err }, "recommendations: failed");
     res.status(502).json({ error: "Could not fetch recommendations" });
@@ -335,6 +308,96 @@ router.post("/movies/process-social-link", requireAuth, async (req, res): Promis
   );
 
   res.json(ProcessSocialLinkResponse.parse(result));
+});
+
+// POST /movies/extract-from-image — read films out of a supplied photo/screenshot
+router.post("/movies/extract-from-image", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = ExtractFromImageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dryRun = Boolean(parsed.data.dryRun);
+  const { imageBase64, mimeType } = parsed.data;
+  req.log.info({ mimeType, bytes: imageBase64.length, dryRun }, "extract-from-image: start");
+
+  let extraction;
+  try {
+    extraction = await extractMoviesFromImage(imageBase64, mimeType);
+  } catch (err) {
+    req.log.warn({ err }, "extract-from-image: Gemini image extraction failed");
+    // A bad or oversized image is the caller's problem to fix; anything else
+    // (Gemini being down or out of quota) is not, but from here both look the
+    // same to the user, so return the empty-result shape the client already
+    // handles rather than an error it would have to special-case.
+    res.json(
+      ProcessSocialLinkResponse.parse({
+        source: "none",
+        text: null,
+        matches: [],
+        saved: [],
+        listTitle: null,
+      })
+    );
+    return;
+  }
+
+  const { matches, saved, listTitle } = await enrichAndSaveMatches(
+    extraction.movies,
+    (data, msg) => req.log.warn(data, msg),
+    dryRun,
+    clerkUserId,
+    extraction.list_title
+  );
+
+  req.log.info(
+    { matches: matches.length, saved: saved.length, listTitle },
+    "extract-from-image: complete"
+  );
+
+  res.json(
+    ProcessSocialLinkResponse.parse({
+      source: matches.length > 0 ? "image" : "none",
+      text: null,
+      matches,
+      saved,
+      listTitle,
+    })
+  );
+});
+
+// POST /movies/recommend — natural-language film/TV recommendation (dry-run or save)
+router.post("/movies/recommend", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const parsed = RecommendMoviesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dryRun = Boolean(parsed.data.dryRun);
+  req.log.info({ query: parsed.data.query, dryRun }, "recommend: start");
+
+  const { offTopic, movies, list_title } = await getRecommendations(parsed.data.query);
+
+  if (offTopic) {
+    req.log.info({ query: parsed.data.query }, "recommend: off-topic query refused");
+    res.json(RecommendMoviesResponse.parse({ offTopic: true, matches: [], saved: [], listTitle: null }));
+    return;
+  }
+
+  const { matches, saved, listTitle } = await enrichAndSaveMatches(
+    movies,
+    (data, msg) => req.log.warn(data, msg),
+    dryRun,
+    clerkUserId,
+    list_title
+  );
+
+  req.log.info({ matchCount: matches.length, saved: saved.length }, "recommend: complete");
+  res.json(RecommendMoviesResponse.parse({ offTopic: false, matches, saved, listTitle }));
 });
 
 // PATCH /movies/:id/watched — toggle watched status (ownership verified)

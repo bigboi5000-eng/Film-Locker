@@ -6,6 +6,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { ShareIntentProvider } from 'expo-share-intent';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -17,6 +18,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react';
@@ -34,6 +36,18 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
+
+// The production build profile ships a placeholder until a real Clerk
+// production key is pasted in (see LAUNCH.md). Without this check that
+// mistake surfaces as an opaque Clerk failure on the sign-in screen of an
+// already-submitted build; this way it stops the app immediately, at the
+// point where the cause is obvious.
+if (!publishableKey?.startsWith('pk_')) {
+  throw new Error(
+    'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is missing or is still the placeholder. ' +
+      'Set a real Clerk key in eas.json for this build profile — see LAUNCH.md.'
+  );
+}
 
 /**
  * Registers push notification permissions after sign-in and uploads the token
@@ -119,7 +133,10 @@ function RootLayoutNav() {
       <Stack.Screen name="inbox/[userId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="people" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="profile" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="blocked-users" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="playlist/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="playlists" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="user/[clerkId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
     </Stack>
   );
 }
@@ -141,24 +158,30 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <SafeAreaProvider>
-          <ErrorBoundary>
-            <QueryClientProvider client={queryClient}>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <ToastProvider>
-                  <KeyboardProvider>
-                    <PushNotificationManager />
-                    <RootLayoutNav />
-                    <ShareIntentHandler />
-                  </KeyboardProvider>
-                </ToastProvider>
-              </GestureHandlerRootView>
-            </QueryClientProvider>
-          </ErrorBoundary>
-        </SafeAreaProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <ShareIntentProvider>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <SafeAreaProvider>
+            {/* App is light-themed only (see hooks/useColors.ts) — force
+                dark status bar icons rather than "auto", which would go
+                white-on-white whenever the device itself is in dark mode. */}
+            <StatusBar style="dark" />
+            <ErrorBoundary>
+              <QueryClientProvider client={queryClient}>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <ToastProvider>
+                    <KeyboardProvider>
+                      <PushNotificationManager />
+                      <RootLayoutNav />
+                      <ShareIntentHandler />
+                    </KeyboardProvider>
+                  </ToastProvider>
+                </GestureHandlerRootView>
+              </QueryClientProvider>
+            </ErrorBoundary>
+          </SafeAreaProvider>
+        </ClerkLoaded>
+      </ClerkProvider>
+    </ShareIntentProvider>
   );
 }

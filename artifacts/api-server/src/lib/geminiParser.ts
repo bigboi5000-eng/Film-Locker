@@ -1,9 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { GEMINI_MODEL } from "./geminiModel";
 
 export interface GeminiMovieMatch {
   movie_title: string;
   release_year: string;
   confidence_score: number;
+  /** One-sentence hook — only populated by geminiRecommender.ts, absent elsewhere. */
+  synopsis?: string;
 }
 
 export interface GeminiExtractionResult {
@@ -100,7 +103,7 @@ export async function extractMoviesWithGemini(
   const ai = getClient();
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: GEMINI_MODEL,
     contents: [
       {
         role: "user",

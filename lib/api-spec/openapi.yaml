@@ -38,6 +38,15 @@ paths:
         Calls TMDB recommendations for each saved film, deduplicates,
         and filters out already-saved films. Returns an empty list when
         the watchlist is empty.
+      parameters:
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code used to pick which country's watch
+            providers to return. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -51,6 +60,15 @@ paths:
       operationId: getTrending
       tags: [movies]
       summary: Fetch trending movies this week from TMDB
+      parameters:
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code used to pick which country's watch
+            providers to return. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -64,6 +82,16 @@ paths:
       operationId: getNewReleases
       tags: [movies]
       summary: Fetch movies currently in theatres from TMDB
+      parameters:
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code. Controls both which country's
+            "now playing" list is used and which country's watch providers
+            are returned. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -91,25 +119,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchMoviesResponse"
-
-  /movies/parse-caption:
-    post:
-      operationId: parseCaption
-      tags: [movies]
-      summary: Parse a social media caption and find matching movies via TMDB
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ParseCaptionBody"
-      responses:
-        "200":
-          description: Candidate movies found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ParseCaptionResponse"
 
   /movies/ai-extract:
     post:
@@ -156,6 +165,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProcessSocialLinkResponse"
 
+  /movies/extract-from-image:
+    post:
+      operationId: extractFromImage
+      tags: [movies]
+      summary: >
+        Extract films from a photo or screenshot the user supplies — a poster
+        or cinema listing photographed in the wild, or a screenshot of a post
+        whose titles are printed in the image rather than written in its
+        caption. Gemini reads the image directly; nothing is scraped, so this
+        works for content the link-based pipeline cannot reach.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractFromImageBody"
+      responses:
+        "200":
+          description: Extraction complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessSocialLinkResponse"
+        "400":
+          description: Missing, oversized, or unsupported image
+        "401":
+          description: Unauthorized
+
+  /movies/recommend:
+    post:
+      operationId: recommendMovies
+      tags: [movies]
+      summary: >
+        Ask Gemini for film/TV recommendations from a natural-language query
+        (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw
+        Massacre"), enrich each with TMDB data, and optionally save to the
+        locker. Strictly scoped to film/TV requests — Gemini is instructed to
+        refuse anything else, surfaced as offTopic=true with no matches.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendBody"
+      responses:
+        "200":
+          description: Recommendation complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendResponse"
+
   /movies/tmdb/{tmdbId}:
     get:
       operationId: getMovieDetails
@@ -169,6 +230,14 @@ paths:
           required: true
           schema:
             type: integer
+        - name: region
+          in: query
+          required: false
+          description: >
+            ISO 3166-1 alpha-2 country code used to pick which country's watch
+            providers to return. Defaults to US when omitted or invalid.
+          schema:
+            type: string
       responses:
         "200":
           description: Movie details
@@ -484,42 +553,13 @@ paths:
         "404":
           description: Notification not found
 
-  /notifications/{id}/react:
-    patch:
-      operationId: reactToNotification
-      tags: [notifications]
-      summary: Set an emoji or text reaction on a received notification
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ReactNotificationBody"
-      responses:
-        "200":
-          description: Reaction saved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReactNotificationResponse"
-        "400":
-          description: Bad request
-        "401":
-          description: Unauthorized
-        "404":
-          description: Notification not found
-
   /notifications/thread/{userId}:
     get:
       operationId: getNotificationThread
       tags: [notifications]
-      summary: All recommendations from a specific user to the authenticated user
+      summary: >
+        Merged chronological chat feed with a specific user — recommendations
+        sent either way plus reactions/messages, newest last
       parameters:
         - name: userId
           in: path
@@ -528,13 +568,50 @@ paths:
             type: string
       responses:
         "200":
-          description: Thread of notifications from this user
+          description: Feed of recommendations and messages with this user
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/NotificationThreadResponse"
         "401":
           description: Unauthorized
+
+  /notifications/thread/{userId}/messages:
+    post:
+      operationId: sendConversationMessage
+      tags: [notifications]
+      summary: >
+        Send a reaction/message to a user from the fixed vocabulary — either
+        a reply to a specific film recommendation (replyToNotificationId) or
+        a standalone message. Allowed regardless of whether a recommendation
+        exists, as long as a follow relationship exists in either direction.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendConversationMessageBody"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationFeedItem"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "403":
+          description: No relationship with this user
+        "404":
+          description: User or replied-to notification not found
 
   /users/sync:
     post:
@@ -596,6 +673,19 @@ paths:
           description: Bad request
         "401":
           description: Unauthorized
+    delete:
+      operationId: deleteMe
+      tags: [users]
+      summary: >
+        Permanently delete the authenticated user's Film Locker data — their
+        locker, comments, ratings, notifications, messages, follows,
+        playlists, and feedback. Call this before deleting the Clerk
+        identity itself; it does not touch Clerk.
+      responses:
+        "204":
+          description: Account data deleted
+        "401":
+          description: Unauthorized
 
   /users/search:
     get:
@@ -621,6 +711,67 @@ paths:
         "401":
           description: Unauthorized
 
+  /users/{id}/profile:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get another user's public profile
+      description: >
+        Headline stats (films watched, reviews given, public playlist count)
+        are always included, even for a private account the caller doesn't
+        follow. The actual list of public playlists is only included
+        (non-null) when the account is public, the caller is viewing their
+        own profile, or the caller is an accepted follower — otherwise
+        publicPlaylists is null and publicPlaylistCount stands in for it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Clerk user ID of the profile to view
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /users/{id}/watched:
+    get:
+      operationId: getUserWatched
+      tags: [users]
+      summary: Get another user's watched films
+      description: >
+        Only visible when both accounts follow each other (mutual — "Film
+        Pals"), a stricter bar than the one-way accepted-follower gate used
+        for playlists, since individual watched films are more personal.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Clerk user ID whose watched films to view
+      responses:
+        "200":
+          description: Watched films
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMoviesResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Not mutually followed
+        "404":
+          description: Not found
+
   /follows:
     get:
       operationId: getFollows
@@ -638,7 +789,9 @@ paths:
     post:
       operationId: followUser
       tags: [users]
-      summary: Follow another user
+      summary: >
+        Follow another user. Accepted immediately if they're public; creates
+        a pending follow request if they're private.
       requestBody:
         required: true
         content:
@@ -647,7 +800,11 @@ paths:
               $ref: "#/components/schemas/FollowBody"
       responses:
         "201":
-          description: Followed
+          description: Followed or requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
         "400":
           description: Bad request
         "401":
@@ -659,7 +816,7 @@ paths:
     delete:
       operationId: unfollowUser
       tags: [users]
-      summary: Unfollow a user
+      summary: Unfollow a user, or cancel an outgoing follow request you sent them
       parameters:
         - name: userId
           in: path
@@ -668,7 +825,154 @@ paths:
             type: string
       responses:
         "204":
-          description: Unfollowed
+          description: Unfollowed / request cancelled
+        "401":
+          description: Unauthorized
+
+  /follows/{userId}/accept:
+    patch:
+      operationId: acceptFollowRequest
+      tags: [users]
+      summary: Accept an incoming follow request from userId
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
+        "401":
+          description: Unauthorized
+        "404":
+          description: No pending request from this user
+
+  /follows/{userId}/request:
+    delete:
+      operationId: declineFollowRequest
+      tags: [users]
+      summary: Decline an incoming pending follow request from userId
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Request declined
+        "401":
+          description: Unauthorized
+
+  /feedback:
+    post:
+      operationId: submitFeedback
+      tags: [users]
+      summary: >
+        Send feedback from the account management page. Always saved to the
+        database first; a notification email is best-effort on top of that.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFeedbackBody"
+      responses:
+        "201":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitFeedbackResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /blocks:
+    get:
+      operationId: getBlocks
+      tags: [users]
+      summary: List users the authenticated user has blocked
+      responses:
+        "200":
+          description: Blocked users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetBlocksResponse"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: blockUser
+      tags: [users]
+      summary: >
+        Block a user. Also removes any existing follow relationship between
+        the two people, in either direction (including a still-pending
+        request).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockUserBody"
+      responses:
+        "201":
+          description: Blocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockUserResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /blocks/{userId}:
+    delete:
+      operationId: unblockUser
+      tags: [users]
+      summary: Unblock a user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Unblocked
+        "401":
+          description: Unauthorized
+
+  /reports:
+    post:
+      operationId: submitReport
+      tags: [users]
+      summary: >
+        Report a user, optionally about a specific comment. Always saved to
+        the database first; a notification email is best-effort on top of
+        that — there's no in-app moderation queue yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitReportBody"
+      responses:
+        "201":
+          description: Report recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitReportResponse"
+        "400":
+          description: Bad request
         "401":
           description: Unauthorized
 
@@ -713,8 +1017,22 @@ paths:
       operationId: searchPublicPlaylists
       tags: [playlists]
       summary: Search public playlists
+      description: >
+        Filter with `q` (by name), `tmdbId` (playlists containing that film),
+        or `userId` (one user's public playlists — used by the profile
+        screen). Any combination may be passed together. A public playlist
+        owned by a private account is only included for that account's
+        owner or an accepted follower.
       parameters:
         - name: q
+          in: query
+          schema:
+            type: string
+        - name: tmdbId
+          in: query
+          schema:
+            type: integer
+        - name: userId
           in: query
           schema:
             type: string
@@ -725,6 +1043,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlaylistsResponse"
+
+  /playlists/followed:
+    get:
+      operationId: getFollowedPlaylists
+      tags: [playlists]
+      summary: Playlists the caller follows but does not own
+      description: >
+        Separate from GET /playlists, which is the set of playlists the caller
+        can add films to. A followed playlist is read-only and reflects
+        whatever its owner currently has in it. Playlists that have since been
+        made private, or whose owner has gone private and no longer accepts
+        this follower, are omitted.
+      responses:
+        "200":
+          description: Followed playlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistsResponse"
+        "401":
+          description: Unauthorized
+
+  /playlists/{id}/follow:
+    post:
+      operationId: followPlaylist
+      tags: [playlists]
+      summary: Follow someone else's public playlist
+      description: >
+        A follow is a reference rather than a copy — the follower always sees
+        the owner's current contents, so the owner's later changes are
+        reflected automatically.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Now following
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowPlaylistResponse"
+        "400":
+          description: Your own playlist
+        "403":
+          description: Playlist is private, or its owner's account is
+        "404":
+          description: Not found
+    delete:
+      operationId: unfollowPlaylist
+      tags: [playlists]
+      summary: Stop following a playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: No longer following
 
   /playlists/{id}:
     get:
@@ -957,6 +1338,19 @@ components:
           items:
             type: string
           description: Genre names mapped from TMDB genre_ids
+        language:
+          type: string
+          description: Full display name of the original language (free on the TMDB list response)
+        director:
+          type: string
+        cast:
+          type: array
+          items:
+            type: string
+        watchProviders:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchProvider"
       required:
         - tmdbId
         - title
@@ -994,6 +1388,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WatchProvider"
+        tmdbRating:
+          type: number
+          nullable: true
+          description: >
+            TMDB's own aggregate user rating (0-10), null if the film has no
+            votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to
+            either; this is TMDB's own users' average.
+        tmdbVoteCount:
+          type: integer
       required:
         - tmdbId
         - title
@@ -1005,26 +1408,8 @@ components:
         - genres
         - language
         - watchProviders
-
-    MovieCandidate:
-      type: object
-      properties:
-        tmdbId:
-          type: integer
-        title:
-          type: string
-        releaseYear:
-          type: string
-        posterUrl:
-          type: string
-        overview:
-          type: string
-      required:
-        - tmdbId
-        - title
-        - releaseYear
-        - posterUrl
-        - overview
+        - tmdbRating
+        - tmdbVoteCount
 
     GeminiMovieMatch:
       type: object
@@ -1051,6 +1436,13 @@ components:
         overview:
           type: string
           nullable: true
+        synopsis:
+          type: string
+          nullable: true
+          description: >
+            Very short (one-sentence) hook written by Gemini specifically for
+            recommend results — only populated by POST /movies/recommend,
+            null everywhere else.
       required:
         - movie_title
         - release_year
@@ -1125,24 +1517,6 @@ components:
         - posterUrl
         - overview
 
-    ParseCaptionBody:
-      type: object
-      properties:
-        caption:
-          type: string
-      required:
-        - caption
-
-    ParseCaptionResponse:
-      type: object
-      properties:
-        candidates:
-          type: array
-          items:
-            $ref: "#/components/schemas/MovieCandidate"
-      required:
-        - candidates
-
     AiExtractBody:
       type: object
       properties:
@@ -1187,7 +1561,10 @@ components:
       properties:
         source:
           type: string
-          enum: [caption, audio, video, none]
+          description: >
+            How the films were found. "image" is used by
+            /movies/extract-from-image, which shares this response shape.
+          enum: [caption, audio, video, image, none]
         text:
           type: string
           nullable: true
@@ -1207,6 +1584,74 @@ components:
             of films (e.g. "Top 10 Horror Films of All Time"), null otherwise.
       required:
         - source
+        - matches
+        - saved
+        - listTitle
+
+    ExtractFromImageBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: >
+            Raw base64-encoded image bytes, with no `data:` URI prefix.
+            Capped at 12MB decoded.
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/jpg, image/png, image/webp, image/heic, image/heif]
+        dryRun:
+          type: boolean
+          description: >
+            When true, identify films from the image but do NOT save them to
+            the locker — same confirmation-first behaviour as
+            /movies/process-social-link.
+      required:
+        - imageBase64
+        - mimeType
+
+    RecommendBody:
+      type: object
+      properties:
+        query:
+          type: string
+          description: >
+            Natural-language film/TV request, e.g. "recommend a 90 minute
+            horror film similar to Texas Chainsaw Massacre".
+        dryRun:
+          type: boolean
+          description: >
+            When true, identify recommended films but do NOT save them to the
+            locker. The response `matches` will include TMDB card data
+            (poster_url, title, overview) so the UI can show a confirmation
+            card before the user explicitly adds the film.
+      required:
+        - query
+
+    RecommendResponse:
+      type: object
+      properties:
+        offTopic:
+          type: boolean
+          description: >
+            True when the query wasn't a film/TV request and Gemini refused
+            to answer it — matches will be empty in this case.
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeminiMovieMatch"
+        saved:
+          type: array
+          items:
+            $ref: "#/components/schemas/Movie"
+        listTitle:
+          type: string
+          nullable: true
+          description: >
+            Suggested playlist name when the recommendation is a themed set of
+            multiple films (e.g. "90s Feel-Good Comedies"), null for a single
+            recommendation.
+      required:
+        - offTopic
         - matches
         - saved
         - listTitle
@@ -1292,6 +1737,10 @@ components:
         isOwn:
           type: boolean
           description: True when the authenticated user authored this comment
+        rating:
+          type: integer
+          nullable: true
+          description: The author's own community star rating (1-5) for this film, if they've left one
       required:
         - id
         - tmdbId
@@ -1300,6 +1749,7 @@ components:
         - createdAt
         - updatedAt
         - isOwn
+        - rating
 
     FilmCommentsResponse:
       type: object
@@ -1339,6 +1789,9 @@ components:
           type: string
           nullable: true
           description: Display username of the sender
+        fromDisplayInitials:
+          type: string
+          nullable: true
         fromAvatarUrl:
           type: string
           nullable: true
@@ -1413,6 +1866,9 @@ components:
         username:
           type: string
           nullable: true
+        displayInitials:
+          type: string
+          nullable: true
         avatarUrl:
           type: string
           nullable: true
@@ -1429,30 +1885,112 @@ components:
       required:
         - users
 
-    ReactNotificationBody:
-      type: object
-      properties:
-        reaction:
-          type: string
-          maxLength: 20
-          description: Emoji or predefined text e.g. "Watched it!"
-      required:
-        - reaction
+    ConversationMessageContent:
+      type: string
+      enum:
+        - "❤️"
+        - "😂"
+        - "😍"
+        - "😭"
+        - "🤪"
+        - "🤓"
+        - "🤯"
+        - "👍"
+        - "🤌"
+        - "👎"
+        - "Watched it!"
+        - "Fool of a Took!"
+        - "Prestige Worldwide"
+        - "I miss your whispering eye"
+        - "Aim for the bushes"
+        - "Read a f***ing book"
+        - "I'll be back"
+        - "Why so serious?"
+        - "You can't handle the truth!"
+        - "May the Force be with you"
+        - "Here's looking at you, kid"
+        - "You shall not pass!"
+        - "I am Groot"
+        - "Say hello to my little friend!"
+        - "Life is like a box of chocolates"
+        - "To infinity and beyond!"
+        - "Nobody puts Baby in a corner"
+        - "Great Scott!"
+        - "What did you think?"
+        - "Have you watched it yet?"
+        - "This was great!"
+        - "Thank you!"
+        - "Not for me this one"
+        - "Hey, why you so sweaty?"
+        - "Watching Cops"
+      description: >
+        A fixed set of emoji + movie-catchphrases + canned questions —
+        deliberately not a freeform string. There is no freeform messaging in
+        this app; this enum is enforced server-side (not just left to the
+        client UI) so free text can never reach another user through it.
 
-    ReactNotificationResponse:
+    SendConversationMessageBody:
       type: object
       properties:
+        content:
+          $ref: "#/components/schemas/ConversationMessageContent"
+        replyToNotificationId:
+          type: integer
+          nullable: true
+          description: >
+            Targets a specific film recommendation (per-film React button or
+            swipe-to-reply). Omit or set null for a standalone message.
+      required:
+        - content
+
+    ConversationFeedItem:
+      type: object
+      description: >
+        One entry in a merged, chronological chat feed between two users —
+        either a film recommendation or a reaction/message, distinguished by
+        "type".
+      properties:
+        type:
+          type: string
+          enum: [recommendation, message]
         id:
           type: integer
-        reaction:
+        fromUserId:
           type: string
-          nullable: true
-        reactedAt:
+        toUserId:
+          type: string
+        createdAt:
           type: string
           format: date-time
+        tmdbId:
+          type: integer
           nullable: true
+        filmTitle:
+          type: string
+          nullable: true
+        posterUrl:
+          type: string
+          nullable: true
+        isRead:
+          type: boolean
+          nullable: true
+        content:
+          type: string
+          nullable: true
+          description: Present when type is "message" — the canned phrase/emoji sent
+        replyToNotificationId:
+          type: integer
+          nullable: true
+        replyToFilmTitle:
+          type: string
+          nullable: true
+          description: Denormalized title of the film this message replies to, if any
       required:
+        - type
         - id
+        - fromUserId
+        - toUserId
+        - createdAt
 
     NotificationThreadResponse:
       type: object
@@ -1460,12 +1998,12 @@ components:
         sender:
           $ref: "#/components/schemas/NotificationUser"
           nullable: true
-        notifications:
+        feed:
           type: array
           items:
-            $ref: "#/components/schemas/FilmNotification"
+            $ref: "#/components/schemas/ConversationFeedItem"
       required:
-        - notifications
+        - feed
 
     UserProfile:
       type: object
@@ -1477,12 +2015,87 @@ components:
         username:
           type: string
           nullable: true
+        displayInitials:
+          type: string
+          nullable: true
+          maxLength: 5
+          description: Optional short display initials shown instead of username-derived ones
+        isPrivate:
+          type: boolean
+          description: >
+            Private accounts require an accepted follow request before they
+            can be followed, recommended to, messaged, or have their
+            comments seen by the requester.
         avatarUrl:
           type: string
           nullable: true
       required:
         - clerkId
         - email
+        - isPrivate
+
+    PublicUserProfile:
+      type: object
+      description: Another user's public profile — never includes their email address.
+      properties:
+        clerkId:
+          type: string
+        username:
+          type: string
+          nullable: true
+        displayInitials:
+          type: string
+          nullable: true
+          maxLength: 5
+        isPrivate:
+          type: boolean
+        avatarUrl:
+          type: string
+          nullable: true
+      required:
+        - clerkId
+        - isPrivate
+
+    UserProfileResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUserProfile"
+        followStatus:
+          type: string
+          enum: [self, none, pending, accepted]
+          description: >
+            The caller's relationship to this profile — "self" when viewing
+            your own profile, otherwise the same pending/accepted states as
+            the rest of the follow system, or "none" if not followed at all.
+        stats:
+          type: object
+          properties:
+            watchedCount:
+              type: integer
+            reviewCount:
+              type: integer
+            publicPlaylistCount:
+              type: integer
+          required:
+            - watchedCount
+            - reviewCount
+            - publicPlaylistCount
+        publicPlaylists:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/Playlist"
+          description: >
+            Null when the account is private and the caller isn't an
+            accepted follower (and isn't the account itself) — use
+            stats.publicPlaylistCount as the headline figure in that case
+            instead of listing them.
+      required:
+        - user
+        - followStatus
+        - stats
+        - publicPlaylists
 
     SyncUserBody:
       type: object
@@ -1506,6 +2119,17 @@ components:
           type: string
           minLength: 2
           maxLength: 30
+        displayInitials:
+          type: string
+          nullable: true
+          maxLength: 3
+          description: Optional — set null/empty to clear and fall back to username-derived initials
+        isPrivate:
+          type: boolean
+          description: >
+            Switch between a public account (anyone can follow instantly)
+            and a private one (follows need your approval). Existing
+            followers are unaffected either way.
 
     SearchUsersResponse:
       type: object
@@ -1513,7 +2137,7 @@ components:
         users:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
+            $ref: "#/components/schemas/PublicUserProfile"
       required:
         - users
 
@@ -1526,22 +2150,131 @@ components:
       required:
         - followeeId
 
+    FollowResponse:
+      type: object
+      properties:
+        followerId:
+          type: string
+        followeeId:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted]
+      required:
+        - followerId
+        - followeeId
+        - status
+
     FollowsResponse:
       type: object
       properties:
         following:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
-          description: Users that the authenticated user follows
+            $ref: "#/components/schemas/PublicUserProfile"
+          description: Users the authenticated user follows (accepted only)
         followers:
           type: array
           items:
-            $ref: "#/components/schemas/UserProfile"
-          description: Users that follow the authenticated user
+            $ref: "#/components/schemas/PublicUserProfile"
+          description: Users that follow the authenticated user (accepted only)
+        incomingRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+          description: Pending follow requests sent TO the authenticated user, awaiting their accept/decline
+        outgoingRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+          description: Pending follow requests the authenticated user has sent, awaiting the other person's approval
       required:
         - following
         - followers
+        - incomingRequests
+        - outgoingRequests
+
+    SubmitFeedbackBody:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      required:
+        - message
+
+    SubmitFeedbackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - createdAt
+
+    BlockUserBody:
+      type: object
+      properties:
+        blockedId:
+          type: string
+          description: Clerk user ID of the user to block
+      required:
+        - blockedId
+
+    BlockUserResponse:
+      type: object
+      properties:
+        blockerId:
+          type: string
+        blockedId:
+          type: string
+      required:
+        - blockerId
+        - blockedId
+
+    GetBlocksResponse:
+      type: object
+      properties:
+        blocked:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+      required:
+        - blocked
+
+    SubmitReportBody:
+      type: object
+      properties:
+        reportedUserId:
+          type: string
+          description: Clerk user ID of the user being reported
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        commentId:
+          type: integer
+          nullable: true
+          description: If reporting a specific comment
+      required:
+        - reportedUserId
+        - reason
+
+    SubmitReportResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - createdAt
 
     UpdatePushTokenBody:
       type: object
@@ -1603,6 +2336,16 @@ components:
         updatedAt:
           type: string
           format: date-time
+        ownerUsername:
+          type: string
+          nullable: true
+          description: Only populated by GET /playlists/public (Discover search results need to show whose playlist it is)
+        ownerDisplayInitials:
+          type: string
+          nullable: true
+        ownerAvatarUrl:
+          type: string
+          nullable: true
       required:
         - id
         - userId
@@ -1622,8 +2365,31 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/PlaylistItem"
+            isOwner:
+              type: boolean
+              description: >
+                Whether the caller owns this playlist. Only the owner may edit
+                it, add or remove films, or delete it.
+            isFollowed:
+              type: boolean
+              description: >
+                Whether the caller follows this playlist. Always false for the
+                owner, who does not follow their own.
           required:
             - items
+            - isOwner
+            - isFollowed
+
+    FollowPlaylistResponse:
+      type: object
+      properties:
+        playlistId:
+          type: integer
+        isFollowed:
+          type: boolean
+      required:
+        - playlistId
+        - isFollowed
 
     PlaylistsResponse:
       type: object

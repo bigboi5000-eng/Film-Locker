@@ -12,6 +12,7 @@
 import type { GoogleGenAI } from "@google/genai";
 import { Type } from "@google/genai";
 import type { GeminiExtractionResult, GeminiMovieMatch } from "./geminiParser";
+import { GEMINI_MODEL } from "./geminiModel";
 
 export const MEDIA_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -82,15 +83,23 @@ export async function uploadAndAnalyzeMedia(
     // State transitions: PROCESSING → ACTIVE | FAILED
     {
       const MAX_WAIT_MS = 90_000;
-      const POLL_INTERVAL_MS = 2_000;
+      // Short social clips (the only thing this ever processes) typically
+      // reach ACTIVE well under 2s — poll faster to catch that sooner
+      // instead of averaging an extra ~1s of dead wait per request.
+      const POLL_INTERVAL_MS = 1_000;
       const deadline = Date.now() + MAX_WAIT_MS;
 
       let fileState = uploadedFile.state ?? "PROCESSING";
 
+      // Re-check before sleeping, not after. Sleeping first charged every
+      // single extraction a full poll interval even when the file was
+      // already ACTIVE by the time the upload call returned — which for the
+      // short clips this handles is the common case, not the exception.
       while (fileState === "PROCESSING" && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         const refreshed = await ai.files.get({ name: uploadedFileName! });
         fileState = (refreshed.state as string) ?? "PROCESSING";
+        if (fileState !== "PROCESSING") break;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
 
       if (fileState === "FAILED") {
@@ -105,7 +114,7 @@ export async function uploadAndAnalyzeMedia(
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODEL,
       contents: [
         {
           role: "user",

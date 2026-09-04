@@ -13,9 +13,18 @@ export default function NotFoundScreen() {
           This screen doesn&apos;t exist.
         </Text>
 
-        <Link href="/" style={styles.link}>
-          <Text style={[styles.linkText, { color: colors.primary }]}>
-            Go to home screen!
+        {/*
+         * Routed through sign-in rather than "/" — the auth layout redirects
+         * a signed-in user straight to (tabs) anyway, so this is a safe
+         * landing spot regardless of auth state and can't loop back into
+         * whatever broken route got us here.
+         */}
+        <Link href="/(auth)/sign-in" asChild>
+          <Text
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+          >
+            Go to home screen
           </Text>
         </Link>
       </View>
@@ -33,12 +42,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
+  button: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 });
