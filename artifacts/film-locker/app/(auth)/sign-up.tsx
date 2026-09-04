@@ -16,6 +16,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { webInputReset } from '@/lib/webInputReset';
 import { useToast } from '@/components/ToastProvider';
 
@@ -105,10 +106,7 @@ export default function SignUpScreen() {
     return (
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.inner}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandDot} />
-            <Text style={styles.logo}>FILM LOCKER</Text>
-          </View>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Verify your email</Text>
           <Text style={styles.subtitle}>We sent a code to {email}</Text>
 
@@ -153,10 +151,7 @@ export default function SignUpScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
           {/* Branding */}
-          <View style={styles.brandRow}>
-            <View style={styles.brandDot} />
-            <Text style={styles.logo}>FILM LOCKER</Text>
-          </View>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>Start building your personal film collection</Text>
 
@@ -282,9 +277,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { flexGrow: 1, justifyContent: 'center' },
   inner: { paddingHorizontal: 24, paddingVertical: 48 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
-  brandDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#0066FF' },
-  logo: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
+  logoImage: { width: 200, height: 85, marginBottom: 24, alignSelf: 'flex-start' },
   title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 6 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 28 },
   label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151', marginBottom: 6 },

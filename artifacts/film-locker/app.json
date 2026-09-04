@@ -10,8 +10,8 @@
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#FFFFFF"
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF0DB"
     },
     "ios": {
       "supportsTablet": false,
@@ -23,7 +23,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0B0B0C"
+        "backgroundColor": "#FAF0DB"
       },
       "gradleProperties": {
         "org.gradle.jvmargs": "-Xmx4g -XX:MaxMetaspaceSize=512m",
@@ -47,7 +47,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#0066FF",
           "defaultChannel": "default",
           "sounds": []
@@ -58,7 +58,9 @@
         {
           "android": {
             "packagingOptions": {
-              "pickFirst": ["META-INF/versions/9/OSGI-INF/MANIFEST.MF"]
+              "pickFirst": [
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+              ]
             }
           }
         }
@@ -74,7 +76,9 @@
         "expo-share-intent",
         {
           "disableIOS": true,
-          "androidIntentFilters": ["text/*"]
+          "androidIntentFilters": [
+            "text/*"
+          ]
         }
       ]
     ],
