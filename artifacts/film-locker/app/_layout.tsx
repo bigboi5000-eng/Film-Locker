@@ -37,6 +37,18 @@ const queryClient = new QueryClient();
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
+// The production build profile ships a placeholder until a real Clerk
+// production key is pasted in (see LAUNCH.md). Without this check that
+// mistake surfaces as an opaque Clerk failure on the sign-in screen of an
+// already-submitted build; this way it stops the app immediately, at the
+// point where the cause is obvious.
+if (!publishableKey?.startsWith('pk_')) {
+  throw new Error(
+    'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is missing or is still the placeholder. ' +
+      'Set a real Clerk key in eas.json for this build profile — see LAUNCH.md.'
+  );
+}
+
 /**
  * Registers push notification permissions after sign-in and uploads the token
  * to the server.  Also handles deep-link navigation when a notification tap
