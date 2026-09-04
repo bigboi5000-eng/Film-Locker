@@ -1,5 +1,5 @@
 const LAST_UPDATED = "September 4, 2026";
-const CONTACT_EMAIL = "jakepltanner@gmail.com";
+const CONTACT_EMAIL = "hello@film-locker.com";
 
 const PAGE_STYLE = `
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; background: #FFFFFF; }
