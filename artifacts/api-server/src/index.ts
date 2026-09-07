@@ -36,6 +36,51 @@ async function logYtDlpDiagnostics(): Promise<void> {
   }
 }
 
+/**
+ * Which Clerk instance this deployment will accept tokens from.
+ *
+ * A publishable key is base64 of the instance's frontend API host, and is not
+ * a secret — it ships inside the app binary by design — so decoding it for
+ * the logs is safe. The secret key is only ever reported as present or
+ * missing, never printed.
+ *
+ * This exists because the failure it diagnoses is invisible from the outside:
+ * if the server holds one instance's keys and a build holds another's, the
+ * app signs in perfectly well against Clerk and then every API call 401s.
+ * Without this you cannot tell from the logs which instance the server is on.
+ */
+function describeClerkInstance(): Record<string, unknown> {
+  const publishable = process.env["CLERK_PUBLISHABLE_KEY"];
+  const secret = process.env["CLERK_SECRET_KEY"];
+
+  let host: string | null = null;
+  const encoded = publishable?.replace(/^pk_(test|live)_/, "");
+  if (encoded) {
+    try {
+      host = Buffer.from(encoded, "base64").toString("utf8").replace(/\$$/, "") || null;
+    } catch {
+      host = null;
+    }
+  }
+
+  return {
+    clerkEnv: publishable?.startsWith("pk_live_")
+      ? "production"
+      : publishable?.startsWith("pk_test_")
+        ? "development"
+        : "unknown",
+    clerkFrontendApi: host,
+    clerkSecretKeySet: Boolean(secret),
+    // Both keys must belong to the same instance, so a mismatch here is the
+    // thing to look at first when authenticated requests start failing.
+    clerkSecretKeyEnv: secret?.startsWith("sk_live_")
+      ? "production"
+      : secret?.startsWith("sk_test_")
+        ? "development"
+        : "unknown",
+  };
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -66,6 +111,7 @@ app.listen(port, (err) => {
       commit: process.env["RAILWAY_GIT_COMMIT_SHA"] ?? null,
       commitMessage: process.env["RAILWAY_GIT_COMMIT_MESSAGE"] ?? null,
       branch: process.env["RAILWAY_GIT_BRANCH"] ?? null,
+      ...describeClerkInstance(),
     },
     "Server listening",
   );
