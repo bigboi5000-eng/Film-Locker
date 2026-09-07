@@ -11,7 +11,7 @@
       "ios": {},
       "env": {
         "EXPO_PUBLIC_DOMAIN": "workspaceapi-server-production-43de.up.railway.app",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZXhjaXRpbmctdmVydmV0LTQuY2xlcmsuYWNjb3VudHMuZGV2JA"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuZmlsbS1sb2NrZXIuY29tJA"
       }
     },
     "production": {
@@ -21,7 +21,7 @@
       "ios": {},
       "env": {
         "EXPO_PUBLIC_DOMAIN": "workspaceapi-server-production-43de.up.railway.app",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "REPLACE_WITH_pk_live_KEY_SEE_LAUNCH_MD"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuZmlsbS1sb2NrZXIuY29tJA"
       }
     }
   },
