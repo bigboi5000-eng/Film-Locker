@@ -17,6 +17,7 @@ import {
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legalLinks';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
 
@@ -27,11 +28,6 @@ function errorMessage(err: unknown): string | undefined {
   return undefined;
 }
 
-// Stable production domain — same one eas.json points builds at, so these
-// links work from any build (dev, preview, or production) without depending
-// on whichever host is proxying the app's own API calls right now.
-const PRIVACY_URL = 'https://film-locker.replit.app/privacy';
-const TERMS_URL = 'https://film-locker.replit.app/terms';
 
 function Row({
   icon, label, value, danger, onPress,

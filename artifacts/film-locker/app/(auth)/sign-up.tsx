@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { webInputReset } from '@/lib/webInputReset';
 import { useToast } from '@/components/ToastProvider';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legalLinks';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -255,11 +256,11 @@ export default function SignUpScreen() {
           {/* Legal */}
           <Text style={styles.legalText}>
             By creating an account you agree to our{' '}
-            <Text style={styles.legalLink} onPress={() => Linking.openURL('https://film-locker.replit.app/terms')}>
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
               Terms of Service
             </Text>{' '}
             and{' '}
-            <Text style={styles.legalLink} onPress={() => Linking.openURL('https://film-locker.replit.app/privacy')}>
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
               Privacy Policy
             </Text>
             .
