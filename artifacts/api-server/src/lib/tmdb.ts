@@ -22,6 +22,13 @@ interface TmdbMovieDetail extends TmdbMovie {
   original_language: string;
   vote_average: number;
   vote_count: number;
+  /**
+   * Minutes. TMDB returns null for films it has no runtime for (common for
+   * very obscure or unreleased titles) and, less obviously, `0` for some
+   * entries where the field exists but was never filled in — both mean
+   * "unknown", so treat them the same.
+   */
+  runtime: number | null;
 }
 
 interface TmdbSearchResponse {
@@ -88,6 +95,8 @@ export interface TmdbMovieDetails extends TmdbCandidate {
   // scores, which TMDB has no access to.
   tmdbRating: number | null;
   tmdbVoteCount: number;
+  /** Running time in minutes, or null when TMDB has no runtime for the film. */
+  runtime: number | null;
 }
 
 // ── Genre map (stable TMDB list — no API call needed) ─────────────────────────
@@ -380,6 +389,10 @@ async function fetchMovieDetailsUncached(
   const tmdbRating = details.vote_count > 0 ? Math.round(details.vote_average * 10) / 10 : null;
   const tmdbVoteCount = details.vote_count ?? 0;
 
+  // TMDB uses both null and 0 for "we don't know the runtime"; neither is a
+  // real length, so both become null rather than being rendered as "0m".
+  const runtime = typeof details.runtime === "number" && details.runtime > 0 ? details.runtime : null;
+
   return {
     tmdbId: details.id,
     title: details.title,
@@ -393,6 +406,7 @@ async function fetchMovieDetailsUncached(
     watchProviders,
     tmdbRating,
     tmdbVoteCount,
+    runtime,
   };
 }
 

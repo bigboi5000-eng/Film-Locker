@@ -418,6 +418,22 @@ function formatVoteCount(count: number): string {
   return String(count);
 }
 
+/**
+ * Runtime in minutes → "2h 22m". Films under an hour keep the plain minutes
+ * form ("48m") rather than reading "0h 48m", and an exact number of hours
+ * drops the minutes ("2h"). Returns null for anything TMDB doesn't have a
+ * runtime for, so the caller can skip the row entirely instead of showing
+ * a blank or "0m".
+ */
+function formatRuntime(minutes: number | null | undefined): string | null {
+  if (typeof minutes !== 'number' || minutes <= 0) return null;
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hrs === 0) return `${mins}m`;
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
+}
+
 const commentStyles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   avatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
@@ -1036,6 +1052,7 @@ export function FilmDetailModal({
   const displayOverview = details?.overview || overview;
   const displayTmdbRating = details?.tmdbRating ?? null;
   const displayTmdbVoteCount = details?.tmdbVoteCount ?? 0;
+  const displayRuntime = formatRuntime(details?.runtime);
 
   const handleRating = useCallback(
     async (n: number) => {
@@ -1133,7 +1150,10 @@ export function FilmDetailModal({
               />
               <View style={styles.posterOverlay}>
                 <Text style={styles.posterTitle} numberOfLines={2}>{title}</Text>
-                <Text style={styles.posterYear}>{releaseYear}</Text>
+                <Text style={styles.posterYear}>
+                  {releaseYear}
+                  {displayRuntime ? ` · ${displayRuntime}` : ''}
+                </Text>
               </View>
             </View>
 
@@ -1154,6 +1174,14 @@ export function FilmDetailModal({
                   <Text style={styles.loadingText}>Loading details…</Text>
                 </View>
               )}
+
+              {displayRuntime ? (
+                <View style={styles.metaRow}>
+                  <Ionicons name="time-outline" size={15} color="#6B7280" style={styles.metaIcon} />
+                  <Text style={styles.metaLabel}>Runtime</Text>
+                  <Text style={styles.metaValue}>{displayRuntime}</Text>
+                </View>
+              ) : null}
 
               {displayTmdbRating != null ? (
                 <View style={styles.metaRow}>

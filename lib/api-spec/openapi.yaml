@@ -1397,6 +1397,13 @@ components:
             either; this is TMDB's own users' average.
         tmdbVoteCount:
           type: integer
+        runtime:
+          type: integer
+          nullable: true
+          description: >
+            Running time in minutes, or null when TMDB has no runtime on
+            record for the film. TMDB reports both null and 0 for unknown;
+            the server normalises 0 to null so clients only handle one case.
       required:
         - tmdbId
         - title
@@ -1410,6 +1417,7 @@ components:
         - watchProviders
         - tmdbRating
         - tmdbVoteCount
+        - runtime
 
     GeminiMovieMatch:
       type: object

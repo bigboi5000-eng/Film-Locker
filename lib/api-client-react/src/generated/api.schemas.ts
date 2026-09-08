@@ -82,6 +82,8 @@ export interface TmdbMovieDetailsResponse {
   /** TMDB's own aggregate user rating (0-10), null if the film has no votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to either; this is TMDB's own users' average. */
   tmdbRating: number | null;
   tmdbVoteCount: number;
+  /** Running time in minutes, or null when TMDB has no runtime on record for the film. TMDB reports both null and 0 for unknown; the server normalises 0 to null so clients only handle one case. */
+  runtime: number | null;
 }
 
 /**

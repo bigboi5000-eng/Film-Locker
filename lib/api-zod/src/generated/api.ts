@@ -375,7 +375,8 @@ export const GetMovieDetailsResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "tmdbRating": zod.number().nullable().describe('TMDB\'s own aggregate user rating (0-10), null if the film has no votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to either; this is TMDB\'s own users\' average.\n'),
-  "tmdbVoteCount": zod.number()
+  "tmdbVoteCount": zod.number(),
+  "runtime": zod.number().nullable().describe('Running time in minutes, or null when TMDB has no runtime on record for the film. TMDB reports both null and 0 for unknown; the server normalises 0 to null so clients only handle one case.\n')
 })
 
 
