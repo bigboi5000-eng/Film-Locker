@@ -23,3 +23,15 @@ const SITE = 'https://film-locker.com';
 
 export const PRIVACY_URL = `${SITE}/privacy`;
 export const TERMS_URL = `${SITE}/terms`;
+
+/**
+ * The address people can reach a human on — shown wherever the app asks
+ * someone to trust it with a problem (reporting another user, sending
+ * feedback, the About card).
+ *
+ * This is deliberately a real, monitored inbox rather than a no-reply: the
+ * App Store's user-generated-content rules expect a published contact point
+ * for abuse reports, and someone who has just been harassed should not have
+ * to hunt through a website to find one.
+ */
+export const CONTACT_EMAIL = 'hello@film-locker.com';

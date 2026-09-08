@@ -17,7 +17,8 @@ import {
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
-import { PRIVACY_URL, TERMS_URL } from '@/lib/legalLinks';
+import Constants from 'expo-constants';
+import { PRIVACY_URL, TERMS_URL, CONTACT_EMAIL } from '@/lib/legalLinks';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
 
@@ -334,6 +335,37 @@ export default function ProfileScreen() {
           <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL(TERMS_URL)} />
         </View>
 
+        {/* About — TMDB attribution is required by TMDB's terms of use
+            wherever their data is displayed, which is essentially every
+            screen in this app, so it lives here rather than being repeated.
+            The version line is here so that a bug report can say which
+            build it came from. */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>About</Text>
+          <Row
+            icon="mail-outline"
+            label="Contact us"
+            value={CONTACT_EMAIL}
+            onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}`)}
+          />
+          <Row
+            icon="information-circle-outline"
+            label="Version"
+            value={Constants.expoConfig?.version ?? '—'}
+          />
+          <Text style={styles.attribution}>
+            This product uses the TMDB API but is not endorsed or certified by TMDB.
+            Film data and posters courtesy of{' '}
+            <Text
+              style={styles.attributionLink}
+              onPress={() => Linking.openURL('https://www.themoviedb.org/')}
+            >
+              The Movie Database
+            </Text>
+            .
+          </Text>
+        </View>
+
         {/* Feedback */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Feedback</Text>
@@ -408,6 +440,13 @@ const styles = StyleSheet.create({
     color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase',
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4,
   },
+
+  attribution: {
+    fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF',
+    lineHeight: 16, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14,
+    borderTopWidth: 1, borderTopColor: '#F3F4F6',
+  },
+  attributionLink: { color: '#6B7280', fontFamily: 'Inter_500Medium' },
 
   row: {
     flexDirection: 'row', alignItems: 'center',

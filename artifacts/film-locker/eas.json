@@ -10,7 +10,7 @@
       },
       "ios": {},
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "workspaceapi-server-production-43de.up.railway.app",
+        "EXPO_PUBLIC_DOMAIN": "api.film-locker.com",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuZmlsbS1sb2NrZXIuY29tJA"
       }
     },
@@ -21,7 +21,7 @@
       },
       "ios": {},
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "workspaceapi-server-production-43de.up.railway.app",
+        "EXPO_PUBLIC_DOMAIN": "api.film-locker.com",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuZmlsbS1sb2NrZXIuY29tJA"
       }
     }

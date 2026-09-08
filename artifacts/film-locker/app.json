@@ -43,7 +43,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://film-locker.com"
         }
       ],
       "expo-font",
@@ -79,7 +79,13 @@
       [
         "expo-share-intent",
         {
-          "disableIOS": true,
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true
+          },
+          "iosShareExtensionName": "Film Locker",
+          "iosAppGroupIdentifier": "group.com.filmlocker.app",
           "androidIntentFilters": [
             "text/*"
           ]

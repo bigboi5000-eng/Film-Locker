@@ -1,10 +1,17 @@
 /**
- * ShareIntentHandler — Android only.
+ * ShareIntentHandler — Android and iOS.
  *
  * Mounted at the root layout, inside <ShareIntentProvider> (see _layout.tsx).
  * Listens for incoming share intents, calls the API in dry-run mode (no DB
  * write) to identify the film, then shows ShareFilmSheet for user
  * confirmation.
+ *
+ * The two platforms deliver the same thing by different routes: Android via
+ * an intent filter on the main activity, iOS via a share extension (a second
+ * bundle, declared by the expo-share-intent config plugin, which hands the
+ * URL over through a shared app group). Everything from `shareIntent` onwards
+ * is identical, so this component is deliberately not platform-branched —
+ * the differences live entirely in app.json.
  *
  * Uses expo-share-intent rather than react-native-receive-sharing-intent —
  * the latter relies on the legacy NativeModules bridge, which crashes with
@@ -50,7 +57,6 @@ export function ShareIntentHandler() {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
     if (!hasShareIntent) return;
 
     // Prefer the extracted URL over raw shared text.
@@ -63,7 +69,7 @@ export function ShareIntentHandler() {
 
     // Sharing into the app should always land the user on the Watchlist tab
     // (same place the in-app paste-link flow lives), not wherever the app
-    // happened to be showing when Android launched/resumed it.
+    // happened to be showing when the OS launched/resumed it.
     router.replace('/(tabs)/watchlist');
 
     setIsPending(true);
@@ -93,7 +99,7 @@ export function ShareIntentHandler() {
   // Receiving the intent failed at the native level — show an error so the
   // user knows something went wrong rather than a silent blank screen.
   useEffect(() => {
-    if (Platform.OS !== 'android' || !error) return;
+    if (!error) return;
     Alert.alert('Share error', "Film Locker couldn't read the shared content.", [{ text: 'OK' }]);
   }, [error]);
 
@@ -105,7 +111,10 @@ export function ShareIntentHandler() {
     resetShareIntent();
   }, [resetShareIntent]);
 
-  if (Platform.OS !== 'android') return null;
+  // There is no share sheet on the web build — the paste-a-link flow on the
+  // Watchlist tab covers it there — so render nothing rather than mounting
+  // two permanently-invisible modals.
+  if (Platform.OS === 'web') return null;
 
   return (
     <>

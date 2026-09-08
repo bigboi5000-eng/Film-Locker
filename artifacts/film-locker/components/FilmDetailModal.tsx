@@ -49,6 +49,7 @@ import {
   type NotificationUser,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
+import { CONTACT_EMAIL } from '@/lib/legalLinks';
 import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
 import { useToast } from '@/components/ToastProvider';
@@ -307,9 +308,14 @@ function CommentRow({
   );
 }
 
-// ── Report sheet — lets you report a comment/user with an optional reason,
-// or block the user outright. No in-app moderation queue yet; a report is
-// emailed to the developer best-effort and always saved server-side. ──
+// ── Report sheet — lets you report a comment/user with a reason, or block
+// the user outright. No in-app moderation queue yet; a report is emailed to
+// hello@film-locker.com best-effort and always saved server-side.
+//
+// The sheet states the review commitment and gives the contact address as a
+// fallback, because the email delivery is best-effort — sendEmail never
+// throws — and someone reporting abuse should not be left with no way to
+// follow up if the notification silently fails to arrive. ──
 
 function ReportSheet({
   visible,
@@ -350,6 +356,21 @@ function ReportSheet({
             maxLength={1000}
             textAlignVertical="top"
           />
+          <Text style={reportStyles.assurance}>
+            We review every report within 24 hours. You can also email{' '}
+            <Text
+              style={reportStyles.assuranceLink}
+              onPress={() =>
+                Linking.openURL(
+                  `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Film Locker report: ${targetUsername}`)}`
+                )
+              }
+            >
+              {CONTACT_EMAIL}
+            </Text>
+            .
+          </Text>
+
           <TouchableOpacity
             style={[reportStyles.submitBtn, (!reason.trim() || submitting) && reportStyles.btnDisabled]}
             onPress={() => onSubmit(reason.trim())}
@@ -385,6 +406,11 @@ const reportStyles = StyleSheet.create({
     color: '#111827', backgroundColor: '#F9FAFB', marginBottom: 12,
     ...webInputReset,
   },
+  assurance: {
+    fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280',
+    lineHeight: 17, marginBottom: 12,
+  },
+  assuranceLink: { color: '#0066FF', fontFamily: 'Inter_600SemiBold' },
   submitBtn: {
     backgroundColor: '#0066FF', borderRadius: 10, paddingVertical: 13,
     alignItems: 'center', marginBottom: 10,
