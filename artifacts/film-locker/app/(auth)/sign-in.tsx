@@ -105,7 +105,11 @@ export default function SignInScreen() {
         redirectUrl: getOAuthRedirectUrl(),
       });
       if (createdSessionId) {
-        router.replace('/(tabs)');
+        // Google sign-in doubles as sign-up — Clerk transfers a sign-in with
+        // no matching user into a new account — so this cannot know whether
+        // the account is new. The welcome gate does, and forwards straight to
+        // the tabs when it is not.
+        router.replace('/welcome');
       } else {
         // The flow was dismissed/cancelled without an error — most often
         // Android reporting the redirect as a dismiss even though sign-in

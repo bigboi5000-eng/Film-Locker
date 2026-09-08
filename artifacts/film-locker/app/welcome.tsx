@@ -1,3 +1,24 @@
+/**
+ * welcome.tsx
+ *
+ * The celebration shown once, immediately after an account is created.
+ *
+ * This used to sit inside the (auth) group as a pre-sign-in splash, which
+ * meant the fireworks greeted people before they had done anything and then
+ * new users dropped straight into an empty app the moment they signed up.
+ * It now lives outside that group — the (auth) layout redirects anyone
+ * signed-in away, so a post-auth screen cannot render in there at all.
+ *
+ * "Seen" is tracked per Clerk user rather than per device. Two people
+ * sharing a phone should each get their own welcome, and a returning user
+ * reinstalling the app should not.
+ *
+ * Every signed-in route into the (auth) group funnels through here, and the
+ * screen forwards to the tabs immediately when the flag is already set. That
+ * is deliberate: it makes this the single place that decides whether the
+ * welcome is due, instead of each caller having to work out whether it has
+ * just created an account or merely signed one in.
+ */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -5,8 +26,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@clerk/expo';
 
-const WELCOME_SEEN_KEY = 'film-locker:hasSeenWelcome';
+/** Per-account, so the key is completed with the Clerk user ID. */
+const WELCOME_SEEN_PREFIX = 'film-locker:hasSeenWelcome:';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ── Fireworks ────────────────────────────────────────────────────────────────
@@ -317,22 +340,39 @@ function FeatureRow({ icon, title, blurb, index }: { icon: keyof typeof Ionicons
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isLoaded, isSignedIn, userId } = useAuth();
   const [ready, setReady] = useState(false);
 
-  // Returning users (already onboarded) skip straight to sign-in.
   useEffect(() => {
-    AsyncStorage.getItem(WELCOME_SEEN_KEY).then((seen) => {
-      if (seen === 'true') {
-        router.replace('/(auth)/sign-in');
-      } else {
-        setReady(true);
-      }
-    });
-  }, [router]);
+    if (!isLoaded) return;
+
+    // Reachable directly via the film-locker:// scheme, so it cannot assume
+    // a session exists just because the sign-up screens send people here.
+    if (!isSignedIn || !userId) {
+      router.replace('/(auth)/sign-in');
+      return;
+    }
+
+    let cancelled = false;
+    AsyncStorage.getItem(WELCOME_SEEN_PREFIX + userId)
+      // A failed read means an unknown state, not a seen one. Showing the
+      // welcome a second time is a far smaller cost than swallowing it, so
+      // treat the error as "not seen".
+      .catch(() => null)
+      .then((seen) => {
+        if (cancelled) return;
+        if (seen === 'true') router.replace('/(tabs)');
+        else setReady(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [isLoaded, isSignedIn, userId, router]);
 
   const handleGetStarted = async () => {
-    await AsyncStorage.setItem(WELCOME_SEEN_KEY, 'true');
-    router.replace('/(auth)/sign-in');
+    if (userId) {
+      await AsyncStorage.setItem(WELCOME_SEEN_PREFIX + userId, 'true').catch(() => {});
+    }
+    router.replace('/(tabs)');
   };
 
   if (!ready) return null;

@@ -75,7 +75,7 @@ export default function SignUpScreen() {
       await signUp.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) return;
-          router.replace('/(tabs)');
+          router.replace('/welcome');
         },
       });
     }
@@ -97,7 +97,7 @@ export default function SignUpScreen() {
         redirectUrl: getOAuthRedirectUrl(),
       });
       if (createdSessionId) {
-        router.replace('/(tabs)');
+        router.replace('/welcome');
       } else {
         showToast({
           title: 'Sign-in did not complete',

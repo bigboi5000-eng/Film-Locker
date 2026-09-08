@@ -129,6 +129,12 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      {/* Fades in over the sign-up screen, and cannot be swiped away — the
+          only way out is the button, which is what records it as seen. */}
+      <Stack.Screen
+        name="welcome"
+        options={{ headerShown: false, animation: 'fade', gestureEnabled: false }}
+      />
       <Stack.Screen name="discover/[section]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="inbox/[userId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="people" options={{ headerShown: false, animation: 'slide_from_right' }} />
