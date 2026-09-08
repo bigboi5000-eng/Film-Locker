@@ -32,54 +32,89 @@ const LAST_EMOJI_STORAGE_KEY = 'film-locker:lastReactionEmoji';
 
 const WATCHED_IT = 'Watched it!';
 
-// "Letter keys" — movie catchphrases (plus a couple of plain conversation
-// starters) instead of letters, laid out as horizontally-scrolling keyboard
-// rows. Matches the fixed enum enforced server-side by
-// SendConversationMessageBody — there's no way to send free text through
-// this endpoint even via a direct API call, so this list IS the entire
-// vocabulary two users can exchange here. Row membership below (via
-// QUOTE_ROWS) is fixed by this array's order; only the position *within*
-// a row changes at runtime, when that row's last-used phrase floats to
-// its front — see lastQuoteByRow in ComposerPanel.
-const QUOTE_KEYS = [
-  // Standard conversational phrases first — most likely to be reached for,
-  // so they default to the leftmost/first positions in each sheet.
-  WATCHED_IT,
-  'Have you watched it yet?',
-  'What did you think?',
-  'This was great!',
-  'Not for me this one',
-  'Thank you!',
-  // Movie catchphrases fill the rest.
-  'Fool of a Took!',
-  'Prestige Worldwide',
-  'I miss your whispering eye',
-  'Aim for the bushes',
-  'Read a f***ing book',
-  "I'll be back",
-  'Why so serious?',
-  "You can't handle the truth!",
-  'May the Force be with you',
-  "Here's looking at you, kid",
-  'You shall not pass!',
-  'I am Groot',
-  'Say hello to my little friend!',
-  'Life is like a box of chocolates',
-  'To infinity and beyond!',
-  'Nobody puts Baby in a corner',
-  'Great Scott!',
-  'Hey, why you so sweaty?',
-  'Watching Cops',
-] as const;
+// The composer's rows, in order, each with the label shown above it.
+//
+// These used to be one flat list of catchphrases sliced into rows of seven,
+// which put "What did you think?" next to "I am Groot" and buried the two
+// phrases that start a conversation somewhere in the middle. Grouping them by
+// what they are for makes the keyboard answer a question — am I asking
+// something, replying to something, or being silly — instead of making people
+// scan twenty-five keys for the one they want.
+//
+// The point of the first two rows is asking a friend what to watch and
+// getting a usable answer back: "What are you feeling like?" → "Something
+// scary" is a whole exchange in two taps, which the old layout could not
+// express at all.
+//
+// Every phrase here must exist in the ConversationMessageContent enum in
+// openapi.yaml — that enum is enforced server-side, so anything missing from
+// it is rejected on send no matter what this file says.
+const PHRASE_ROWS: ReadonlyArray<{ label: string; keys: readonly string[] }> = [
+  {
+    label: 'Ask',
+    keys: [
+      'What are you feeling like?',
+      'Any recommendations?',
+      'What should I watch tonight?',
+      'Seen anything good lately?',
+      'Have you watched it yet?',
+      'What did you think?',
+      'Is it worth watching?',
+    ],
+  },
+  {
+    label: 'Reply',
+    keys: [
+      WATCHED_IT,
+      'Loved it!',
+      'This was great!',
+      'Not for me this one',
+      'Thank you!',
+      // Genre answers — the natural reply to "What are you feeling like?"
+      'Something funny',
+      'Something scary',
+      'Something easy',
+      'Anything but horror',
+      'Comedy',
+      'Horror',
+      'Action',
+      'Drama',
+      'Thriller',
+      'Sci-fi',
+      'Documentary',
+    ],
+  },
+  {
+    label: 'Quotes',
+    keys: [
+      'Fool of a Took!',
+      'Prestige Worldwide',
+      'I miss your whispering eye',
+      'Aim for the bushes',
+      'Read a f***ing book',
+      "I'll be back",
+      'Why so serious?',
+      "You can't handle the truth!",
+      'May the Force be with you',
+      "Here's looking at you, kid",
+    ],
+  },
+  {
+    label: '',
+    keys: [
+      'You shall not pass!',
+      'I am Groot',
+      'Say hello to my little friend!',
+      'Life is like a box of chocolates',
+      'To infinity and beyond!',
+      'Nobody puts Baby in a corner',
+      'Great Scott!',
+      'Hey, why you so sweaty?',
+      'Watching Cops',
+    ],
+  },
+];
 
-/** Splits QUOTE_KEYS into fixed-size rows so the sheet reads as multiple
- * scrollable keyboard rows rather than one very long one. */
-function chunk<T>(items: readonly T[], size: number): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size) as T[]);
-  return rows;
-}
-const QUOTE_ROWS = chunk(QUOTE_KEYS, 7);
 const LAST_QUOTE_STORAGE_KEY = 'film-locker:lastQuoteByRow';
 
 function formatRelative(date: Date): string {
@@ -123,7 +158,7 @@ function ComposerPanel({
   // Same idea for the phrase rows, but kept strictly per-row: the last
   // phrase used within a given row floats to that row's front, without
   // ever pulling it into a different row or reordering rows that weren't
-  // touched. Keyed by row index since QUOTE_ROWS/row membership is fixed.
+  // touched. Keyed by row index since PHRASE_ROWS membership is fixed.
   const [lastQuoteByRow, setLastQuoteByRow] = useState<Record<number, string>>({});
 
   useEffect(() => {
@@ -147,12 +182,13 @@ function ComposerPanel({
     ? [lastEmoji, ...EMOJI_KEYS.filter((e) => e !== lastEmoji)]
     : EMOJI_KEYS;
 
-  const orderedQuoteRows = QUOTE_ROWS.map((row, rowIndex) => {
+  const orderedPhraseRows = PHRASE_ROWS.map((row, rowIndex) => {
     const last = lastQuoteByRow[rowIndex];
-    if (last && (row as readonly string[]).includes(last)) {
-      return [last, ...row.filter((p) => p !== last)];
-    }
-    return row;
+    const keys =
+      last && row.keys.includes(last)
+        ? [last, ...row.keys.filter((p) => p !== last)]
+        : [...row.keys];
+    return { label: row.label, keys };
   });
 
   const handleEmojiPress = useCallback((emoji: (typeof EMOJI_KEYS)[number]) => {
@@ -207,39 +243,44 @@ function ComposerPanel({
           ))}
         </ScrollView>
 
-        {/* Catchphrase "keys" — where the letters would be, one horizontally
-            scrolling row per keyboard row. Each row independently floats
-            its own last-used phrase to the front — rows never mix. */}
-        {orderedQuoteRows.map((row, rowIndex) => (
-          <ScrollView
-            key={rowIndex}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={kStyles.quoteRow}
-          >
-            {row.map((phrase) => {
-              const isWatched = phrase === WATCHED_IT;
-              return (
-                <TouchableOpacity
-                  key={phrase}
-                  style={kStyles.quoteKey}
-                  onPress={() => handleQuotePress(phrase, rowIndex)}
-                  disabled={disabled}
-                  activeOpacity={0.7}
-                >
-                  {isWatched && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={13}
-                      color="#059669"
-                      style={{ marginRight: 4 }}
-                    />
-                  )}
-                  <Text style={kStyles.quoteText}>{phrase}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        {/* Phrase "keys" — where the letters would be, one horizontally
+            scrolling row per category. Each row independently floats its own
+            last-used phrase to the front — rows never mix, so a genre reply
+            can't drift up into the questions. The label is omitted on the
+            second Quotes row, which is a continuation of the first rather
+            than a category of its own. */}
+        {orderedPhraseRows.map((row, rowIndex) => (
+          <View key={rowIndex}>
+            {row.label ? <Text style={kStyles.rowLabel}>{row.label}</Text> : null}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={kStyles.quoteRow}
+            >
+              {row.keys.map((phrase) => {
+                const isWatched = phrase === WATCHED_IT;
+                return (
+                  <TouchableOpacity
+                    key={phrase}
+                    style={kStyles.quoteKey}
+                    onPress={() => handleQuotePress(phrase, rowIndex)}
+                    disabled={disabled}
+                    activeOpacity={0.7}
+                  >
+                    {isWatched && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={13}
+                        color="#059669"
+                        style={{ marginRight: 4 }}
+                      />
+                    )}
+                    <Text style={kStyles.quoteText}>{phrase}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
         ))}
       </ScrollView>
     </View>
@@ -269,6 +310,11 @@ const kStyles = StyleSheet.create({
 
   // Catchphrase rows — each phrase gets a white key-cap (unlike single-glyph
   // keys, multi-word phrases need a visible boundary to read as one "key").
+  rowLabel: {
+    fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF',
+    letterSpacing: 0.6, textTransform: 'uppercase',
+    paddingHorizontal: 14, paddingTop: 6, paddingBottom: 1,
+  },
   quoteRow: { paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
   quoteKey: {
     flexDirection: 'row', alignItems: 'center',

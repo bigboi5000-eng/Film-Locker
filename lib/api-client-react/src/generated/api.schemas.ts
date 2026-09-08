@@ -318,7 +318,9 @@ export interface NotificationUsersResponse {
 }
 
 /**
- * A fixed set of emoji + movie-catchphrases + canned questions — deliberately not a freeform string. There is no freeform messaging in this app; this enum is enforced server-side (not just left to the client UI) so free text can never reach another user through it.
+ * A fixed set of emoji + movie-catchphrases + canned questions and replies — deliberately not a freeform string. There is no freeform messaging in this app; this enum is enforced server-side (not just left to the client UI) so free text can never reach another user through it.
+ *
+ * Entries are append-only: a phrase that has been sent is stored verbatim in conversation_messages, so removing one from this list would make existing messages fail validation on read.
  */
 export type ConversationMessageContent = typeof ConversationMessageContent[keyof typeof ConversationMessageContent];
 
@@ -359,6 +361,23 @@ export const ConversationMessageContent = {
   Not_for_me_this_one: 'Not for me this one',
   'Hey,_why_you_so_sweaty?': 'Hey, why you so sweaty?',
   Watching_Cops: 'Watching Cops',
+  'What_are_you_feeling_like?': 'What are you feeling like?',
+  'Any_recommendations?': 'Any recommendations?',
+  'What_should_I_watch_tonight?': 'What should I watch tonight?',
+  'Seen_anything_good_lately?': 'Seen anything good lately?',
+  'Is_it_worth_watching?': 'Is it worth watching?',
+  'Loved_it!': 'Loved it!',
+  Something_funny: 'Something funny',
+  Something_scary: 'Something scary',
+  Something_easy: 'Something easy',
+  Anything_but_horror: 'Anything but horror',
+  Comedy: 'Comedy',
+  Horror: 'Horror',
+  Action: 'Action',
+  Drama: 'Drama',
+  Thriller: 'Thriller',
+  'Sci-fi': 'Sci-fi',
+  Documentary: 'Documentary',
 } as const;
 
 export interface SendConversationMessageBody {

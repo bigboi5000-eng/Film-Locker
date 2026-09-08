@@ -1947,11 +1947,36 @@ components:
         - "Not for me this one"
         - "Hey, why you so sweaty?"
         - "Watching Cops"
+        # Questions — asking a friend for something, rather than replying.
+        - "What are you feeling like?"
+        - "Any recommendations?"
+        - "What should I watch tonight?"
+        - "Seen anything good lately?"
+        - "Is it worth watching?"
+        # Replies, including the genre answers to "what are you feeling like?"
+        - "Loved it!"
+        - "Something funny"
+        - "Something scary"
+        - "Something easy"
+        - "Anything but horror"
+        - "Comedy"
+        - "Horror"
+        - "Action"
+        - "Drama"
+        - "Thriller"
+        - "Sci-fi"
+        - "Documentary"
       description: >
-        A fixed set of emoji + movie-catchphrases + canned questions —
-        deliberately not a freeform string. There is no freeform messaging in
-        this app; this enum is enforced server-side (not just left to the
-        client UI) so free text can never reach another user through it.
+        A fixed set of emoji + movie-catchphrases + canned questions and
+        replies — deliberately not a freeform string. There is no freeform
+        messaging in this app; this enum is enforced server-side (not just
+        left to the client UI) so free text can never reach another user
+        through it.
+
+
+        Entries are append-only: a phrase that has been sent is stored
+        verbatim in conversation_messages, so removing one from this list
+        would make existing messages fail validation on read.
 
     SendConversationMessageBody:
       type: object
