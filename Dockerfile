@@ -42,6 +42,13 @@ ENV NODE_ENV=production
 # it, which is the outcome we want: serving requests against a schema the code
 # does not expect is worse than not serving them.
 #
+# `-C lib/db` rather than `--filter @workspace/db`: a filter that matches no
+# package makes pnpm print a warning and exit 0, so the migration step would
+# be skipped silently and the server would start anyway against an outdated
+# schema. `-C` on a missing directory fails loudly instead. (Note that a start
+# command set in the host's dashboard overrides this CMD entirely — the
+# schema check the server logs on boot exists to catch that case.)
+#
 # `exec` on the server so it replaces the shell as PID 1 and still receives
 # SIGTERM from Railway on shutdown.
-CMD ["sh", "-c", "pnpm --filter @workspace/db run migrate && exec pnpm --filter @workspace/api-server run start"]
+CMD ["sh", "-c", "pnpm -C lib/db run migrate && exec pnpm -C artifacts/api-server run start"]

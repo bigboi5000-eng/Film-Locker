@@ -1,5 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import journal from "@workspace/db/journal";
 import app from "./app";
 import { logger } from "./lib/logger";
 
@@ -81,6 +84,79 @@ function describeClerkInstance(): Record<string, unknown> {
   };
 }
 
+/**
+ * Whether the database has actually had every migration in the repo applied.
+ *
+ * This exists because the failure it catches is silent and expensive. The
+ * container is supposed to run migrations before serving, but that step can
+ * be bypassed without any error at all — a start command overridden in the
+ * host's dashboard, or a pnpm filter that matches no package and exits 0.
+ * The server then boots happily against a schema the code does not match,
+ * and the first symptom is a 500 on whichever endpoint touches the new
+ * column, several test rounds later.
+ *
+ * Drizzle records applied migrations with the same epoch-millisecond stamp
+ * the journal uses, so the newest journal entry and the newest applied row
+ * should agree. The migrations table lives in its own schema by default but
+ * older setups put it in public, so both are checked rather than assumed.
+ *
+ * Deliberately logs rather than refusing to boot: a wrong query here would
+ * take down a healthy service, which is worse than the problem it reports.
+ * The log line is loud enough to find.
+ */
+async function checkSchemaVersion(): Promise<Record<string, unknown>> {
+  const entries = journal.entries ?? [];
+  const expected = entries.length ? entries[entries.length - 1] : null;
+  const expectedAt = expected?.when ?? null;
+
+  let appliedAt: number | null = null;
+  try {
+    const result = await db.execute<{ created_at: string | number }>(sql`
+      select created_at
+      from (
+        select created_at from drizzle.__drizzle_migrations
+        union all
+        select created_at from public.__drizzle_migrations
+      ) all_migrations
+      order by created_at desc
+      limit 1
+    `);
+    const raw = result.rows[0]?.created_at;
+    appliedAt = raw == null ? null : Number(raw);
+  } catch {
+    // Either table may not exist; a union over a missing one throws. Fall
+    // back to whichever does exist rather than reporting "no migrations".
+    for (const table of [sql`drizzle.__drizzle_migrations`, sql`public.__drizzle_migrations`]) {
+      try {
+        const result = await db.execute<{ created_at: string | number }>(
+          sql`select created_at from ${table} order by created_at desc limit 1`,
+        );
+        const raw = result.rows[0]?.created_at;
+        if (raw != null) { appliedAt = Number(raw); break; }
+      } catch {
+        // try the next location
+      }
+    }
+  }
+
+  const upToDate = expectedAt != null && appliedAt != null && appliedAt >= expectedAt;
+
+  if (!upToDate) {
+    logger.error(
+      {
+        expectedMigration: expected?.tag ?? null,
+        expectedAt,
+        latestAppliedAt: appliedAt,
+        migrationsInRepo: entries.length,
+      },
+      "DATABASE SCHEMA IS BEHIND THE CODE — migrations have not been applied. " +
+        "Endpoints touching new columns will fail with 500s until they are.",
+    );
+  }
+
+  return { schemaUpToDate: upToDate, latestMigration: expected?.tag ?? null };
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -117,4 +193,7 @@ app.listen(port, (err) => {
   );
 
   void logYtDlpDiagnostics();
+  void checkSchemaVersion().then((schema) => {
+    logger.info(schema, "database schema check");
+  });
 });
