@@ -13,12 +13,13 @@ import {
 } from 'react-native';
 import { useSignUp, useSSO, useAuth } from '@clerk/expo';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { webInputReset } from '@/lib/webInputReset';
 import { useToast } from '@/components/ToastProvider';
+import { getOAuthRedirectUrl } from '@/lib/oauthRedirect';
+import { clerkErrorMessage } from '@/lib/clerkErrors';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legalLinks';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -70,10 +71,12 @@ export default function SignUpScreen() {
     try {
       // An explicit path makes the redirect URI more specific — Android's
       // Custom Tabs sometimes report a false "dismiss" for a bare scheme
-      // redirect even after the OAuth provider actually completed.
+      // redirect even after the OAuth provider actually completed. The URL
+      // itself lives in one place because it also has to be allowlisted in
+      // the Clerk Dashboard; see lib/oauthRedirect.ts.
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy,
-        redirectUrl: AuthSession.makeRedirectUri({ path: 'oauth-native-callback' }),
+        redirectUrl: getOAuthRedirectUrl(),
       });
       if (createdSessionId) {
         await setActive!({
@@ -91,8 +94,16 @@ export default function SignUpScreen() {
         });
       }
     } catch (err) {
+      // Show Clerk's own reason rather than a generic retry prompt: the
+      // failures that actually happen here are configuration problems
+      // (an un-allowlisted redirect URL, a provider not enabled on this
+      // instance), and "Please try again" is wrong advice for all of them.
       console.error('OAuth error:', err);
-      showToast({ title: 'Sign-in failed', subtitle: 'Please try again.', variant: 'error' });
+      showToast({
+        title: 'Sign-in failed',
+        subtitle: clerkErrorMessage(err) ?? 'Please try again.',
+        variant: 'error',
+      });
     } finally {
       setOauthLoading(null);
     }
