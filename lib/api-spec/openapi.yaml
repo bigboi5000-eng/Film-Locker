@@ -1291,6 +1291,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WatchProvider"
+        runtime:
+          type: integer
+          nullable: true
+          description: >
+            Running time in minutes. Null when TMDB has no runtime for the
+            film, and also while a newly added film is still being enriched
+            in the background — both mean "unknown length", and the app's
+            length filter treats them the same way.
         rating:
           type: integer
           nullable: true
@@ -1351,6 +1359,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WatchProvider"
+        runtime:
+          type: integer
+          nullable: true
+          description: >
+            Running time in minutes. Null when TMDB has no runtime for the
+            film, and also while a newly added film is still being enriched
+            in the background — both mean "unknown length", and the app's
+            length filter treats them the same way.
       required:
         - tmdbId
         - title

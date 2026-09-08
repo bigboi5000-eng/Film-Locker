@@ -175,6 +175,10 @@ export async function enrichAndSaveMatches(
         genres: details?.genres ?? [],
         language: details?.language ?? "",
         watchProviders: details?.watchProviders ?? [],
+        // Left null rather than 0 when details are unavailable: the column
+        // distinguishes "not enriched yet" from a real length, and the
+        // length filter treats null as unknown rather than very short.
+        runtime: details?.runtime ?? null,
       };
 
       // Upsert:
@@ -197,6 +201,7 @@ export async function enrichAndSaveMatches(
               genres: values.genres,
               language: values.language,
               watchProviders: values.watchProviders,
+              runtime: values.runtime,
             },
           })
           .returning());

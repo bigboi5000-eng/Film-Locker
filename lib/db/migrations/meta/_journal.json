@@ -64,6 +64,13 @@
       "when": 1788347465811,
       "tag": "0008_bent_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788875542682,
+      "tag": "0009_kind_gladiator",
+      "breakpoints": true
     }
   ]
 }

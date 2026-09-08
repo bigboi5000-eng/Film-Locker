@@ -444,6 +444,7 @@ export default function PlaylistScreen() {
         cast: saved?.cast,
         language: saved?.language,
         watchProviders: saved?.watchProviders,
+        runtime: saved?.runtime,
       };
     }),
     [items, savedByTmdbId]

@@ -81,6 +81,11 @@ export interface TmdbCandidate {
   director?: string;
   cast?: string[];
   watchProviders?: WatchProvider[];
+  /**
+   * Minutes. Absent on TMDB's list responses, so it is only populated by
+   * enrichCandidates; null means TMDB has no runtime for the film.
+   */
+  runtime?: number | null;
 }
 
 export interface TmdbMovieDetails extends TmdbCandidate {
@@ -150,13 +155,18 @@ function movieToCandidate(m: TmdbMovie): TmdbCandidate {
 }
 
 /**
- * Fills in director/cast/watchProviders for a list of candidates (genre and
- * language are already free on the list response — see movieToCandidate).
- * Used for discovery lists (trending, new releases, recommendations) so the
- * Director/Actor/Streaming filters on those screens have real options
- * instead of always showing "No data yet". Runs one credits + one
- * watch-providers request per movie, all in parallel; a single movie's
- * failure just leaves that movie's fields empty rather than failing the list.
+ * Fills in director/cast/watchProviders/runtime for a list of candidates
+ * (genre and language are already free on the list response — see
+ * movieToCandidate). Used for discovery lists (trending, new releases,
+ * recommendations) so the Genre/Director/Actor/Streaming/Length filters on
+ * those screens have real options instead of always showing "No data yet".
+ *
+ * Runs one credits + one watch-providers + one details request per movie, all
+ * in parallel; a single movie's failure just leaves that movie's fields empty
+ * rather than failing the list. The details request is the one that carries
+ * runtime, and it goes through the cached fetchMovieDetails rather than a raw
+ * fetch — a film that appears in both trending and new releases, or that the
+ * same user opens afterwards, costs nothing the second time.
  */
 export async function enrichCandidates(
   candidates: TmdbCandidate[],
@@ -170,14 +180,18 @@ export async function enrichCandidates(
 
   return Promise.all(
     candidates.map(async (c) => {
-      const [creditsResult, providersResult] = await Promise.allSettled([
+      const [creditsResult, providersResult, detailsResult] = await Promise.allSettled([
         fetch(`${TMDB_BASE}/movie/${c.tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
           okJson<TmdbCredits>(r)
         ),
         fetch(`${TMDB_BASE}/movie/${c.tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
           okJson<TmdbProvidersResponse>(r)
         ),
+        fetchMovieDetails(c.tmdbId, region),
       ]);
+
+      const runtime =
+        detailsResult.status === "fulfilled" ? detailsResult.value?.runtime ?? null : null;
 
       let director: string | undefined;
       let cast: string[] | undefined;
@@ -215,7 +229,7 @@ export async function enrichCandidates(
           }));
       }
 
-      return { ...c, director, cast, watchProviders };
+      return { ...c, director, cast, watchProviders, runtime };
     })
   );
 }

@@ -42,7 +42,8 @@ export const GetRecommendationsResponse = zod.object({
   "logo_url": zod.string(),
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
-})).optional()
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
 }))
 })
 
@@ -71,7 +72,8 @@ export const GetTrendingResponse = zod.object({
   "logo_url": zod.string(),
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
-})).optional()
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
 }))
 })
 
@@ -100,7 +102,8 @@ export const GetNewReleasesResponse = zod.object({
   "logo_url": zod.string(),
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
-})).optional()
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
 }))
 })
 
@@ -132,7 +135,8 @@ export const SearchMoviesResponse = zod.object({
   "logo_url": zod.string(),
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
-})).optional()
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
 }))
 })
 
@@ -178,6 +182,7 @@ export const AiExtractResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(aiExtractResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -230,6 +235,7 @@ export const ProcessSocialLinkResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(processSocialLinkResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -284,6 +290,7 @@ export const ExtractFromImageResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(extractFromImageResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -336,6 +343,7 @@ export const RecommendMoviesResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(recommendMoviesResponseSavedItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -406,6 +414,7 @@ export const ListMoviesResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(listMoviesResponseMoviesItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -447,6 +456,7 @@ export const AddMovieResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(addMovieResponseRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -487,6 +497,7 @@ export const PatchWatchedResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(patchWatchedResponseRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -531,6 +542,7 @@ export const PatchRatingResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(patchRatingResponseRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
@@ -1002,6 +1014,7 @@ export const GetUserWatchedResponse = zod.object({
   "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "rating": zod.number().min(1).max(getUserWatchedResponseMoviesItemRatingMax).nullish(),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),

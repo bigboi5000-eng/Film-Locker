@@ -43,6 +43,8 @@ export interface Movie {
   genres: string[];
   language: string;
   watchProviders: WatchProvider[];
+  /** Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean "unknown length", and the app's length filter treats them the same way. */
+  runtime?: number | null;
   /**
      * @minimum 1
      * @maximum 5
@@ -66,6 +68,8 @@ export interface TmdbMovieCard {
   director?: string;
   cast?: string[];
   watchProviders?: WatchProvider[];
+  /** Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean "unknown length", and the app's length filter treats them the same way. */
+  runtime?: number | null;
 }
 
 export interface TmdbMovieDetailsResponse {

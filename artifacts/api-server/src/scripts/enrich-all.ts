@@ -7,11 +7,15 @@ import { db, moviesTable } from "@workspace/db";
 import { fetchMovieDetails } from "../lib/tmdb";
 
 async function main() {
-  // Fetch all movies whose genres array is empty (not yet enriched)
+  // Movies missing any enrichment. Runtime is checked separately from genres
+  // because rows enriched before the runtime column existed have one and not
+  // the other, and matching on genres alone would skip them.
   const movies = await db
     .select()
     .from(moviesTable)
-    .where(sql`array_length(${moviesTable.genres}, 1) IS NULL`);
+    .where(
+      sql`(array_length(${moviesTable.genres}, 1) IS NULL OR ${moviesTable.runtime} IS NULL)`
+    );
 
   console.log(`Found ${movies.length} unenriched movie(s). Starting enrichment…`);
 
@@ -35,6 +39,7 @@ async function main() {
           genres: details.genres,
           language: details.language,
           watchProviders: details.watchProviders,
+          runtime: details.runtime,
         })
         .where(eq(moviesTable.id, movie.id));
       console.log(`OK (${details.genres.join(", ") || "no genres"})`);

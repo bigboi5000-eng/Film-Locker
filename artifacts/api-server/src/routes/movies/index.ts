@@ -182,7 +182,10 @@ router.post("/movies/enrich-all", requireAuth, async (req, res): Promise<void> =
     .where(
       and(
         eq(moviesTable.clerkUserId, clerkUserId),
-        drizzleSql`array_length(${moviesTable.genres}, 1) IS NULL`
+        // Rows enriched before the runtime column existed have genres but no
+        // runtime, so matching on genres alone would skip exactly the rows
+        // that need backfilling.
+        drizzleSql`(array_length(${moviesTable.genres}, 1) IS NULL OR ${moviesTable.runtime} IS NULL)`
       )
     );
 
@@ -201,6 +204,7 @@ router.post("/movies/enrich-all", requireAuth, async (req, res): Promise<void> =
           genres: details.genres,
           language: details.language,
           watchProviders: details.watchProviders,
+          runtime: details.runtime,
         })
         .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
       req.log.info({ tmdbId: movie.tmdbId, title: movie.title }, "enrich-all: enriched");
@@ -254,6 +258,7 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
           genres: details.genres,
           language: details.language,
           watchProviders: details.watchProviders,
+          runtime: details.runtime,
         })
         .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
     })
