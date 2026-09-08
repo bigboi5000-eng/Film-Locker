@@ -315,23 +315,33 @@ export async function processSocialLink(
   // ── Step 0.5: direct page caption scrape (free, no API cost) ─────────────
   // Fetches og:description directly from the page — catches Instagram/TikTok/
   // YouTube/Facebook captions that Google hasn't indexed (Instagram especially).
+  // The scrape and the pipeline that reads its result are caught separately.
+  // Sharing one catch reported a failed Gemini call as "page caption scrape
+  // failed", which sent an investigation after the scraper when the scrape
+  // had in fact worked perfectly and it was Gemini that had refused.
+  let pageCaption: string | null = null;
   try {
-    const pageCaption = await timed("caption-scrape", warn, () => fetchPageCaption(url));
-    if (pageCaption) {
-      warn?.({ url, captionPreview: pageCaption.slice(0, 300) }, "processSocialLink: page caption scrape succeeded");
+    pageCaption = await timed("caption-scrape", warn, () => fetchPageCaption(url));
+  } catch (err) {
+    warn?.({ url, err }, "processSocialLink: page caption scrape failed");
+  }
+
+  if (pageCaption) {
+    warn?.({ url, captionPreview: pageCaption.slice(0, 300) }, "processSocialLink: page caption scrape succeeded");
+    try {
       const { matches, saved, listTitle } = await timed("caption-pipeline", warn, () =>
-        runMoviePipeline(pageCaption, warn, dryRun, clerkUserId));
+        runMoviePipeline(pageCaption!, warn, dryRun, clerkUserId));
       if (matches.length > 0) {
         warn?.({ matchCount: matches.length }, "processSocialLink: page caption pipeline succeeded");
         discardAudioDownload();
         return { source: "caption", text: pageCaption, matches, saved, listTitle };
       }
-      warn?.({ url }, "processSocialLink: page caption found no films — falling back to Gemini URL grounding");
-    } else {
-      warn?.({ url }, "processSocialLink: page caption scrape found nothing — falling back to Gemini URL grounding");
+      warn?.({ url }, "processSocialLink: page caption found no films — falling back");
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: caption pipeline failed — falling back");
     }
-  } catch (err) {
-    warn?.({ url, err }, "processSocialLink: page caption scrape failed — falling back to Gemini URL grounding");
+  } else {
+    warn?.({ url }, "processSocialLink: page caption scrape found nothing — falling back");
   }
 
   // ── Step 1: Gemini + Google Search grounding (skipped for Instagram/TikTok) ─

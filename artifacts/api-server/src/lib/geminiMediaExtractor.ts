@@ -13,6 +13,7 @@ import type { GoogleGenAI } from "@google/genai";
 import { Type } from "@google/genai";
 import type { GeminiExtractionResult, GeminiMovieMatch } from "./geminiParser";
 import { GEMINI_MODEL } from "./geminiModel";
+import { withGeminiRetry } from "./geminiRetry";
 
 export const MEDIA_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -113,23 +114,24 @@ export async function uploadAndAnalyzeMedia(
       // fileState === "ACTIVE" — safe to proceed
     }
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { fileData: { mimeType, fileUri: uploadedFile.uri } },
-            { text: prompt },
-          ],
+    const response = await withGeminiRetry("media", () =>
+    ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { fileData: { mimeType, fileUri: uploadedFile.uri } },
+              { text: prompt },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: MEDIA_RESPONSE_SCHEMA,
+          temperature: 0,
         },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: MEDIA_RESPONSE_SCHEMA,
-        temperature: 0,
-      },
-    });
+      }));
 
     const raw = response.text ?? "{}";
     let parsed: { movies?: GeminiMovieMatch[]; list_title?: string | null };

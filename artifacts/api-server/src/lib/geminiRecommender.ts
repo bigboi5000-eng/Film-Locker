@@ -24,6 +24,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { GeminiMovieMatch } from "./geminiParser";
 import { GEMINI_MODEL } from "./geminiModel";
+import { withGeminiRetry } from "./geminiRetry";
 
 export interface GeminiRecommendationResult {
   offTopic: boolean;
@@ -141,20 +142,21 @@ export async function getRecommendations(
 ): Promise<GeminiRecommendationResult> {
   const ai = getClient();
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: `${SYSTEM_PROMPT}\n\nUser request:\n${query}` }],
+  const response = await withGeminiRetry("recommender", () =>
+    ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `${SYSTEM_PROMPT}\n\nUser request:\n${query}` }],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+        temperature: 0.4,
       },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      temperature: 0.4,
-    },
-  });
+    }));
 
   const raw = response.text ?? "{}";
   let parsed: GeminiRecommendResponse;

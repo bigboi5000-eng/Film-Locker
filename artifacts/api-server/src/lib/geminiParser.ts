@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GEMINI_MODEL } from "./geminiModel";
+import { withGeminiRetry } from "./geminiRetry";
 
 export interface GeminiMovieMatch {
   movie_title: string;
@@ -102,20 +103,21 @@ export async function extractMoviesWithGemini(
 ): Promise<GeminiExtractionResult> {
   const ai = getClient();
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: `${SYSTEM_PROMPT}\n\nText to analyse:\n${text}` }],
+  const response = await withGeminiRetry("caption-text", () =>
+    ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `${SYSTEM_PROMPT}\n\nText to analyse:\n${text}` }],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+        temperature: 0,
       },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      temperature: 0,
-    },
-  });
+    }));
 
   // Safely parse the structured response
   const raw = response.text ?? "{}";
