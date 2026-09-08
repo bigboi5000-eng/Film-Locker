@@ -165,11 +165,13 @@ export async function uploadAndAnalyzeMedia(
     return { movies: mapped, list_title };
   } finally {
     if (uploadedFileName) {
-      try {
-        await ai.files.delete({ name: uploadedFileName });
-      } catch {
-        // ignore — Gemini garbage-collects orphaned files after 48h anyway
-      }
+      // Not awaited: the caller is a user staring at a spinner, and the
+      // result is already in hand by this point. Gemini garbage-collects
+      // orphaned files after 48h regardless, so the only thing awaiting
+      // buys is a round trip added to every single extraction.
+      void ai.files.delete({ name: uploadedFileName }).catch(() => {
+        // ignore — see above
+      });
     }
   }
 }

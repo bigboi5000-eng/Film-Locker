@@ -63,10 +63,15 @@
  *   "none"      — all steps returned empty
  */
 
+import { unlinkSync } from "node:fs";
 import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
 import { isPubliclyFetchableUrl } from "./safeUrl";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
-import { extractMoviesFromAudio } from "./audioExtractor";
+import {
+  extractMoviesFromAudio,
+  extractMoviesFromAudioFile,
+  startAudioDownload,
+} from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
 import {
   runMoviePipeline,
@@ -83,6 +88,30 @@ export interface ProcessSocialLinkResult extends PipelineResult {
 }
 
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
+
+// ── Timing ────────────────────────────────────────────────────────────────────
+
+/**
+ * Times a stage and logs how long it took.
+ *
+ * The pipeline is a chain of fallbacks with wildly different costs — a
+ * caption scrape is milliseconds, a video download and Gemini upload is tens
+ * of seconds — and from the outside all you see is one long wait. Without
+ * per-stage numbers, "identification is slow" cannot be acted on: there is no
+ * way to tell a slow download from a slow model call from a slow TMDB fan-out.
+ */
+async function timed<T>(
+  label: string,
+  warn: WarnFn | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await fn();
+  } finally {
+    warn?.({ stage: label, ms: Date.now() - startedAt }, `processSocialLink: ${label} took ${Date.now() - startedAt}ms`);
+  }
+}
 
 // ── Mixed-text helpers ────────────────────────────────────────────────────────
 
@@ -252,16 +281,49 @@ export async function processSocialLink(
     }
   }
 
+  // Instagram and TikTok skip Gemini's search grounding (see step 1 below),
+  // which means the caption scrape is the only thing standing between them
+  // and the audio download — and their anti-bot checks block that scrape
+  // from a cloud IP often enough that the download is usually needed. So
+  // start it now, concurrently with the caption attempt, instead of after
+  // it has failed. Downloading spends bandwidth and a temp file, not Gemini
+  // quota, so a speculative one that turns out to be unnecessary is cheap
+  // next to making every user wait for it in series.
+  const skipGrounding = detectPlatform(url) === "instagram" || detectPlatform(url) === "tiktok";
+  const audioDownload = skipGrounding
+    ? (() => {
+        const startedAt = Date.now();
+        const p = startAudioDownload(url);
+        // Attach handlers now so a rejection can never surface as an
+        // unhandled rejection while the caption path is still running.
+        p.then(
+          () => warn?.({ stage: "audio-download", ms: Date.now() - startedAt }, "processSocialLink: speculative audio download finished"),
+          (err) => warn?.({ err, ms: Date.now() - startedAt }, "processSocialLink: speculative audio download failed"),
+        );
+        return p;
+      })()
+    : null;
+
+  /** Delete a speculative download that turned out not to be needed. */
+  const discardAudioDownload = () => {
+    audioDownload?.then(
+      (path) => { try { unlinkSync(path); } catch { /* already gone */ } },
+      () => { /* it failed; nothing to clean up */ },
+    );
+  };
+
   // ── Step 0.5: direct page caption scrape (free, no API cost) ─────────────
   // Fetches og:description directly from the page — catches Instagram/TikTok/
   // YouTube/Facebook captions that Google hasn't indexed (Instagram especially).
   try {
-    const pageCaption = await fetchPageCaption(url);
+    const pageCaption = await timed("caption-scrape", warn, () => fetchPageCaption(url));
     if (pageCaption) {
       warn?.({ url, captionPreview: pageCaption.slice(0, 300) }, "processSocialLink: page caption scrape succeeded");
-      const { matches, saved, listTitle } = await runMoviePipeline(pageCaption, warn, dryRun, clerkUserId);
+      const { matches, saved, listTitle } = await timed("caption-pipeline", warn, () =>
+        runMoviePipeline(pageCaption, warn, dryRun, clerkUserId));
       if (matches.length > 0) {
         warn?.({ matchCount: matches.length }, "processSocialLink: page caption pipeline succeeded");
+        discardAudioDownload();
         return { source: "caption", text: pageCaption, matches, saved, listTitle };
       }
       warn?.({ url }, "processSocialLink: page caption found no films — falling back to Gemini URL grounding");
@@ -294,15 +356,17 @@ export async function processSocialLink(
   // starved platforms that actually need it (Twitter/X, Facebook, generic
   // sites) once the daily cap was hit. TikTok downloads reliably via
   // yt-dlp, so it goes straight to the audio/video steps below instead.
-  const skipGrounding = detectPlatform(url) === "instagram" || detectPlatform(url) === "tiktok";
   if (!skipGrounding) {
     try {
-      const { movies: matches, list_title: listTitle } = await analyzeUrlForFilms(url);
+      const { movies: matches, list_title: listTitle } = await timed("gemini-url-grounding", warn, () =>
+        analyzeUrlForFilms(url));
       warn?.({ url, matchCount: matches.length, matches }, "processSocialLink: Gemini URL analysis complete");
 
       if (matches.length > 0) {
         const { matches: enriched, saved, listTitle: enrichedListTitle } =
-          await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
+          await timed("enrich-and-save", warn, () =>
+            enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle));
+        discardAudioDownload();
         return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
       }
 
@@ -319,7 +383,11 @@ export async function processSocialLink(
   // hasn't indexed yet — download the audio and analyse it directly. Only
   // catches films that are actually narrated aloud.
   try {
-    const { movies: audioMatches, list_title: audioListTitle } = await extractMoviesFromAudio(url);
+    const { movies: audioMatches, list_title: audioListTitle } = await timed("audio-extraction", warn, async () =>
+      // Reuse the head start when there is one; otherwise download now.
+      audioDownload
+        ? extractMoviesFromAudioFile(await audioDownload)
+        : extractMoviesFromAudio(url));
     warn?.({ url, matchCount: audioMatches.length }, "processSocialLink: audio extraction complete");
 
     if (audioMatches.length > 0) {
@@ -338,7 +406,8 @@ export async function processSocialLink(
   // on-screen text/graphics with no voiceover — audio-only (step 2) misses
   // these entirely. Slower and costlier, so it's the last resort.
   try {
-    const { movies: videoMatches, list_title: videoListTitle } = await extractMoviesFromVideo(url);
+    const { movies: videoMatches, list_title: videoListTitle } = await timed("video-extraction", warn, () =>
+      extractMoviesFromVideo(url));
     warn?.({ url, matchCount: videoMatches.length }, "processSocialLink: video extraction complete");
 
     const { matches, saved, listTitle } =

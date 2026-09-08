@@ -80,6 +80,11 @@ async function downloadAudio(videoUrl: string): Promise<string> {
     // encode costs nothing in extraction accuracy while cutting encode and
     // upload time for this step.
     "--audio-quality", "7",
+    // Mono at 16 kHz. Speech carries entirely below 8 kHz and there is no
+    // second channel worth keeping in a phone-shot clip, so this is a
+    // several-fold size reduction that costs nothing in what Gemini can
+    // make out — and it shortens both the ffmpeg encode and the upload.
+    "--postprocessor-args", "ffmpeg:-ac 1 -ar 16000",
     // Same guards the video path uses. Without them a link to a multi-hour
     // livestream VOD downloads at full rate until the timeout below fires,
     // and the only bound on how much of Railway's fixed disk allowance that
@@ -111,17 +116,29 @@ async function downloadAudio(videoUrl: string): Promise<string> {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Download the audio from `videoUrl` and use Gemini 2.5 Flash's native
- * multimodal understanding to extract movie references directly from the audio.
+ * Start the download without analysing anything yet.
  *
- * Always cleans up both the local temp file and the Gemini-hosted file.
+ * Exposed so callers can begin fetching while they are still trying the
+ * cheaper text-based routes: on the platforms that skip search grounding the
+ * download is very often needed in the end, and it is the slowest single
+ * step in the pipeline. Downloading costs bandwidth and a temp file, not
+ * Gemini quota, so starting one that turns out to be unnecessary is cheap —
+ * whereas waiting until the text routes have failed makes the user wait for
+ * the whole download afterwards.
+ *
+ * The caller owns the returned path and must delete it.
  */
-export async function extractMoviesFromAudio(
-  videoUrl: string
+export function startAudioDownload(videoUrl: string): Promise<string> {
+  return downloadAudio(videoUrl);
+}
+
+/**
+ * Analyse an already-downloaded audio file. Deletes the local file when done.
+ */
+export async function extractMoviesFromAudioFile(
+  audioPath: string
 ): Promise<GeminiExtractionResult> {
   const ai = getClient();
-  const audioPath = await downloadAudio(videoUrl);
-
   try {
     return await uploadAndAnalyzeMedia(
       ai,
@@ -133,4 +150,16 @@ export async function extractMoviesFromAudio(
   } finally {
     try { unlinkSync(audioPath); } catch { /* ignore */ }
   }
+}
+
+/**
+ * Download the audio from `videoUrl` and use Gemini 2.5 Flash's native
+ * multimodal understanding to extract movie references directly from the audio.
+ *
+ * Always cleans up both the local temp file and the Gemini-hosted file.
+ */
+export async function extractMoviesFromAudio(
+  videoUrl: string
+): Promise<GeminiExtractionResult> {
+  return extractMoviesFromAudioFile(await downloadAudio(videoUrl));
 }

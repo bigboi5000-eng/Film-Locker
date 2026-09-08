@@ -84,7 +84,13 @@ async function downloadVideo(videoUrl: string): Promise<string> {
     // processed by Gemini faster. 360p still reads large title-card/countdown
     // text fine, which is all this last-resort fallback exists for.
     "-f", "best[height<=360][ext=mp4]/best[height<=360]/best",
-    "--recode-video", "mp4",
+    // Remux, not recode. --recode-video re-encodes every frame through
+    // ffmpeg unconditionally, which on a shared container is frequently
+    // slower than the download itself — and pointless, because the format
+    // selector above already asks for mp4. --remux-video only rewraps the
+    // container when the codecs are already compatible, so the usual case
+    // becomes a no-op and the exceptions still end up as mp4.
+    "--remux-video", "mp4",
     // Skip anything longer than 10 minutes — short-form list content this
     // fallback targets is almost always well under that.
     "--match-filter", "duration<600",
