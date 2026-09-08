@@ -4,80 +4,82 @@ Things that differ between the internal test builds and a real App Store /
 Play Store release. Written down because most of them are one-time account
 setup that is easy to half-finish and hard to spot afterwards.
 
-## 1. Clerk production instance
+Status is marked per section: **done** items are recorded so they are not
+redone or undone by accident.
 
-The app authenticates through Clerk. Test builds have been running against a
-**development** instance (`pk_test_…`, `exciting-vervet-4.clerk.accounts.dev`),
-which is capped at a small number of users, is not meant to serve production
-traffic, and signs its tokens with different keys than a production instance.
+## 1. Clerk production instance — done
 
-A store release needs a **production** instance.
+The app authenticates through Clerk, and a store release needs a
+**production** instance (`pk_live_…`) rather than the development one test
+builds started on.
 
-### In the Clerk dashboard
+Current state:
 
-1. Create a production instance for the app.
-2. Enable the sign-in methods the app actually uses — **email + password**,
-   **Google**, and **Apple** (see `app/(auth)/sign-in.tsx`).
-3. Supply your own OAuth credentials. This is the step that catches people
-   out: development instances borrow Clerk's shared Google/Apple credentials,
-   production instances do not, so **Google and Apple sign-in will fail until
-   you configure them**.
-   - Google: create an OAuth 2.0 Client in Google Cloud Console and paste the
-     client ID/secret into Clerk.
-   - Apple: configure Sign In with Apple against the Apple Developer account
-     you are shipping the app under.
-4. Copy the two keys: `pk_live_…` (publishable) and `sk_live_…` (secret).
-
-### Where the keys go
-
-| Key | Goes to | How |
-| --- | --- | --- |
-| `pk_live_…` | `artifacts/film-locker/eas.json`, `build.production.env` | Replace the placeholder, commit |
-| `sk_live_…` | Railway → api-server service → Variables | `CLERK_SECRET_KEY` |
-| `pk_live_…` | Railway → api-server service → Variables | `CLERK_PUBLISHABLE_KEY` |
+- Production instance live on `clerk.film-locker.com`.
+- `pk_live_Y2xlcmsuZmlsbS1sb2NrZXIuY29tJA` is in **both** `eas.json` build
+  profiles. Preview deliberately shares it so internal builds exercise the
+  same instance a release will.
+- `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` are set in Railway.
+- Google sign-in works, using our own Google Cloud OAuth client.
+- The native redirect `film-locker://oauth-native-callback` is allowlisted
+  under **Native applications → Allowlist for mobile SSO redirect**. Production
+  instances validate this; development instances do not, which is why it only
+  surfaced at launch prep.
 
 The publishable key is not a secret — it ships inside the app binary by
-design, so committing it is fine. The **secret key must only ever live in
-Railway's environment variables**, never in the repo.
+design. The **secret key must only ever live in Railway's environment
+variables**, never in the repo.
 
-Leave the `preview` profile on the `pk_test_…` key so internal test builds
-keep using the development instance and don't consume production user slots.
+### Still outstanding on Clerk
+
+- **Sign in with Apple** — see §6.2.
+- **Email DNS records.** `clkmail`, `clk._domainkey` and `clk2._domainkey` do
+  not resolve on `film-locker.com`. Google sign-in does not need them, but
+  **email + password sign-up cannot send its verification code without them**,
+  so that route is dead until they exist. Values come from Clerk → Domains;
+  add them in Cloudflare as **DNS only** (grey cloud).
 
 ### Existing accounts do not carry over
 
-Every table keys off `clerk_id`. A new Clerk instance issues new user IDs, so
-accounts created against the development instance will be orphaned — their
-films, playlists, follows and comments will still be in the database but
-unreachable by the new login.
-
-That is fine pre-launch with test accounts. Do it **before** real users exist;
-afterwards it becomes a data migration.
+Every table keys off `clerk_id`, and a new Clerk instance issues new user IDs,
+so accounts made against the development instance are orphaned. That was
+absorbed before real users existed; it is not a live concern now.
 
 ## 2. Database
 
 - Confirm **backups are enabled** on the Railway Postgres instance. Losing the
   database is a far likelier bad day than a breach.
-- Migrations apply automatically on container start (see `Dockerfile`), so
-  there is no manual migration step at deploy time.
+- Migrations apply on container start (see `Dockerfile`), and the server logs
+  `schemaUpToDate` on boot. If that ever reads `false`, the deploy is running
+  against a schema the code does not match and endpoints touching new columns
+  will 500.
+- Use `migrate`, never `drizzle-kit push`, against this database. Push
+  reshapes the schema and records nothing in the migrations ledger; that is
+  how the two fell out of step once already.
 
-## 3. API domain
+## 3. API domain — done
 
-`EXPO_PUBLIC_DOMAIN` currently points at a Railway-generated subdomain. It
-works, but it is Railway's name rather than yours: pointing a domain you own
-at the service means you could move hosts later without shipping a new build
-to the stores. Worth doing before release, since the value is baked into the
-binary.
+`api.film-locker.com` points at the Railway service, DNS-only in Cloudflare.
+Proxying it caused app requests to be treated as bot traffic while a browser
+sailed through, so leave the cloud grey.
+
+`EXPO_PUBLIC_*` values are compiled into the binary, so changing this later
+means a new store release.
 
 ## 4. Store requirements already handled
 
 - **Account deletion** — `DELETE /users/me` wipes every row the app holds and
   is wired into the profile screen. Apple requires this for any app with
-  accounts.
-- **Privacy policy and terms** — served at `/privacy` and `/terms`, and linked
-  from the profile screen and sign-up. App Store Connect asks for the privacy
-  policy URL.
-- **Blocking and reporting** — required for apps with user-generated content.
-- **Rate limiting** and production error messages that don't leak internals.
+  accounts (5.1.1(v)).
+- **Privacy policy and terms** — on the website, linked from the profile
+  screen and sign-up via `lib/legalLinks.ts`, and served as a fallback at the
+  API's `/privacy` and `/terms`.
+- **Blocking and reporting** — required for user-generated content (1.2). The
+  report sheet also shows `hello@film-locker.com` and a 24-hour commitment.
+- **TMDB attribution** — in the profile's About card, as TMDB's terms require.
+- **Export compliance** — `usesNonExemptEncryption: false` in `app.json`, so
+  App Store Connect stops asking on every upload.
+- **Rate limiting**, and production error messages that don't leak internals.
 
 ## 5. What the app collects, for the App Privacy questionnaire
 
@@ -90,4 +92,134 @@ binary.
 - Photos, only when the user picks one to identify films in it. The image is
   sent to Google Gemini for analysis and not stored.
 
-Passwords are never seen or stored by this app — Clerk handles them.
+No tracking, no advertising, no third-party analytics. Passwords are never
+seen or stored by this app — Clerk handles them.
+
+## 6. iOS submission
+
+Do these in order. Several later steps depend on identifiers created earlier.
+
+### 6.1 Apple Developer portal — identifiers
+
+At <https://developer.apple.com/account>.
+
+1. **Team ID** — Membership details. A 10-character string. Needed in three
+   places below, so note it now.
+2. **App ID** for `com.filmlocker.app`, with these capabilities enabled:
+   - **Push Notifications**
+   - **Sign in with Apple**
+   - **App Groups**
+3. **App Group** `group.com.filmlocker.app`. The share extension and the app
+   pass the shared URL through this; without it, sharing a link into Film
+   Locker on iOS silently does nothing. Declared in `app.json` under the
+   `expo-share-intent` plugin.
+4. **App ID for the share extension**: `com.filmlocker.app.ShareExtension`,
+   with the same App Group enabled.
+
+EAS creates most of these on the first build, but App Groups are the one it
+is least reliable about. Creating them by hand first costs two minutes and
+avoids a failed build.
+
+### 6.2 Sign in with Apple, for Clerk
+
+Guideline 4.8 makes this **mandatory** because the app offers Google sign-in.
+The button already exists and is iOS-only (`app/(auth)/sign-in.tsx`); it will
+fail until the credentials below exist.
+
+Four artefacts, in this order:
+
+1. **Services ID** — Identifiers → `+` → Services IDs. Something like
+   `com.filmlocker.app.signin`. **This is the "client ID" Clerk asks for**,
+   not the bundle ID. Enable Sign in with Apple on it, then Configure:
+   - Primary App ID: `com.filmlocker.app`
+   - Domain: `clerk.film-locker.com`
+   - Return URL: copy it **from Clerk's Apple connection page** rather than
+     typing it. Clerk shows the exact string; it is normally
+     `https://clerk.film-locker.com/v1/oauth_callback`.
+2. **Key** — Keys → `+`, enable Sign in with Apple, choose the primary App ID,
+   download the `.p8`. **It downloads exactly once.** Note the Key ID.
+3. In **Clerk → production instance → Social Connections → Apple**, switch to
+   custom credentials and supply: Services ID, Team ID, Key ID, and the
+   contents of the `.p8`.
+4. Optional but worth doing: **Configure Sign in with Apple for Email
+   Communication** and register `film-locker.com`, so mail still reaches users
+   who chose Apple's private relay address.
+
+### 6.3 Push notifications
+
+`lib/pushNotifications.ts` requests permission and fetches an Expo push token;
+iOS delivery needs an **APNs key**.
+
+Simplest path is to let EAS create and hold it — `eas credentials` for the iOS
+platform, or answer yes when the first build offers. If you make it by hand
+instead: Keys → `+` → Apple Push Notifications service, download the `.p8`
+(once only), and upload it to EAS.
+
+One key covers every app on the team, so do not delete it later while tidying.
+
+### 6.4 App Store Connect — the app record
+
+At <https://appstoreconnect.apple.com> → Apps → `+` → New App.
+
+- Platform: iOS
+- Bundle ID: `com.filmlocker.app` (must already exist from 6.1)
+- SKU: any private string, e.g. `film-locker-001`
+- Primary language, and the app name as it appears on the store
+
+Then fill in:
+
+- **App Information** — category **Entertainment**; content rights; age
+  rating. Expect **12+** once the user-generated-content questions are
+  answered honestly.
+- **Privacy Policy URL** — `https://film-locker.com/privacy`
+- **App Privacy** — answer from §5. The short version: data is collected and
+  linked to identity, none of it is used for tracking, no third-party ads.
+- **Pricing** — free.
+
+The numeric **App Store Connect App ID** appears in the URL once the record
+exists. Needed for `eas submit`.
+
+### 6.5 Build and upload
+
+```
+cd artifacts/film-locker
+eas build --profile production --platform ios
+eas submit --platform ios --latest
+```
+
+The first build prompts to create signing credentials — let EAS manage them
+unless you have a reason not to. `eas submit` asks for your Apple ID, Team ID
+and the App Store Connect App ID, and can write them into `eas.json` under
+`submit.production.ios` for next time.
+
+`autoIncrement` is on for the production profile, so build numbers rise on
+their own. App Store Connect refuses a build number it has seen before, even
+from a rejected build, so do not turn it off.
+
+Processing takes roughly 10–30 minutes before the build appears in TestFlight.
+
+### 6.6 Before submitting for review
+
+- **Install from TestFlight and actually use it.** This is the first time the
+  iOS build has ever run: Sign in with Apple, the share extension, and push
+  notifications have no iOS test history at all.
+- **Screenshots** — 6.9" (1320×2868) is required. iPhone only, since
+  `supportsTablet` is false.
+- **Demo account** — App Review needs working credentials. Film Locker is a
+  social app, so a fresh empty account shows a reviewer almost nothing: create
+  one with films, a playlist and a couple of follows, and say so in the review
+  notes.
+- **Review notes** — point out where blocking, reporting and account deletion
+  live. Reviewers check for these on any app with user-generated content and
+  finding them quickly avoids a rejection round.
+
+### 6.7 Known iOS risks
+
+- **Sign in with Apple goes through Clerk's browser flow**, not Apple's native
+  sheet — `expo-apple-authentication` is not installed. This is accepted in
+  practice, but the native sheet is what Apple's guidelines illustrate. Moving
+  to it means adding `@clerk/expo-google-signin`'s Apple counterpart and
+  `expo-apple-authentication`, plus a rebuild.
+- **The share extension has never run.** Its config is complete and mirrors
+  the working Android path, but iOS delivers the URL through an app group
+  rather than an intent, and that half is untested.
