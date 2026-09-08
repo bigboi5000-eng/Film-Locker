@@ -11,7 +11,22 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
-import { useSignUp, useSSO, useAuth } from '@clerk/expo';
+import { useSignUp, useAuth } from '@clerk/expo';
+// useSSO comes from the experimental entry point deliberately. The rest of
+// this screen uses Clerk's Core 3 ("future") API — signIn.password(),
+// signIn.finalize(), signIn.mfa — and the non-experimental useSSO is built on
+// the legacy resources instead. Clerk's own source says as much: "For Core 3
+// custom flows, use the experimental useSSO() hook from
+// '@clerk/expo/experimental'. It uses future auth resources and activates
+// completed sessions automatically."
+//
+// The difference that matters is what happens for a Google account that has
+// no Clerk user yet. Both versions transfer the sign-in attempt to a sign-up,
+// but the experimental one re-reads the verification straight off the client
+// after the OAuth callback and finalizes the resulting session itself,
+// instead of relying on a legacy resource kept in step with a future-mode
+// client.
+import { useSSO } from '@clerk/expo/experimental';
 import * as WebBrowser from 'expo-web-browser';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,18 +89,15 @@ export default function SignUpScreen() {
       // redirect even after the OAuth provider actually completed. The URL
       // itself lives in one place because it also has to be allowlisted in
       // the Clerk Dashboard; see lib/oauthRedirect.ts.
-      const { createdSessionId, setActive } = await startSSOFlow({
+      // The experimental hook activates the session itself (it calls
+      // finalize internally), so there is no setActive to call here — a
+      // non-null createdSessionId means we are already signed in.
+      const { createdSessionId } = await startSSOFlow({
         strategy,
         redirectUrl: getOAuthRedirectUrl(),
       });
       if (createdSessionId) {
-        await setActive!({
-          session: createdSessionId,
-          navigate: async ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace('/(tabs)');
-          },
-        });
+        router.replace('/(tabs)');
       } else {
         showToast({
           title: 'Sign-in did not complete',
