@@ -27,6 +27,25 @@ import { logger } from "./logger";
 /** HTTP statuses worth trying again. Everything else is our fault, not load. */
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
+/**
+ * A 429 means two very different things, and only one is worth retrying.
+ *
+ * A per-minute rate limit clears in seconds, and Google says so by attaching
+ * a RetryInfo to the error. A quota or billing limit does not clear at all
+ * until the daily reset, and comes back with no RetryInfo — just a link to
+ * the billing docs. Retrying that one spends three more requests out of an
+ * allowance that is already gone, and makes the user wait through the
+ * backoff to be told the same thing.
+ */
+function isExhaustedQuota(err: unknown): boolean {
+  const message = typeof (err as { message?: unknown })?.message === "string"
+    ? (err as { message: string }).message
+    : "";
+  if (!message) return false;
+  const hasRetryInfo = message.includes("RetryInfo") || message.includes("retryDelay");
+  return !hasRetryInfo && /quota|billing/i.test(message);
+}
+
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 400;
 
@@ -47,7 +66,9 @@ function statusOf(err: unknown): number | null {
 
 export function isRetryableGeminiError(err: unknown): boolean {
   const status = statusOf(err);
-  return status !== null && RETRYABLE_STATUS.has(status);
+  if (status === null || !RETRYABLE_STATUS.has(status)) return false;
+  if (status === 429 && isExhaustedQuota(err)) return false;
+  return true;
 }
 
 /**
