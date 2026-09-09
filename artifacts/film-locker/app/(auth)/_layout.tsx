@@ -1,25 +1,23 @@
-import { useAuth } from '@clerk/expo';
 import { Stack } from 'expo-router';
 
 export default function AuthLayout() {
-  const { isLoaded } = useAuth();
-
-  if (!isLoaded) return null;
-
-  // Deliberately no redirect for signed-in users.
+  // No gates of any kind here, deliberately.
   //
-  // This used to send them to the welcome gate, on the theory that anything
-  // signed-in reaching these screens should be routed onwards. That is
-  // actively harmful during sign-out: if Clerk's isSignedIn has not yet
-  // flipped when we navigate here, the redirect fires, the gate forwards to
-  // the tabs, and the user is thrown straight back into the app they were
-  // trying to leave.
+  // This layout had two, and both caused the bug they were meant to prevent.
   //
-  // Nothing needs it. The sign-in and sign-up screens navigate explicitly on
-  // success — sign-up and OAuth to /welcome, password sign-in to the tabs —
-  // so this was a second, competing opinion about where to go, and the one
-  // with the worse failure mode.
-
+  // A redirect for signed-in users sent them to the welcome gate, which
+  // during sign-out threw them straight back into the app they were leaving —
+  // Clerk's isSignedIn does not reliably flip, so the redirect fired against
+  // a session that had in fact already gone.
+  //
+  // Then `if (!isLoaded) return null` was left as the last gate, and became
+  // the blank screen people landed on after signing out instead. A route
+  // whose entire purpose is to show a sign-in form should never render
+  // nothing: the form does not need Clerk to be loaded to be drawn, and
+  // useSignIn handles its own readiness when someone actually submits it.
+  //
+  // Both screens navigate explicitly on success, so nothing here needs to
+  // have an opinion about where anyone goes.
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
   );
