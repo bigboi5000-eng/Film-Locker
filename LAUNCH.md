@@ -120,11 +120,36 @@ EAS creates most of these on the first build, but App Groups are the one it
 is least reliable about. Creating them by hand first costs two minutes and
 avoids a failed build.
 
-### 6.2 Sign in with Apple, for Clerk
+### 6.2 Sign in with Apple, for Clerk — done
 
 Guideline 4.8 makes this **mandatory** because the app offers Google sign-in.
-The button already exists and is iOS-only (`app/(auth)/sign-in.tsx`); it will
-fail until the credentials below exist.
+
+Working as of 2026-09-09, verified from the Android APK: the app uses Clerk's
+browser-based Apple flow rather than Apple's native sheet, so both platforms
+walk the identical path and Android can prove the configuration before any
+iOS build exists. `SHOW_APPLE_SIGN_IN` in `lib/appleSignIn.ts` is currently
+`true` on both platforms for that reason; set it back to
+`Platform.OS === 'ios'` before the Play Store release.
+
+**The private key is the step that will waste your afternoon.** Paste the
+`.p8` into Clerk *with* its `-----BEGIN PRIVATE KEY-----` and
+`-----END PRIVATE KEY-----` lines, and with its **line breaks intact**. Copy
+it straight from the file, never through a rich-text editor:
+
+```
+cat AuthKey_XXXXXXXXXX.p8 | pbcopy              # macOS
+Get-Content -Raw AuthKey_XXXXXXXXXX.p8 | Set-Clipboard   # PowerShell
+```
+
+A value that has been flattened to one line fails Go's PEM decoder, which
+then falls back to parsing the literal text and reports an ASN.1 error about
+mismatched tags — the `tag:13 length:45` in that message is the byte `0x2D`,
+i.e. the `-` of the header it should never have been reading. The error names
+nothing about newlines, so it is easy to chase the wrong thing for an hour.
+Clear Clerk's field completely before re-pasting; leftovers merge silently.
+
+The button will fail until all four values exist: Services ID, Team ID, Key ID
+and the key itself.
 
 Four artefacts, in this order:
 
