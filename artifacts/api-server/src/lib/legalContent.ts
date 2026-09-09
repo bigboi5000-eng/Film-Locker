@@ -42,7 +42,8 @@ export function privacyPolicyHtml(): string {
 
     <h2>Information we collect</h2>
     <ul>
-      <li><strong>Account info:</strong> your email address, and optionally a username, display initials, and avatar. Sign-in itself is handled by our authentication provider, Clerk — we never see or store your password.</li>
+      <li><strong>Account info:</strong> your email address, an account ID that identifies you to us, the date you joined, and optionally a username, display initials, and avatar. Sign-in itself is handled by our authentication provider, Clerk — we never see or store your password. We do not ask for or keep your real name.</li>
+      <li><strong>Sign-in security records:</strong> Clerk keeps a record of your sign-ins so it can run your session and flag suspicious activity — the device and browser used, the IP address it came from, and when each session started. This is held by Clerk rather than by us, and is used for account security only.</li>
       <li><strong>Your locker:</strong> films you add to your watchlist or mark as watched, and any star ratings you give them.</li>
       <li><strong>Your playlists:</strong> the playlists you create, the films in them, whether each one is public or private, and which other people's playlists you follow.</li>
       <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, films you recommend to people you follow, and reactions/messages you send them (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
