@@ -30,14 +30,15 @@ The publishable key is not a secret — it ships inside the app binary by
 design. The **secret key must only ever live in Railway's environment
 variables**, never in the repo.
 
-### Still outstanding on Clerk
+### Email delivery — done
 
-- **Sign in with Apple** — see §6.2.
-- **Email DNS records.** `clkmail`, `clk._domainkey` and `clk2._domainkey` do
-  not resolve on `film-locker.com`. Google sign-in does not need them, but
-  **email + password sign-up cannot send its verification code without them**,
-  so that route is dead until they exist. Values come from Clerk → Domains;
-  add them in Cloudflare as **DNS only** (grey cloud).
+`clkmail`, `clk._domainkey` and `clk2._domainkey` are live on
+`film-locker.com`, and email + password sign-up sends its verification code.
+Verified 2026-09-09. If that ever regresses, the records are the first thing
+to check: values come from Clerk → Domains, and they must be **DNS only**
+(grey cloud) in Cloudflare.
+
+Sign in with Apple is also done — see §6.2.
 
 ### Existing accounts do not carry over
 
@@ -99,7 +100,7 @@ seen or stored by this app — Clerk handles them.
 
 Do these in order. Several later steps depend on identifiers created earlier.
 
-### 6.1 Apple Developer portal — identifiers
+### 6.1 Apple Developer portal — identifiers — done
 
 At <https://developer.apple.com/account>.
 
@@ -172,15 +173,44 @@ Four artefacts, in this order:
 
 ### 6.3 Push notifications
 
-`lib/pushNotifications.ts` requests permission and fetches an Expo push token;
-iOS delivery needs an **APNs key**.
+`lib/pushNotifications.ts` requests permission and fetches an Expo push token.
+Delivery goes through Expo's push service, which talks to APNs on our behalf,
+so **EAS needs an APNs key stored against the project**. Nothing in `app.json`
+configures this; EAS sets the `aps-environment` entitlement itself on a
+production build.
 
-Simplest path is to let EAS create and hold it — `eas credentials` for the iOS
-platform, or answer yes when the first build offers. If you make it by hand
-instead: Keys → `+` → Apple Push Notifications service, download the `.p8`
-(once only), and upload it to EAS.
+Prerequisite: the App ID `com.filmlocker.app` must already have the **Push
+Notifications** capability enabled (§6.1).
+
+**Let EAS create and hold the key.** From `artifacts/film-locker`:
+
+```
+eas credentials
+```
+
+Pick **iOS** → the **production** profile → **Push Notifications: Manage your
+Apple Push Notifications Key** → **Set up a new key**. It asks for an Apple
+login, creates the key in the Developer account over Apple's API, and stores
+it. Answering yes when the first `eas build` offers to do this is the same
+thing. Re-running `eas credentials` afterwards should list a **Push Key** with
+its Key ID, which is how you confirm it took.
+
+**Apple allows only two APNs keys per team.** If both slots are already used,
+EAS cannot create a third and the step fails. Reuse an existing key instead:
+`eas credentials` → **Use an existing key**, then supply the `.p8`, its Key ID
+and the Team ID. This is the only case where the manual path is needed.
+
+Manual creation, if you want the key in hand: developer.apple.com → **Keys** →
+`+` → name it → tick **Apple Push Notifications service (APNs)** → Continue →
+Register → Download. **The `.p8` downloads exactly once.** Note the Key ID,
+then upload it through `eas credentials`.
 
 One key covers every app on the team, so do not delete it later while tidying.
+
+Push cannot be tested on a simulator; it needs a TestFlight build on a real
+device. A signed-in user who grants the permission prompt should get a row in
+`users.expo_push_token` via `PUT /users/push-token`. An empty column after
+granting means the token was never fetched, not that delivery failed.
 
 ### 6.4 App Store Connect — the app record
 
