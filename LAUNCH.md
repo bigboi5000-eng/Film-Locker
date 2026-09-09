@@ -178,7 +178,7 @@ Four artefacts, in this order:
    Communication** and register `film-locker.com`, so mail still reaches users
    who chose Apple's private relay address.
 
-### 6.3 Push notifications
+### 6.3 Push notifications — done
 
 `lib/pushNotifications.ts` requests permission and fetches an Expo push token.
 Delivery goes through Expo's push service, which talks to APNs on our behalf,
@@ -213,6 +213,11 @@ Register → Download. **The `.p8` downloads exactly once.** Note the Key ID,
 then upload it through `eas credentials`.
 
 One key covers every app on the team, so do not delete it later while tidying.
+
+Done 2026-09-09: key generated through `eas credentials` and assigned to
+`com.filmlocker.app` on team `CP46776B8Y`. The credentials summary still
+prints "No credentials set up yet!" for both targets afterwards — that line
+reports *build* credentials only, and the push key is not among them.
 
 Push cannot be tested on a simulator; it needs a TestFlight build on a real
 device. A signed-in user who grants the permission prompt should get a row in
