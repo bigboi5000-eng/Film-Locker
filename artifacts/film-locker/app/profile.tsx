@@ -177,19 +177,27 @@ export default function ProfileScreen() {
       'Delete',
       async () => {
         try {
-          // Delete our own data first, while the session is still valid —
-          // then remove the Clerk identity itself. If the first step fails,
-          // we deliberately don't delete the Clerk account, so the two
-          // never drift out of sync.
+          // One call does all of it. The server deletes every row and then the
+          // Clerk identity itself, using the secret key — deleting from here
+          // instead failed with "needs to supply an active session", because
+          // Clerk puts user deletion behind reverification and the native
+          // prompt for that does not exist yet.
           await deleteMe();
-          await clerkUser?.delete();
+          // The account is gone, so the local session is now meaningless.
+          // Clear it rather than leaving a token for a user that no longer
+          // exists, then leave regardless of whether that succeeds.
+          try {
+            await signOut();
+          } catch {
+            // the account is already deleted; nothing useful to report
+          }
           router.replace('/(auth)/sign-in');
         } catch (err) {
           showToast({ title: 'Could not delete your account', subtitle: errorMessage(err) ?? 'Please contact support.', variant: 'error' });
         }
       }
     );
-  }, [deleteMe, clerkUser, router, showToast]);
+  }, [deleteMe, signOut, router, showToast]);
 
   // Leave the moment the session goes, however it goes — signing out, or a
   // session expiring while the screen is open. Deliberately below every hook

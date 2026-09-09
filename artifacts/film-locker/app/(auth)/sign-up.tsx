@@ -11,7 +11,7 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
-import { useSignUp, useAuth } from '@clerk/expo';
+import { useSignUp } from '@clerk/expo';
 // useSSO comes from the experimental entry point deliberately. The rest of
 // this screen uses Clerk's Core 3 ("future") API — signIn.password(),
 // signIn.finalize(), signIn.mfa — and the non-experimental useSSO is built on
@@ -51,7 +51,6 @@ function useWarmUpBrowser() {
 export default function SignUpScreen() {
   useWarmUpBrowser();
   const router = useRouter();
-  const { isSignedIn } = useAuth();
   const { signUp, errors, fetchStatus } = useSignUp();
   const { startSSOFlow } = useSSO();
   const { showToast } = useToast();
@@ -62,7 +61,12 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
 
-  if (isSignedIn) return null;
+  // Deliberately no `if (isSignedIn) return null` here. That guard existed to
+  // avoid flashing the form while a redirect was in flight, but isSignedIn
+  // does not reliably flip on sign-out — so after signing out it rendered an
+  // empty screen instead of the form the user had just been sent to.
+  // Rendering the form to someone whose session is already gone is correct;
+  // rendering nothing never is.
 
   const handleSignUp = async () => {
     const { error } = await signUp.password({ emailAddress: email, password });

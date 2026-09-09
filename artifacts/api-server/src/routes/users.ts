@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { clerkClient } from "@clerk/express";
 import { eq, or, and, ilike, count, desc, sql } from "drizzle-orm";
 import {
   db,
@@ -191,6 +192,31 @@ router.delete("/users/me", requireAuth, async (req, res): Promise<void> => {
     await tx.delete(moviesTable).where(eq(moviesTable.clerkUserId, clerkUserId));
     await tx.delete(usersTable).where(eq(usersTable.clerkId, clerkUserId));
   });
+
+  // Delete the Clerk identity here rather than from the app.
+  //
+  // The client used to call user.delete() itself once this returned, and it
+  // failed with "needs to supply an active session": Clerk treats deleting a
+  // user as a sensitive action behind reverification, and native support for
+  // that prompt is still being built. The result was the worst possible
+  // split — every row above deleted, the Clerk account still alive, and the
+  // user able to sign back in to an empty locker as though nothing had
+  // happened.
+  //
+  // From here it is a backend call authenticated by the secret key, so no
+  // reverification applies. Deliberately after the rows are gone: if this
+  // throws, the account still exists and the user can sign in and retry,
+  // which is recoverable. The reverse — identity gone, rows behind it — is
+  // not.
+  try {
+    await clerkClient.users.deleteUser(clerkUserId);
+  } catch (err) {
+    req.log.error({ err, clerkUserId }, "account deletion: Clerk user delete failed");
+    res.status(502).json({
+      error: "Your data was deleted, but the account itself could not be removed. Please try again.",
+    });
+    return;
+  }
 
   res.status(204).send();
 });

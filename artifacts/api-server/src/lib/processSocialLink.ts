@@ -427,6 +427,32 @@ export async function processSocialLink(
     warn?.({ url, err }, "processSocialLink: video extraction failed — no data available");
   }
 
+  // ── Step 3.5: grounding as a last resort on the platforms that skip it ────
+  // Instagram and TikTok skip Gemini's search grounding above, for good
+  // reasons: Google's index of them is thin, and the grounding quota is
+  // separate and much stricter. But those reasons are about *preferring*
+  // other routes, not about grounding being worthless — and by this point
+  // every other route has failed.
+  //
+  // Instagram in particular refuses media downloads from a cloud IP outright
+  // ("Instagram sent an empty media response... use --cookies"), so a reel
+  // whose caption names no films had nothing left to try at all. One
+  // grounding call is a better last word than giving up.
+  if (skipGrounding) {
+    try {
+      const { movies: matches, list_title: listTitle } = await timed("gemini-url-grounding-fallback", warn, () =>
+        analyzeUrlForFilms(url));
+      warn?.({ url, matchCount: matches.length }, "processSocialLink: last-resort grounding complete");
+      if (matches.length > 0) {
+        const { matches: enriched, saved, listTitle: enrichedListTitle } =
+          await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle);
+        return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
+      }
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: last-resort grounding failed");
+    }
+  }
+
   // ── Step 4: nothing worked ────────────────────────────────────────────────
   return { source: "none", text: null, matches: [], saved: [], listTitle: null };
 }
