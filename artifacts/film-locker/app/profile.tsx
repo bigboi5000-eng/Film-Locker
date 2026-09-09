@@ -6,7 +6,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -63,7 +63,7 @@ function Row({
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { isLoaded, isSignedIn, signOut } = useAuth();
   const { user: clerkUser } = useUser();
   const queryClient = useQueryClient();
 
@@ -150,11 +150,16 @@ export default function ProfileScreen() {
   }, [feedbackText, submitFeedback, showToast]);
 
   const handleSignOut = useCallback(() => {
-    confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
-      await signOut();
-      router.replace('/(auth)/sign-in');
+    // No navigation here on purpose. This screen sits in the root stack
+    // rather than inside (tabs), so nothing was watching the session — it
+    // relied on this one imperative replace landing at the right moment, and
+    // signing out left you looking at your own profile until you restarted
+    // the app. The guard below reacts to Clerk's state instead, which cannot
+    // race with it.
+    confirmDestructive('Are you sure you want to sign out?', 'Sign out', () => {
+      void signOut();
     });
-  }, [signOut, router]);
+  }, [signOut]);
 
   const { mutateAsync: deleteMe } = useDeleteMe();
 
@@ -177,6 +182,11 @@ export default function ProfileScreen() {
       }
     );
   }, [deleteMe, clerkUser, router, showToast]);
+
+  // Leave the moment the session goes, however it goes — signing out, or a
+  // session expiring while the screen is open. Deliberately below every hook
+  // so the early return cannot change hook order.
+  if (isLoaded && !isSignedIn) return <Redirect href="/(auth)/sign-in" />;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
