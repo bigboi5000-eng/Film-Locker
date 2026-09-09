@@ -150,16 +150,24 @@ export default function ProfileScreen() {
   }, [feedbackText, submitFeedback, showToast]);
 
   const handleSignOut = useCallback(() => {
-    // No navigation here on purpose. This screen sits in the root stack
-    // rather than inside (tabs), so nothing was watching the session — it
-    // relied on this one imperative replace landing at the right moment, and
-    // signing out left you looking at your own profile until you restarted
-    // the app. The guard below reacts to Clerk's state instead, which cannot
-    // race with it.
-    confirmDestructive('Are you sure you want to sign out?', 'Sign out', () => {
-      void signOut();
+    // Navigate unconditionally, and do not wait on isSignedIn to tell us the
+    // session has gone. In practice it does not flip here: signing out clears
+    // the stored session — a restart lands you on sign-in — but the hook keeps
+    // reporting signed-in, so the guard below never fires and the screen just
+    // sits there. Whatever the cause, the user asked to leave, so leave.
+    //
+    // The failure is swallowed for the same reason: if revoking the session
+    // server-side fails, the local session is still gone and stranding
+    // someone on their account page is not a useful way to say so.
+    confirmDestructive('Are you sure you want to sign out?', 'Sign out', async () => {
+      try {
+        await signOut();
+      } catch {
+        // fall through to the navigation below
+      }
+      router.replace('/(auth)/sign-in');
     });
-  }, [signOut]);
+  }, [signOut, router]);
 
   const { mutateAsync: deleteMe } = useDeleteMe();
 
