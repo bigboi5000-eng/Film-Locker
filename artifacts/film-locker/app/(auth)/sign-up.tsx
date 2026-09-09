@@ -33,6 +33,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { webInputReset } from '@/lib/webInputReset';
 import { useToast } from '@/components/ToastProvider';
+import { SHOW_APPLE_SIGN_IN } from '@/lib/appleSignIn';
 import { getOAuthRedirectUrl } from '@/lib/oauthRedirect';
 import { clerkErrorMessage } from '@/lib/clerkErrors';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legalLinks';
@@ -252,7 +253,7 @@ export default function SignUpScreen() {
           </TouchableOpacity>
 
           {/* Apple — iOS only */}
-          {Platform.OS === 'ios' && (
+          {SHOW_APPLE_SIGN_IN && (
             <TouchableOpacity
               style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && styles.btnDisabled]}
               onPress={() => handleOAuth('oauth_apple')}
