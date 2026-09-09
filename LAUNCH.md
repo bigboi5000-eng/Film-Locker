@@ -121,6 +121,13 @@ EAS creates most of these on the first build, but App Groups are the one it
 is least reliable about. Creating them by hand first costs two minutes and
 avoids a failed build.
 
+**The share extension identifier is pinned deliberately.** Left alone,
+`expo-share-intent` derives `com.filmlocker.app.share-extension` — lowercase
+and hyphenated — which is *not* the App ID created above, so the build would
+target an identifier with no App Group and sharing would fail silently.
+`iosShareExtensionBundleIdentifier` in `app.json` overrides it to match. If
+that key is ever removed, the App ID in the portal has to be renamed to suit.
+
 ### 6.2 Sign in with Apple, for Clerk — done
 
 Guideline 4.8 makes this **mandatory** because the app offers Google sign-in.
