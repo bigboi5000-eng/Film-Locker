@@ -236,8 +236,7 @@ At <https://appstoreconnect.apple.com> → Apps → `+` → New App.
 Then fill in:
 
 - **App Information** — category **Entertainment**; content rights; age
-  rating. Expect **12+** once the user-generated-content questions are
-  answered honestly.
+  rating. See the age-rating notes below. Expect **13+**.
 - **Privacy Policy URL** — `https://film-locker.com/privacy`
 - **App Privacy** — answer from §5. The short version: data is collected and
   linked to identity, none of it is used for tracking, no third-party ads.
@@ -245,6 +244,39 @@ Then fill in:
 
 The numeric **App Store Connect App ID** appears in the URL once the record
 exists. Needed for `eas submit`.
+
+#### Age rating
+
+Apple replaced the old tiers in January 2026. The values are now 4+, 9+,
+**13+**, **16+** and **18+**; 12+ and 17+ no longer exist. Since September
+2026 the questionnaire also carries **mandatory social media questions**, and
+they cannot be skipped on a new app submission.
+
+The content questions ask about **what the app itself shows, not what the
+films it catalogues depict**. Film Locker streams nothing, so the honest
+answers are mild rather than none: TMDB synopses routinely reference drink,
+drugs and violence, posters for horror and adult titles are displayed at full
+size, and comments are freeform text written by users. Answer **Infrequent or
+Mild** for violence, sexual content, profanity, horror themes and
+alcohol/tobacco/drug references, and **None** for gambling, contests and
+medical topics.
+
+**Social media capability must be answered yes.** Apple defines it as
+redistributing, amplifying or interacting with user-generated content through
+a feed or similar discovery method, which describes the comments, follows and
+recommendations exactly. The app gets a Social Media descriptor on its product
+page and falls into the Social Media Time Allowance category in iOS 27.
+
+There is an exception for apps whose social features are **disabled** below
+age 13. **Do not claim it.** The terms say 13 or older and the privacy policy
+says the app is not directed at children under 13, but nothing in the app
+enforces either — Clerk never asks for a date of birth. A policy is not a
+control, and claiming otherwise on the questionnaire is a misrepresentation.
+Claiming it would require building an actual age gate first.
+
+Rating low is a bad trade. Apple re-rates apps unilaterally when the
+questionnaire does not match what a reviewer sees, and a user-generated
+content app rated 4+ is a well-known rejection.
 
 ### 6.5 Build and upload
 
