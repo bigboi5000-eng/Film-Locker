@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { GEMINI_MODEL } from "./geminiModel";
+import { GEMINI_TEXT_MODEL } from "./geminiModel";
 import { withGeminiRetry } from "./geminiRetry";
 
 export interface GeminiMovieMatch {
@@ -105,7 +105,7 @@ export async function extractMoviesWithGemini(
 
   const response = await withGeminiRetry("caption-text", () =>
     ai.models.generateContent({
-      model: GEMINI_MODEL,
+      model: GEMINI_TEXT_MODEL,
       contents: [
         {
           role: "user",

@@ -48,7 +48,7 @@ export function privacyPolicyHtml(): string {
       <li><strong>Your playlists:</strong> the playlists you create, the films in them, whether each one is public or private, and which other people's playlists you follow.</li>
       <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, films you recommend to people you follow, and reactions/messages you send them (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
       <li><strong>Content you share for lookup:</strong> if you paste a social media link or caption to identify a film, that text (and, where needed, audio or video extracted from the link) is processed to figure out what film you mean. It is not stored beyond what's needed to complete that lookup.</li>
-      <li><strong>Photos you choose to identify films from:</strong> if you take a photo or pick an image from your device to find the films in it — a poster, a cinema listing, a screenshot of a post — that image is sent to Google Gemini to be read. We do not store the image: it is held only for as long as the lookup takes, then deleted. The app only ever accesses the camera or a photo you specifically select; it never browses your photo library on its own.</li>
+      <li><strong>Photos you choose to identify films from:</strong> if you take a photo or pick an image from your device to find the films in it — a poster, a cinema listing, a screenshot of a post — that image is sent to Google Gemini to be read. We do not store the image: it is held only for as long as the lookup takes, then deleted. Google does not use it to train its models — see the note on Gemini's paid tier below. The app only ever accesses the camera or a photo you specifically select; it never browses your photo library on its own.</li>
       <li><strong>Feedback:</strong> anything you submit through the in-app feedback form, along with the email on your account.</li>
       <li><strong>Push notification token:</strong> only if you enable notifications, so we can deliver them to your device.</li>
     </ul>
@@ -65,7 +65,7 @@ export function privacyPolicyHtml(): string {
     <ul>
       <li><strong>Clerk</strong> — authentication and account sign-in.</li>
       <li><strong>The Movie Database (TMDB)</strong> — film details, posters, and where-to-watch info. Search terms you enter are sent to TMDB to look up matching films.</li>
-      <li><strong>Google Gemini</strong> — used to identify films from a shared social link's caption, audio or video, to read films out of a photo or screenshot you choose, and to turn a natural-language search ("a 90 minute horror film like X") into film suggestions. Content you paste, share or photograph for these purposes is sent to Google for processing.</li>
+      <li><strong>Google Gemini</strong> — used to identify films from a shared social link's caption, audio or video, to read films out of a photo or screenshot you choose, and to turn a natural-language search ("a 90 minute horror film like X") into film suggestions. Content you paste, share or photograph for these purposes is sent to Google for processing. We use Gemini's paid tier, under which Google does not use what we send, or what it sends back, to train or improve its models.</li>
       <li><strong>Expo</strong> — delivers push notifications to your device, if enabled.</li>
       <li><strong>Resend</strong> — delivers the email notification when you submit feedback.</li>
     </ul>
