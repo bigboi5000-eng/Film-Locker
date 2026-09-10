@@ -245,16 +245,48 @@ export async function enrichCandidates(
  */
 const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
 
-export async function searchTmdb(query: string): Promise<TmdbCandidate[]> {
+/** A plausible four-digit release year, or null for anything else. */
+function parseYear(year: string | undefined): string | null {
+  if (!year) return null;
+  const trimmed = year.trim();
+  if (!/^\d{4}$/.test(trimmed)) return null;
+  // Guard against a hallucinated 0202 or 9999 narrowing the search to nothing.
+  const n = Number(trimmed);
+  if (n < 1880 || n > new Date().getFullYear() + 5) return null;
+  return trimmed;
+}
+
+/**
+ * Search TMDB for a title, optionally narrowed to a release year.
+ *
+ * `year` matters more than it looks. Without it this ranked candidates by
+ * TMDB's `popularity`, which is a measure of how much attention a film is
+ * getting — and a film released this week has almost none. Any older film
+ * with a similar title outranked it, so the newest releases, the ones people
+ * are most likely to be sharing a post about, were the ones most likely to
+ * resolve to the wrong film. Gemini already returns a release year for every
+ * match; it simply was not being passed through to here.
+ *
+ * When a year is supplied, TMDB's own relevance order is kept rather than
+ * re-sorted: the year has already done the disambiguating, and popularity
+ * would only reintroduce the same bias among the remaining candidates.
+ * Without a year, popularity is still the best tie-break available.
+ */
+export async function searchTmdb(query: string, year?: string): Promise<TmdbCandidate[]> {
   const normalised = query.trim().toLowerCase();
   if (!normalised) return [];
 
+  const releaseYear = parseYear(year);
+
   return cached(
-    `tmdb:search:${normalised}`,
+    // The year is part of the key: the same title searched with and without
+    // one is a different query and must not share a cached result.
+    `tmdb:search:${normalised}${releaseYear ? `:${releaseYear}` : ""}`,
     SEARCH_CACHE_TTL_MS,
     async () => {
       const apiKey = getApiKey();
-      const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US`;
+      const yearParam = releaseYear ? `&primary_release_year=${releaseYear}` : "";
+      const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}${yearParam}&include_adult=false&language=en-US`;
 
       const res = await fetch(url);
       if (!res.ok) {
@@ -263,17 +295,45 @@ export async function searchTmdb(query: string): Promise<TmdbCandidate[]> {
 
       const data = (await res.json()) as TmdbSearchResponse;
 
-      return data.results
-        .filter((m) => m.poster_path)
-        .sort((a, b) => b.popularity - a.popularity)
-        .slice(0, 3)
-        .map(movieToCandidate);
+      // Prefer results with artwork, since the UI shows a poster card — but
+      // do not let that discard the film entirely. TMDB indexes a new release
+      // days before anyone uploads a poster for it, which is exactly the case
+      // this function was getting wrong.
+      const withPoster = data.results.filter((m) => m.poster_path);
+      const candidates = withPoster.length > 0 ? withPoster : data.results;
+
+      const ordered = releaseYear
+        ? candidates
+        : [...candidates].sort((a, b) => b.popularity - a.popularity);
+
+      return ordered.slice(0, 3).map(movieToCandidate);
     },
     // Never remember a miss: a film TMDB hasn't indexed yet, or a title
     // Gemini garbled, would otherwise stay "not found" for the full hour
     // even after a retry would have worked.
     { shouldCache: (results) => results.length > 0 },
   );
+}
+
+/**
+ * Search narrowed to `year`, falling back to an unnarrowed search when that
+ * finds nothing.
+ *
+ * The year comes from Gemini reading a caption, so it is frequently right and
+ * occasionally a year out — a post about a film's streaming debut naming the
+ * year it reached the platform rather than the year it was released, say.
+ * Narrowing is worth it for the accuracy it buys on new releases, but it must
+ * never be the reason a film that TMDB holds comes back as unidentified.
+ */
+export async function searchTmdbPreferringYear(
+  query: string,
+  year?: string,
+): Promise<TmdbCandidate[]> {
+  if (parseYear(year)) {
+    const narrowed = await searchTmdb(query, year);
+    if (narrowed.length > 0) return narrowed;
+  }
+  return searchTmdb(query);
 }
 
 // ── Full details (credits + watch providers) ──────────────────────────────────

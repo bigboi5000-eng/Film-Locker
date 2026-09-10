@@ -11,7 +11,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
-import { searchTmdb, fetchMovieDetails } from "./tmdb";
+import { searchTmdb, searchTmdbPreferringYear, fetchMovieDetails } from "./tmdb";
 
 export type SavedMovie = typeof moviesTable.$inferSelect;
 
@@ -107,7 +107,11 @@ export async function enrichAndSaveMatches(
   const hits = await mapWithConcurrency(sanitised, TMDB_CONCURRENCY, async (match) => {
     if (!(match.confidence_score >= CONFIDENCE_THRESHOLD)) return null;
     try {
-      return (await searchTmdb(match.movie_title))[0] ?? null;
+      // Gemini's release_year disambiguates remakes and same-titled films,
+      // and is what keeps a brand-new release from losing to a better-known
+      // older one. It falls back to an unnarrowed search when the year finds
+      // nothing, so a wrong year costs a little latency, never a match.
+      return (await searchTmdbPreferringYear(match.movie_title, match.release_year))[0] ?? null;
     } catch (err) {
       warn?.({ match, err }, "pipeline: TMDB search failed for match");
       return null;
