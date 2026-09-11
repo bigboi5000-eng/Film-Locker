@@ -286,6 +286,12 @@ eas build --profile production --platform ios
 eas submit --platform ios --latest
 ```
 
+`submit.production.ios` in `eas.json` carries `ascAppId` (6810410110) and
+`appleTeamId`. Without the first, `eas submit` logs into the Apple ID purely
+to look the app up, and fails on the same "iTunes service key is empty"
+described below. With it, the step is skipped and the upload authenticates
+with the API key instead.
+
 The first build prompts to create signing credentials — let EAS manage them
 unless you have a reason not to. `eas submit` asks for your Apple ID, Team ID
 and the App Store Connect App ID, and can write them into `eas.json` under
