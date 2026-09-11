@@ -45,6 +45,7 @@
           "origin": "https://film-locker.com"
         }
       ],
+      "@clerk/expo",
       "expo-font",
       "expo-web-browser",
       [
