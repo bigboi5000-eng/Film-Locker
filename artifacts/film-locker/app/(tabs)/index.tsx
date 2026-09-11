@@ -10,7 +10,6 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -130,11 +129,12 @@ export default function HomeScreen() {
     ? lockerData?.movies.find((m) => m.tmdbId === selectedMovie.tmdbId)
     : undefined;
 
-  // Avatar for profile button — a set displayInitials takes priority over
-  // Clerk's own avatar image, so the button reflects what the user chose.
+  // Avatar for the profile button. Clerk's own `imageUrl` is not consulted:
+  // it carries whatever the social provider supplied, which for an account
+  // with no photo is a generated picture of the first letter of the person's
+  // name. Initials the user chose, else their username, else a person icon.
   const { data: profile } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
-  const avatarUrl = user?.imageUrl;
-  const displayInitials = profile?.displayInitials || null;
+  const displayInitials = profile?.displayInitials || profile?.username || null;
 
   const handleRefresh = useCallback(() => {
     refetchTrending();
@@ -182,9 +182,7 @@ export default function HomeScreen() {
             activeOpacity={0.8}
           >
             {displayInitials ? (
-              <Text style={styles.profileInitials}>{displayInitials}</Text>
-            ) : avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.profileAvatar} contentFit="cover" />
+              <Text style={styles.profileInitials}>{displayInitials.slice(0, 5).toUpperCase()}</Text>
             ) : (
               <Ionicons name="person" size={18} color="#FFFFFF" />
             )}

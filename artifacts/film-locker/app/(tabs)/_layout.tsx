@@ -64,7 +64,17 @@ export default function TabLayout() {
     const email = user.primaryEmailAddress?.emailAddress;
     if (!email) return;
     syncUser({
-      data: { email, avatarUrl: user.imageUrl ?? null, username: user.username ?? null },
+      // avatarUrl is deliberately always null. Clerk's `imageUrl` is whatever
+      // the social provider supplied, and for an account with no photo Google
+      // returns a generated image of the first letter of the person's name —
+      // so syncing it put a "J" on other people's screens for someone who had
+      // chosen their own initials, and never uploaded a picture at all.
+      //
+      // Sent as an explicit null rather than omitted so that rows already
+      // carrying a provider image are cleared the next time the app opens.
+      // The column stays for a future in-app avatar upload; nothing writes it
+      // for now, so every avatar falls through to the initials.
+      data: { email, avatarUrl: null, username: user.username ?? null },
     }).catch(() => {
       // Non-fatal — best-effort
     });

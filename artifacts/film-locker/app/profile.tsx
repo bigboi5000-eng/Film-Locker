@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, ActivityIndicator, Platform, Switch, Linking,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
@@ -79,10 +78,17 @@ export default function ProfileScreen() {
   const [editingInitials, setEditingInitials] = useState(false);
   const [initialsInput, setInitialsInput] = useState('');
 
-  const displayName = profile?.username ?? clerkUser?.username ?? clerkUser?.firstName ?? 'You';
+  // firstName deliberately absent from this chain. It is only ever populated
+  // by a social provider, the privacy policy says the app does not display it,
+  // and using it here meant someone who signed in with Google saw a name they
+  // never gave us.
+  const displayName = profile?.username ?? clerkUser?.username ?? 'You';
   const email = profile?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? '';
-  const avatarUrl = clerkUser?.imageUrl;
-  const initials = (profile?.displayInitials || displayName).slice(0, 5).toUpperCase();
+  // Initials come from what the user chose, falling back to their username —
+  // never from displayName, which could still resolve to the literal 'You'.
+  const initials = (profile?.displayInitials || profile?.username || clerkUser?.username || '')
+    .slice(0, 5)
+    .toUpperCase();
 
   const handleStartEditUsername = useCallback(() => {
     setUsernameInput(profile?.username ?? '');
@@ -219,13 +225,9 @@ export default function ProfileScreen() {
         {/* Avatar + name */}
         <View style={styles.hero}>
           <View style={styles.avatarWrap}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
-            )}
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
           </View>
           <Text style={styles.heroName}>{displayName}</Text>
           <Text style={styles.heroEmail}>{email}</Text>
