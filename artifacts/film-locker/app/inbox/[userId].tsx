@@ -32,7 +32,7 @@ const LAST_EMOJI_STORAGE_KEY = 'film-locker:lastReactionEmoji';
 
 const WATCHED_IT = 'Watched it!';
 
-// The composer's rows, in order, each with the label shown above it.
+// The composer's rows, in order.
 //
 // These used to be one flat list of catchphrases sliced into rows of seven,
 // which put "What did you think?" next to "I am Groot" and buried the two
@@ -49,9 +49,8 @@ const WATCHED_IT = 'Watched it!';
 // Every phrase here must exist in the ConversationMessageContent enum in
 // openapi.yaml — that enum is enforced server-side, so anything missing from
 // it is rejected on send no matter what this file says.
-const PHRASE_ROWS: ReadonlyArray<{ label: string; keys: readonly string[] }> = [
+const PHRASE_ROWS: ReadonlyArray<{ keys: readonly string[] }> = [
   {
-    label: 'Ask',
     keys: [
       'What are you feeling like?',
       'Any recommendations?',
@@ -63,7 +62,6 @@ const PHRASE_ROWS: ReadonlyArray<{ label: string; keys: readonly string[] }> = [
     ],
   },
   {
-    label: 'Reply',
     keys: [
       WATCHED_IT,
       'Loved it!',
@@ -85,7 +83,6 @@ const PHRASE_ROWS: ReadonlyArray<{ label: string; keys: readonly string[] }> = [
     ],
   },
   {
-    label: 'Quotes',
     keys: [
       'Fool of a Took!',
       'Prestige Worldwide',
@@ -100,7 +97,6 @@ const PHRASE_ROWS: ReadonlyArray<{ label: string; keys: readonly string[] }> = [
     ],
   },
   {
-    label: '',
     keys: [
       'You shall not pass!',
       'I am Groot',
@@ -188,7 +184,7 @@ function ComposerPanel({
       last && row.keys.includes(last)
         ? [last, ...row.keys.filter((p) => p !== last)]
         : [...row.keys];
-    return { label: row.label, keys };
+    return { keys };
   });
 
   const handleEmojiPress = useCallback((emoji: (typeof EMOJI_KEYS)[number]) => {
@@ -246,12 +242,11 @@ function ComposerPanel({
         {/* Phrase "keys" — where the letters would be, one horizontally
             scrolling row per category. Each row independently floats its own
             last-used phrase to the front — rows never mix, so a genre reply
-            can't drift up into the questions. The label is omitted on the
-            second Quotes row, which is a continuation of the first rather
-            than a category of its own. */}
+            can't drift up into the questions. The rows are no longer
+            captioned: the phrases read as what they are, and three headings
+            above a keyboard was more furniture than help. */}
         {orderedPhraseRows.map((row, rowIndex) => (
           <View key={rowIndex}>
-            {row.label ? <Text style={kStyles.rowLabel}>{row.label}</Text> : null}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -310,11 +305,6 @@ const kStyles = StyleSheet.create({
 
   // Catchphrase rows — each phrase gets a white key-cap (unlike single-glyph
   // keys, multi-word phrases need a visible boundary to read as one "key").
-  rowLabel: {
-    fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF',
-    letterSpacing: 0.6, textTransform: 'uppercase',
-    paddingHorizontal: 14, paddingTop: 6, paddingBottom: 1,
-  },
   quoteRow: { paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
   quoteKey: {
     flexDirection: 'row', alignItems: 'center',
