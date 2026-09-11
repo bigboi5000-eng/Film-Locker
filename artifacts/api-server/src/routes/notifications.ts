@@ -11,10 +11,9 @@ import {
   SendConversationMessageBody,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { sendPush } from "../lib/push";
 import { isBlockedEitherWay } from "../lib/blocks";
-import { Expo } from "expo-server-sdk";
 
-const expo = new Expo();
 
 const router: IRouter = Router();
 
@@ -160,22 +159,12 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   ]);
 
   // Fire push notification — best-effort, never block the response
-  const pushToken = recipientWithToken?.expoPushToken;
-  if (pushToken && Expo.isExpoPushToken(pushToken)) {
-    try {
-      await expo.sendPushNotificationsAsync([
-        {
-          to: pushToken,
-          title: "🎬 New film recommendation",
-          body: `${sender?.username ?? "Someone"} recommended "${filmTitle}" to you`,
-          data: { screen: "/(tabs)/notifications" },
-          sound: "default",
-        },
-      ]);
-    } catch {
-      // Push failure is non-fatal — in-app inbox always works as fallback
-    }
-  }
+  void sendPush({
+    token: recipientWithToken?.expoPushToken,
+    title: "🎬 New film recommendation",
+    body: `${sender?.username ?? "Someone"} recommended "${filmTitle}" to you`,
+    screen: "/(tabs)/notifications",
+  });
 
   res.status(201).json(
     SendNotificationResponse.parse({
@@ -420,18 +409,14 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
     .returning();
 
   // Best-effort push to the recipient
-  const pushToken = recipient.expoPushToken;
-  if (pushToken && Expo.isExpoPushToken(pushToken)) {
+  if (recipient.expoPushToken) {
     const [sender] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.clerkId, clerkUserId));
-    try {
-      await expo.sendPushNotificationsAsync([{
-        to: pushToken,
-        title: `🎬 ${sender?.username ?? "Someone"}`,
-        body: replyToFilmTitle ? `${content} (re: "${replyToFilmTitle}")` : content,
-        data: { screen: "/(tabs)/notifications" },
-        sound: "default",
-      }]);
-    } catch { /* non-fatal */ }
+    void sendPush({
+      token: recipient.expoPushToken,
+      title: `🎬 ${sender?.username ?? "Someone"}`,
+      body: replyToFilmTitle ? `${content} (re: "${replyToFilmTitle}")` : content,
+      screen: "/(tabs)/notifications",
+    });
   }
 
   res.status(201).json({

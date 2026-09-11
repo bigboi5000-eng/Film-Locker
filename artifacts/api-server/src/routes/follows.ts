@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db, followsTable, usersTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
+import { sendPush } from "../lib/push";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -128,6 +129,42 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
         .from(followsTable)
         .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, followeeId)))
     )[0];
+
+  // Announce it. Until now a follow request was invisible until the target
+  // happened to open the Film Pals tab and look — there was no push, no badge,
+  // and nothing in the inbox, so in practice people only discovered a pending
+  // request when the same person later sent them a recommendation.
+  //
+  // Gated on `inserted` rather than on `status`, which is what keeps this from
+  // becoming spam. A repeat tap on Follow hits onConflictDoNothing and returns
+  // no row, so no second notification goes out. The one case where `inserted`
+  // is set without a brand-new row is a pending request promoted to accepted
+  // because the target went public, and announcing that is correct: they have
+  // genuinely just become a follower.
+  if (inserted) {
+    const [[sender], [recipient]] = await Promise.all([
+      db
+        .select({ username: usersTable.username })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, clerkUserId)),
+      db
+        .select({ expoPushToken: usersTable.expoPushToken })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, followeeId)),
+    ]);
+
+    const who = sender?.username ?? "Someone";
+    const pending = (row?.status ?? status) === "pending";
+
+    void sendPush({
+      token: recipient?.expoPushToken,
+      title: pending ? "🎬 New Film Pal request" : "🎬 New follower",
+      body: pending
+        ? `${who} has asked to connect with you`
+        : `${who} started following you`,
+      screen: "/(tabs)/notifications",
+    });
+  }
 
   res.status(201).json({ followerId: clerkUserId, followeeId, status: row?.status ?? status });
 });
