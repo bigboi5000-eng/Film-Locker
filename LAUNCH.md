@@ -293,7 +293,57 @@ and the App Store Connect App ID, and can write them into `eas.json` under
 
 `autoIncrement` is on for the production profile, so build numbers rise on
 their own. App Store Connect refuses a build number it has seen before, even
-from a rejected build, so do not turn it off.
+from a rejected build, so do not turn it off. `cli.appVersionSource` is
+`remote`, so the counter lives on EAS servers rather than in `app.json` —
+which is why `ios.buildNumber` has been removed from the config, where it
+was ignored and only invited confusion.
+
+#### Do not build from Replit, and do not use the Apple ID login
+
+Both of these cost an afternoon on the first release.
+
+**`eas build` needs `node_modules`.** It resolves the config plugins in
+`app.json` locally before it uploads anything, so a fresh clone fails with
+"Failed to resolve plugin for module expo-router". Run `pnpm install` from
+the **repository root** first — the root `package.json` has a preinstall
+hook that refuses npm and yarn outright.
+
+**Apple ID login fails with "iTunes service key is empty".** It fails before
+the two-factor prompt, on both Replit and a laptop, so it is neither the
+password nor the network. Accepting the App Store Connect agreements did not
+fix it. Do not chase it — authenticate with an **App Store Connect API key**
+instead, which uses a different endpoint and no two-factor:
+
+```
+export EXPO_ASC_API_KEY_PATH="/path/to/AuthKey_XXXXXXXXXX.p8"
+export EXPO_ASC_KEY_ID=XXXXXXXXXX
+export EXPO_ASC_ISSUER_ID=<uuid from App Store Connect → Users and Access
+                           → Integrations>
+export EXPO_APPLE_TEAM_ID=CP46776B8Y
+export EXPO_APPLE_TEAM_TYPE=INDIVIDUAL
+```
+
+The key is created at App Store Connect → Users and Access → Integrations →
+App Store Connect API, with the **App Manager** role. The `.p8` downloads
+exactly once. It can create distribution certificates, provisioning profiles
+and bundle identifiers — everything a build needs. It deliberately cannot
+create a push key or change capabilities, which is why §6.1 and §6.3 are
+done by hand and stay done.
+
+**Capability syncing has to be off.**
+
+```
+export EXPO_NO_CAPABILITY_SYNC=1
+```
+
+Without it the build fails at "Failed to sync capabilities". EAS reconciles
+the App ID against `app.json`, finds nothing declaring Sign in with Apple —
+the app uses Clerk's browser flow, not `expo-apple-authentication` — and
+tries to switch the capability **off**. That is the opposite of what is
+wanted: guideline 4.8 requires it. An API key cannot patch capabilities
+anyway, so the request is rejected and the build stops.
+
+All five variables are session-scoped. Use one terminal window.
 
 Processing takes roughly 10–30 minutes before the build appears in TestFlight.
 
