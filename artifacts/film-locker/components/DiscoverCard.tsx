@@ -25,10 +25,12 @@ export function DiscoverCard({ movie, onPress, width, height }: DiscoverCardProp
         placeholder={require('@/assets/images/icon.png')}
       />
       <View style={styles.overlay}>
-        <Text style={styles.title} numberOfLines={2}>{movie.title}</Text>
-        {movie.releaseYear ? (
-          <Text style={styles.year}>{movie.releaseYear}</Text>
-        ) : null}
+        <View style={styles.metaContainer}>
+          <Text style={styles.title} numberOfLines={2}>{movie.title}</Text>
+          {movie.releaseYear ? (
+            <Text style={styles.year}>{movie.releaseYear}</Text>
+          ) : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -46,9 +48,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   poster: { width: '100%', height: '100%' },
+  // Positioning only — no background here, so the dark scrim below sits
+  // just behind the title/year text instead of tinting the whole poster.
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
+  },
+  metaContainer: {
     padding: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },

@@ -10,11 +10,31 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useSignIn, useSSO, useAuth } from '@clerk/expo';
+import { useSignIn } from '@clerk/expo';
+// useSSO comes from the experimental entry point deliberately. The rest of
+// this screen uses Clerk's Core 3 ("future") API — signIn.password(),
+// signIn.finalize(), signIn.mfa — and the non-experimental useSSO is built on
+// the legacy resources instead. Clerk's own source says as much: "For Core 3
+// custom flows, use the experimental useSSO() hook from
+// '@clerk/expo/experimental'. It uses future auth resources and activates
+// completed sessions automatically."
+//
+// The difference that matters is what happens for a Google account that has
+// no Clerk user yet. Both versions transfer the sign-in attempt to a sign-up,
+// but the experimental one re-reads the verification straight off the client
+// after the OAuth callback and finalizes the resulting session itself,
+// instead of relying on a legacy resource kept in step with a future-mode
+// client.
+import { useSSO } from '@clerk/expo/experimental';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { webInputReset } from '@/lib/webInputReset';
+import { useToast } from '@/components/ToastProvider';
+import { SHOW_APPLE_SIGN_IN } from '@/lib/appleSignIn';
+import { getOAuthRedirectUrl } from '@/lib/oauthRedirect';
+import { clerkErrorMessage } from '@/lib/clerkErrors';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,17 +49,29 @@ function useWarmUpBrowser() {
 export default function SignInScreen() {
   useWarmUpBrowser();
   const router = useRouter();
-  const { isSignedIn } = useAuth();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Password reset runs as three steps in this same screen rather than a
+  // separate route: it shares the email field, and a user who mistyped their
+  // password is already here.
+  const [resetStage, setResetStage] = useState<null | 'code' | 'password'>(null);
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
 
-  if (isSignedIn) return null;
+  // Deliberately no `if (isSignedIn) return null` here. That guard existed to
+  // avoid flashing the form while a redirect was in flight, but isSignedIn
+  // does not reliably flip on sign-out — so after signing out it rendered an
+  // empty screen instead of the form the user had just been sent to.
+  // Rendering the form to someone whose session is already gone is correct;
+  // rendering nothing never is.
 
   const handleSignIn = async () => {
     const { error } = await signIn.password({ emailAddress: email, password });
@@ -69,35 +101,189 @@ export default function SignInScreen() {
     }
   };
 
+  // ── Forgot password ───────────────────────────────────────────────────────
+  // Clerk Core 3 splits this into three calls: create the attempt against the
+  // email, send a code to it, verify that code (which moves the status to
+  // 'needs_new_password'), then submit the new password. The last step
+  // completes the sign-in, so a successful reset lands the user in the app
+  // rather than back at this form to type the password they just chose.
+
+  const handleSendResetCode = async () => {
+    const { error: createError } = await signIn.create({ identifier: email });
+    if (createError) return;
+    const { error } = await signIn.resetPasswordEmailCode.sendCode();
+    if (error) return;
+    setResetStage('code');
+  };
+
+  const handleVerifyResetCode = async () => {
+    const { error } = await signIn.resetPasswordEmailCode.verifyCode({ code: resetCode });
+    if (error) return;
+    setResetStage('password');
+  };
+
+  const handleSubmitNewPassword = async () => {
+    const { error } = await signIn.resetPasswordEmailCode.submitPassword({ password: newPassword });
+    if (error) return;
+    if (signIn.status === 'complete') {
+      await signIn.finalize({
+        navigate: ({ session }) => {
+          if (session?.currentTask) return;
+          router.replace('/(tabs)');
+        },
+      });
+    }
+  };
+
+  /** Abandon a reset and return to the sign-in form with a clean attempt. */
+  const cancelReset = () => {
+    setResetStage(null);
+    setResetCode('');
+    setNewPassword('');
+    signIn.reset();
+  };
+
   const handleOAuth = useCallback(async (strategy: 'oauth_google' | 'oauth_apple') => {
     setOauthLoading(strategy === 'oauth_google' ? 'google' : 'apple');
     try {
-      const { createdSessionId, setActive } = await startSSOFlow({
+      // An explicit path makes the redirect URI more specific — Android's
+      // Custom Tabs sometimes report a false "dismiss" for a bare scheme
+      // redirect even after the OAuth provider actually completed. The URL
+      // itself lives in one place because it also has to be allowlisted in
+      // the Clerk Dashboard; see lib/oauthRedirect.ts.
+      // The experimental hook activates the session itself (it calls
+      // finalize internally), so there is no setActive to call here — a
+      // non-null createdSessionId means we are already signed in.
+      const { createdSessionId } = await startSSOFlow({
         strategy,
-        redirectUrl: AuthSession.makeRedirectUri(),
+        redirectUrl: getOAuthRedirectUrl(),
       });
       if (createdSessionId) {
-        await setActive!({
-          session: createdSessionId,
-          navigate: async ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace('/(tabs)');
-          },
+        // Google sign-in doubles as sign-up — Clerk transfers a sign-in with
+        // no matching user into a new account — so this cannot know whether
+        // the account is new. The welcome gate does, and forwards straight to
+        // the tabs when it is not.
+        router.replace('/welcome');
+      } else {
+        // The flow was dismissed/cancelled without an error — most often
+        // Android reporting the redirect as a dismiss even though sign-in
+        // may have completed in the browser. Let the user know explicitly
+        // rather than leaving them wondering why nothing happened.
+        showToast({
+          title: 'Sign-in did not complete',
+          subtitle: 'Please try again.',
+          variant: 'error',
         });
       }
     } catch (err) {
+      // Show Clerk's own reason rather than a generic retry prompt: the
+      // failures that actually happen here are configuration problems
+      // (an un-allowlisted redirect URL, a provider not enabled on this
+      // instance), and "Please try again" is wrong advice for all of them.
       console.error('OAuth error:', err);
+      showToast({
+        title: 'Sign-in failed',
+        subtitle: clerkErrorMessage(err) ?? 'Please try again.',
+        variant: 'error',
+      });
     } finally {
       setOauthLoading(null);
     }
-  }, [startSSOFlow, router]);
+  }, [startSSOFlow, router, showToast]);
+
+  // Reset step 1: enter the emailed code
+  if (resetStage === 'code') {
+    return (
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.inner}>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
+          <Text style={styles.title}>Check your email</Text>
+          <Text style={styles.subtitle}>We sent a reset code to {email}</Text>
+          <TextInput
+            style={styles.input}
+            value={resetCode}
+            onChangeText={setResetCode}
+            placeholder="Reset code"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="number-pad"
+            autoFocus
+          />
+          {errors?.fields?.code && (
+            <Text style={styles.error}>{errors.fields.code.message}</Text>
+          )}
+          <TouchableOpacity
+            style={[styles.primaryBtn, (!resetCode || fetchStatus === 'fetching') && styles.btnDisabled]}
+            onPress={handleVerifyResetCode}
+            disabled={!resetCode || fetchStatus === 'fetching'}
+            activeOpacity={0.85}
+          >
+            {fetchStatus === 'fetching'
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.primaryBtnText}>Continue</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => signIn.resetPasswordEmailCode.sendCode()} style={styles.linkRow}>
+            <Text style={styles.linkText}>Resend code</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={cancelReset} style={styles.linkRow}>
+            <Text style={styles.mutedText}>Back to sign in</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Reset step 2: choose a new password
+  if (resetStage === 'password') {
+    return (
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.inner}>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
+          <Text style={styles.title}>Choose a new password</Text>
+          <Text style={styles.subtitle}>You&apos;ll be signed in once it&apos;s saved</Text>
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder="New password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showNewPassword}
+              autoComplete="new-password"
+              returnKeyType="done"
+              onSubmitEditing={handleSubmitNewPassword}
+              autoFocus
+            />
+            <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowNewPassword((v) => !v)}>
+              <Ionicons name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          {errors?.fields?.password && (
+            <Text style={styles.error}>{errors.fields.password.message}</Text>
+          )}
+          <TouchableOpacity
+            style={[styles.primaryBtn, (!newPassword || fetchStatus === 'fetching') && styles.btnDisabled]}
+            onPress={handleSubmitNewPassword}
+            disabled={!newPassword || fetchStatus === 'fetching'}
+            activeOpacity={0.85}
+          >
+            {fetchStatus === 'fetching'
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.primaryBtnText}>Save and sign in</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={cancelReset} style={styles.linkRow}>
+            <Text style={styles.mutedText}>Back to sign in</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   // MFA verification step
   if (signIn.status === 'needs_client_trust') {
     return (
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.inner}>
-          <Text style={styles.logo}>FILM LOCKER</Text>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.subtitle}>We sent a verification code to {email}</Text>
           <TextInput
@@ -138,10 +324,7 @@ export default function SignInScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
           {/* Branding */}
-          <View style={styles.brandRow}>
-            <View style={styles.brandDot} />
-            <Text style={styles.logo}>FILM LOCKER</Text>
-          </View>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
 
@@ -184,6 +367,19 @@ export default function SignInScreen() {
             <Text style={styles.error}>{errors.fields.password.message}</Text>
           )}
 
+          {/* Forgot password — needs the email field filled, since the reset
+              code goes to that address. Disabled rather than hidden when it
+              is empty, so the route is visible before you know you need it. */}
+          <TouchableOpacity
+            onPress={handleSendResetCode}
+            disabled={!email || fetchStatus === 'fetching'}
+            style={styles.forgotRow}
+          >
+            <Text style={[styles.linkText, !email && styles.linkTextDisabled]}>
+              Forgot password?
+            </Text>
+          </TouchableOpacity>
+
           {/* Sign in button */}
           <TouchableOpacity
             style={[styles.primaryBtn, (!email || !password || fetchStatus === 'fetching') && styles.btnDisabled]}
@@ -219,7 +415,7 @@ export default function SignInScreen() {
           </TouchableOpacity>
 
           {/* Apple — iOS only */}
-          {Platform.OS === 'ios' && (
+          {SHOW_APPLE_SIGN_IN && (
             <TouchableOpacity
               style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && styles.btnDisabled]}
               onPress={() => handleOAuth('oauth_apple')}
@@ -252,9 +448,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { flexGrow: 1, justifyContent: 'center' },
   inner: { paddingHorizontal: 24, paddingVertical: 48 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
-  brandDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#0066FF' },
-  logo: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
+  logoImage: { width: 200, height: 85, marginBottom: 24, alignSelf: 'flex-start' },
   title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 6 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 28 },
   label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151', marginBottom: 6 },
@@ -269,6 +463,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     marginBottom: 14,
+    ...webInputReset,
   },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 46 },
@@ -304,6 +499,8 @@ const styles = StyleSheet.create({
   appleBtnText: { color: '#FFFFFF' },
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  linkTextDisabled: { color: '#9CA3AF' },
+  forgotRow: { alignSelf: 'flex-end', paddingVertical: 6 },
   linkRow: { alignItems: 'center', paddingVertical: 8 },
   mutedText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
 });

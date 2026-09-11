@@ -155,7 +155,7 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
             <View style={[styles.modelBadgeRow, { borderBottomColor: colors.border }]}>
               <View style={[styles.modelBadge, { backgroundColor: colors.secondary }]}>
                 <Text style={[styles.modelBadgeText, { color: colors.primary }]}>
-                  ✦ gemini-2.5-flash · structured JSON schema
+                  ✦ gemini-3.6-flash · structured JSON schema
                 </Text>
               </View>
             </View>

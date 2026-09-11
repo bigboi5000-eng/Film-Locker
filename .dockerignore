@@ -1,0 +1,7 @@
+node_modules
+**/node_modules
+.git
+**/dist
+**/.expo
+artifacts/film-locker/android
+artifacts/film-locker/ios
