@@ -84,7 +84,7 @@
             "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
             "NSExtensionActivationSupportsText": true
           },
-          "iosShareExtensionName": "Film Locker",
+          "iosShareExtensionName": "Film Locker Share",
           "iosShareExtensionBundleIdentifier": "com.filmlocker.app.ShareExtension",
           "iosAppGroupIdentifier": "group.com.filmlocker.app",
           "androidIntentFilters": [
