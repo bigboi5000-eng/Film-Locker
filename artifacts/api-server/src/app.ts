@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
@@ -11,8 +11,27 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { privacyPolicyHtml, termsOfServiceHtml } from "./lib/legalContent";
 
 const app: Express = express();
+
+// Railway sits the app behind a reverse proxy that sets X-Forwarded-For on
+// every request. Without this, Express's default trust-proxy setting (false)
+// makes express-rate-limit refuse to trust that header (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+// and fall back to req.ip resolving incorrectly — bucketing unrelated
+// requests together under the same rate-limit key instead of one per real
+// client IP. `1` trusts exactly one hop (Railway's own edge proxy).
+app.set("trust proxy", 1);
+
+// Public legal pages — deliberately outside /api and unauthenticated, so
+// they're plain reachable URLs (e.g. for the App Store Connect privacy
+// policy field) as well as links from inside the app.
+app.get("/privacy", (_req, res) => {
+  res.type("html").send(privacyPolicyHtml());
+});
+app.get("/terms", (_req, res) => {
+  res.type("html").send(termsOfServiceHtml());
+});
 
 // Structured request logging
 app.use(
@@ -35,6 +54,13 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 // CORS — allow credentials so Clerk session cookies work in browser previews
 app.use(cors({ credentials: true, origin: true }));
 
+// A base64-encoded photo is far past express.json()'s 100kb default, so this
+// one route gets its own larger parser. It must be mounted BEFORE the general
+// one below: whichever parser runs first populates req.body, and the second
+// then sees it is already parsed and skips. Mounting it per-route keeps the
+// larger ceiling off every other endpoint.
+app.use("/api/movies/extract-from-image", express.json({ limit: "16mb" }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -49,11 +75,16 @@ app.use(
   })),
 );
 
-// General rate limit — 120 requests per 15 min per IP
+// General rate limit — 400 requests per 15 min per IP.
+// Was 120, which is easy for one active session to exceed legitimately: the
+// notifications badge alone polls every 30s (30/15min), and normal tab
+// navigation fires several list/count queries per screen — a few minutes of
+// real use can rack up well past 120 with no abuse involved, silently
+// 429-ing whatever request happens to land next (e.g. a "create playlist").
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 120,
+    max: 400,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many requests — please try again later." },
@@ -71,7 +102,39 @@ const heavyLimit = rateLimit({
 
 app.use("/api/movies/process-social-link", heavyLimit);
 app.use("/api/movies/ai-extract", heavyLimit);
+app.use("/api/movies/recommend", heavyLimit);
+app.use("/api/movies/extract-from-image", heavyLimit);
 
 app.use("/api", router);
+
+// JSON error handler — keeps the API's error shape consistent (matching the
+// { error: string } responses routes already return for 4xx) even for
+// unhandled exceptions, instead of falling through to Express's default HTML
+// error page, which is unreadable to API clients and to error toasts in the app.
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) { next(err); return; }
+  req.log.error({ err }, "unhandled error");
+
+  // The real reason (e.g. "column ... does not exist") is always logged
+  // server-side above. Whether it's also returned to the client depends on
+  // environment: in production that would hand a stranger a look at our
+  // schema/internals on every crash, so only the generic message goes out;
+  // outside production (where we're the ones hitting it) the detail is
+  // worth seeing without digging through logs.
+  if (process.env.NODE_ENV === "production") {
+    res.status(500).json({ error: "Internal server error." });
+    return;
+  }
+
+  // Drizzle wraps the real Postgres error in DrizzleQueryError.cause —
+  // surface that instead of the generic "Failed query: ..." wrapper
+  // message, which has no diagnostic value on its own.
+  const cause = err instanceof Error ? err.cause : undefined;
+  const message =
+    (cause instanceof Error ? cause.message : undefined) ??
+    (err instanceof Error ? err.message : undefined) ??
+    "Internal server error.";
+  res.status(500).json({ error: message });
+});
 
 export default app;

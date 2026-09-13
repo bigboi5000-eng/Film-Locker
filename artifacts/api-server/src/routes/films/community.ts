@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, eq, avg, count, desc } from "drizzle-orm";
+import { and, eq, avg, count, desc, notInArray, or, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
-import { db, filmCommunityRatingsTable, filmCommentsTable, usersTable } from "@workspace/db";
+import { db, filmCommunityRatingsTable, filmCommentsTable, usersTable, followsTable } from "@workspace/db";
 import {
   GetFilmCommunityScoreParams,
   GetFilmCommunityScoreResponse,
@@ -17,6 +17,7 @@ import {
   DeleteFilmCommentParams,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
+import { getMutualBlockSet } from "../../lib/blocks";
 
 const router: IRouter = Router();
 
@@ -138,7 +139,37 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
 
   const clerkUserId: string | undefined = getAuth(req)?.userId ?? undefined;
 
-  // Fetch comments with user profile join
+  // Visibility is resolved in SQL rather than by filtering the fetched page
+  // in JS. Filtering afterwards silently shrinks pages (a page whose authors
+  // are all hidden comes back empty) and makes `hasMore` describe the
+  // unfiltered result, so the client can't tell an exhausted list from a
+  // fully-hidden page. Both gates below therefore go into the WHERE clause,
+  // where LIMIT/OFFSET see the same rows the viewer will:
+  //   • blocks (either direction) hide the author entirely
+  //   • a private author's comments are visible only to themselves and to
+  //     their accepted followers
+  const blockedIds = clerkUserId ? await getMutualBlockSet(clerkUserId) : new Set<string>();
+
+  const visibleToViewer = and(
+    eq(filmCommentsTable.tmdbId, tmdbId),
+    blockedIds.size > 0 ? notInArray(filmCommentsTable.userId, [...blockedIds]) : undefined,
+    or(
+      eq(usersTable.isPrivate, false),
+      clerkUserId ? eq(filmCommentsTable.userId, clerkUserId) : undefined,
+      clerkUserId
+        ? sql`EXISTS (
+            SELECT 1 FROM ${followsTable}
+            WHERE ${followsTable.followerId} = ${clerkUserId}
+              AND ${followsTable.followeeId} = ${filmCommentsTable.userId}
+              AND ${followsTable.status} = 'accepted'
+          )`
+        : undefined
+    )
+  );
+
+  // Fetch comments with user profile join, plus that author's own community
+  // rating for this film (if they've left one) so it can show alongside
+  // their comment.
   const rows = await db
     .select({
       id: filmCommentsTable.id,
@@ -149,10 +180,20 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
       updatedAt: filmCommentsTable.updatedAt,
       username: usersTable.username,
       avatarUrl: usersTable.avatarUrl,
+      rating: filmCommunityRatingsTable.rating,
     })
     .from(filmCommentsTable)
-    .leftJoin(usersTable, eq(filmCommentsTable.userId, usersTable.clerkId))
-    .where(eq(filmCommentsTable.tmdbId, tmdbId))
+    // Inner, not left: a comment whose author row is missing has no privacy
+    // setting to evaluate, so it can't be shown safely.
+    .innerJoin(usersTable, eq(filmCommentsTable.userId, usersTable.clerkId))
+    .leftJoin(
+      filmCommunityRatingsTable,
+      and(
+        eq(filmCommunityRatingsTable.tmdbId, filmCommentsTable.tmdbId),
+        eq(filmCommunityRatingsTable.userId, filmCommentsTable.userId)
+      )
+    )
+    .where(visibleToViewer)
     .orderBy(desc(filmCommentsTable.createdAt))
     .limit(PAGE_SIZE + 1)
     .offset(offset);
@@ -160,17 +201,19 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
   const hasMore = rows.length > PAGE_SIZE;
   const pageRows = rows.slice(0, PAGE_SIZE);
 
-  const comments = pageRows.map((r) => ({
-    id: r.id,
-    tmdbId: r.tmdbId,
-    userId: r.userId,
-    username: r.username ?? null,
-    avatarUrl: r.avatarUrl ?? null,
-    body: r.body,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    isOwn: clerkUserId ? r.userId === clerkUserId : false,
-  }));
+  const comments = pageRows
+    .map((r) => ({
+      id: r.id,
+      tmdbId: r.tmdbId,
+      userId: r.userId,
+      username: r.username ?? null,
+      avatarUrl: r.avatarUrl ?? null,
+      body: r.body,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      isOwn: clerkUserId ? r.userId === clerkUserId : false,
+      rating: r.rating ?? null,
+    }));
 
   res.json(GetFilmCommentsResponse.parse({ comments, page, hasMore }));
 });
@@ -198,11 +241,21 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
     .values({ userId: clerkUserId, tmdbId, body: body.data.body })
     .returning();
 
-  // Look up user profile for the response
+  // Look up user profile and their own community rating for this film, for the response
   const [user] = await db
     .select({ username: usersTable.username, avatarUrl: usersTable.avatarUrl })
     .from(usersTable)
     .where(eq(usersTable.clerkId, clerkUserId));
+
+  const [ratingRow] = await db
+    .select({ rating: filmCommunityRatingsTable.rating })
+    .from(filmCommunityRatingsTable)
+    .where(
+      and(
+        eq(filmCommunityRatingsTable.tmdbId, tmdbId),
+        eq(filmCommunityRatingsTable.userId, clerkUserId)
+      )
+    );
 
   res.status(201).json(
     PostFilmCommentResponse.parse({
@@ -215,6 +268,7 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
       createdAt: inserted.createdAt,
       updatedAt: inserted.updatedAt,
       isOwn: true,
+      rating: ratingRow?.rating ?? null,
     })
   );
 });

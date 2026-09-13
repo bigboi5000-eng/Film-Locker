@@ -32,10 +32,10 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   try {
-    // Push tokens require a physical device (simulators don't have APNs creds).
-    if (!Constants.isDevice) {
-      return null;
-    }
+    // Simulators have no APNs credentials, so getExpoPushTokenAsync throws
+    // there. That is caught below and returns null, which is why there is no
+    // physical-device guard here: `Constants.isDevice` does not exist in
+    // expo-constants, and reading it silently disabled push on every device.
 
     // Android needs a notification channel set up first.
     if (Platform.OS === 'android') {

@@ -24,14 +24,25 @@ import type {
   AddPlaylistItemBody,
   AiExtractBody,
   AiExtractResponse,
+  BlockUserBody,
+  BlockUserResponse,
+  ConversationFeedItem,
   CreatePlaylistBody,
+  ExtractFromImageBody,
   FilmComment,
   FilmCommentsResponse,
   FilmCommunityScore,
   FilmNotification,
   FollowBody,
+  FollowPlaylistResponse,
+  FollowResponse,
   FollowsResponse,
+  GetBlocksResponse,
   GetFilmCommentsParams,
+  GetMovieDetailsParams,
+  GetNewReleasesParams,
+  GetRecommendationsParams,
+  GetTrendingParams,
   HealthStatus,
   ListMoviesResponse,
   Movie,
@@ -39,8 +50,6 @@ import type {
   NotificationThreadResponse,
   NotificationUsersResponse,
   NotificationsResponse,
-  ParseCaptionBody,
-  ParseCaptionResponse,
   PatchRatingBody,
   PatchWatchedBody,
   Playlist,
@@ -49,23 +58,29 @@ import type {
   PostCommentBody,
   ProcessSocialLinkBody,
   ProcessSocialLinkResponse,
-  ReactNotificationBody,
-  ReactNotificationResponse,
+  RecommendBody,
+  RecommendResponse,
   RecommendationsResponse,
   SearchMoviesParams,
   SearchMoviesResponse,
   SearchPublicPlaylistsParams,
   SearchUsersParams,
   SearchUsersResponse,
+  SendConversationMessageBody,
   SendNotificationBody,
   SetCommunityRatingBody,
+  SubmitFeedbackBody,
+  SubmitFeedbackResponse,
+  SubmitReportBody,
+  SubmitReportResponse,
   SyncUserBody,
   TmdbMovieDetailsResponse,
   TrendingResponse,
   UpdateMeBody,
   UpdatePlaylistBody,
   UpdatePushTokenBody,
-  UserProfile
+  UserProfile,
+  UserProfileResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -173,21 +188,28 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
-export const getGetRecommendationsUrl = () => {
+export const getGetRecommendationsUrl = (params?: GetRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/recommendations`
+  return stringifiedParams.length > 0 ? `/api/movies/recommendations?${stringifiedParams}` : `/api/movies/recommendations`
 }
 
 /**
  * @summary Personalised recommendations based on the user's watchlist. Calls TMDB recommendations for each saved film, deduplicates, and filters out already-saved films. Returns an empty list when the watchlist is empty.
 
  */
-export const getRecommendations = async ( options?: RequestInit): Promise<RecommendationsResponse> => {
+export const getRecommendations = async (params?: GetRecommendationsParams, options?: RequestInit): Promise<RecommendationsResponse> => {
 
-  return customFetch<RecommendationsResponse>(getGetRecommendationsUrl(),
+  return customFetch<RecommendationsResponse>(getGetRecommendationsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -200,23 +222,23 @@ export const getRecommendations = async ( options?: RequestInit): Promise<Recomm
 
 
 
-export const getGetRecommendationsQueryKey = () => {
+export const getGetRecommendationsQueryKey = (params?: GetRecommendationsParams,) => {
     return [
-    `/api/movies/recommendations`
+    `/api/movies/recommendations`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>(params?: GetRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetRecommendationsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetRecommendationsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecommendations>>> = ({ signal }) => getRecommendations({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecommendations>>> = ({ signal }) => getRecommendations(params, { signal, ...requestOptions });
 
 
 
@@ -235,11 +257,11 @@ export type GetRecommendationsQueryError = ErrorType<unknown>
  */
 
 export function useGetRecommendations<TData = Awaited<ReturnType<typeof getRecommendations>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetRecommendationsQueryOptions(options)
+  const queryOptions = getGetRecommendationsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -252,20 +274,27 @@ export function useGetRecommendations<TData = Awaited<ReturnType<typeof getRecom
 
 
 
-export const getGetTrendingUrl = () => {
+export const getGetTrendingUrl = (params?: GetTrendingParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/trending`
+  return stringifiedParams.length > 0 ? `/api/movies/trending?${stringifiedParams}` : `/api/movies/trending`
 }
 
 /**
  * @summary Fetch trending movies this week from TMDB
  */
-export const getTrending = async ( options?: RequestInit): Promise<TrendingResponse> => {
+export const getTrending = async (params?: GetTrendingParams, options?: RequestInit): Promise<TrendingResponse> => {
 
-  return customFetch<TrendingResponse>(getGetTrendingUrl(),
+  return customFetch<TrendingResponse>(getGetTrendingUrl(params),
   {
     ...options,
     method: 'GET'
@@ -278,23 +307,23 @@ export const getTrending = async ( options?: RequestInit): Promise<TrendingRespo
 
 
 
-export const getGetTrendingQueryKey = () => {
+export const getGetTrendingQueryKey = (params?: GetTrendingParams,) => {
     return [
-    `/api/movies/trending`
+    `/api/movies/trending`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetTrendingQueryOptions = <TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetTrendingQueryOptions = <TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>(params?: GetTrendingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetTrendingQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetTrendingQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrending>>> = ({ signal }) => getTrending({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrending>>> = ({ signal }) => getTrending(params, { signal, ...requestOptions });
 
 
 
@@ -312,11 +341,11 @@ export type GetTrendingQueryError = ErrorType<unknown>
  */
 
 export function useGetTrending<TData = Awaited<ReturnType<typeof getTrending>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetTrendingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTrending>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetTrendingQueryOptions(options)
+  const queryOptions = getGetTrendingQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -329,20 +358,27 @@ export function useGetTrending<TData = Awaited<ReturnType<typeof getTrending>>, 
 
 
 
-export const getGetNewReleasesUrl = () => {
+export const getGetNewReleasesUrl = (params?: GetNewReleasesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/movies/new-releases`
+  return stringifiedParams.length > 0 ? `/api/movies/new-releases?${stringifiedParams}` : `/api/movies/new-releases`
 }
 
 /**
  * @summary Fetch movies currently in theatres from TMDB
  */
-export const getNewReleases = async ( options?: RequestInit): Promise<NewReleasesResponse> => {
+export const getNewReleases = async (params?: GetNewReleasesParams, options?: RequestInit): Promise<NewReleasesResponse> => {
 
-  return customFetch<NewReleasesResponse>(getGetNewReleasesUrl(),
+  return customFetch<NewReleasesResponse>(getGetNewReleasesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -355,23 +391,23 @@ export const getNewReleases = async ( options?: RequestInit): Promise<NewRelease
 
 
 
-export const getGetNewReleasesQueryKey = () => {
+export const getGetNewReleasesQueryKey = (params?: GetNewReleasesParams,) => {
     return [
-    `/api/movies/new-releases`
+    `/api/movies/new-releases`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetNewReleasesQueryOptions = <TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetNewReleasesQueryOptions = <TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>(params?: GetNewReleasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetNewReleasesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetNewReleasesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNewReleases>>> = ({ signal }) => getNewReleases({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNewReleases>>> = ({ signal }) => getNewReleases(params, { signal, ...requestOptions });
 
 
 
@@ -389,11 +425,11 @@ export type GetNewReleasesQueryError = ErrorType<unknown>
  */
 
 export function useGetNewReleases<TData = Awaited<ReturnType<typeof getNewReleases>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetNewReleasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNewReleases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetNewReleasesQueryOptions(options)
+  const queryOptions = getGetNewReleasesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -489,76 +525,6 @@ export function useSearchMovies<TData = Awaited<ReturnType<typeof searchMovies>>
 
 
 
-
-export const getParseCaptionUrl = () => {
-
-
-
-
-  return `/api/movies/parse-caption`
-}
-
-/**
- * @summary Parse a social media caption and find matching movies via TMDB
- */
-export const parseCaption = async (parseCaptionBody: ParseCaptionBody, options?: RequestInit): Promise<ParseCaptionResponse> => {
-
-  return customFetch<ParseCaptionResponse>(getParseCaptionUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(parseCaptionBody)
-  }
-);}
-
-
-
-
-export const getParseCaptionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext> => {
-
-const mutationKey = ['parseCaption'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof parseCaption>>, {data: BodyType<ParseCaptionBody>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  parseCaption(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ParseCaptionMutationResult = NonNullable<Awaited<ReturnType<typeof parseCaption>>>
-    export type ParseCaptionMutationBody = BodyType<ParseCaptionBody>
-    export type ParseCaptionMutationError = ErrorType<unknown>
-
-    /**
- * @summary Parse a social media caption and find matching movies via TMDB
- */
-export const useParseCaption = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof parseCaption>>, TError,{data: BodyType<ParseCaptionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof parseCaption>>,
-        TError,
-        {data: BodyType<ParseCaptionBody>},
-        TContext
-      > => {
-      return useMutation(getParseCaptionMutationOptions(options));
-    }
 
 export const getAiExtractUrl = () => {
 
@@ -704,21 +670,174 @@ export const useProcessSocialLink = <TError = ErrorType<unknown>,
       return useMutation(getProcessSocialLinkMutationOptions(options));
     }
 
-export const getGetMovieDetailsUrl = (tmdbId: number,) => {
+export const getExtractFromImageUrl = () => {
 
 
 
 
-  return `/api/movies/tmdb/${tmdbId}`
+  return `/api/movies/extract-from-image`
+}
+
+/**
+ * @summary Extract films from a photo or screenshot the user supplies — a poster or cinema listing photographed in the wild, or a screenshot of a post whose titles are printed in the image rather than written in its caption. Gemini reads the image directly; nothing is scraped, so this works for content the link-based pipeline cannot reach.
+
+ */
+export const extractFromImage = async (extractFromImageBody: ExtractFromImageBody, options?: RequestInit): Promise<ProcessSocialLinkResponse> => {
+
+  return customFetch<ProcessSocialLinkResponse>(getExtractFromImageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(extractFromImageBody)
+  }
+);}
+
+
+
+
+export const getExtractFromImageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractFromImage>>, TError,{data: BodyType<ExtractFromImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof extractFromImage>>, TError,{data: BodyType<ExtractFromImageBody>}, TContext> => {
+
+const mutationKey = ['extractFromImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof extractFromImage>>, {data: BodyType<ExtractFromImageBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  extractFromImage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExtractFromImageMutationResult = NonNullable<Awaited<ReturnType<typeof extractFromImage>>>
+    export type ExtractFromImageMutationBody = BodyType<ExtractFromImageBody>
+    export type ExtractFromImageMutationError = ErrorType<void>
+
+    /**
+ * @summary Extract films from a photo or screenshot the user supplies — a poster or cinema listing photographed in the wild, or a screenshot of a post whose titles are printed in the image rather than written in its caption. Gemini reads the image directly; nothing is scraped, so this works for content the link-based pipeline cannot reach.
+
+ */
+export const useExtractFromImage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof extractFromImage>>, TError,{data: BodyType<ExtractFromImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof extractFromImage>>,
+        TError,
+        {data: BodyType<ExtractFromImageBody>},
+        TContext
+      > => {
+      return useMutation(getExtractFromImageMutationOptions(options));
+    }
+
+export const getRecommendMoviesUrl = () => {
+
+
+
+
+  return `/api/movies/recommend`
+}
+
+/**
+ * @summary Ask Gemini for film/TV recommendations from a natural-language query (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre"), enrich each with TMDB data, and optionally save to the locker. Strictly scoped to film/TV requests — Gemini is instructed to refuse anything else, surfaced as offTopic=true with no matches.
+
+ */
+export const recommendMovies = async (recommendBody: RecommendBody, options?: RequestInit): Promise<RecommendResponse> => {
+
+  return customFetch<RecommendResponse>(getRecommendMoviesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recommendBody)
+  }
+);}
+
+
+
+
+export const getRecommendMoviesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendMovies>>, TError,{data: BodyType<RecommendBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recommendMovies>>, TError,{data: BodyType<RecommendBody>}, TContext> => {
+
+const mutationKey = ['recommendMovies'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recommendMovies>>, {data: BodyType<RecommendBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recommendMovies(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecommendMoviesMutationResult = NonNullable<Awaited<ReturnType<typeof recommendMovies>>>
+    export type RecommendMoviesMutationBody = BodyType<RecommendBody>
+    export type RecommendMoviesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Ask Gemini for film/TV recommendations from a natural-language query (e.g. "recommend a 90 minute horror film similar to Texas Chainsaw Massacre"), enrich each with TMDB data, and optionally save to the locker. Strictly scoped to film/TV requests — Gemini is instructed to refuse anything else, surfaced as offTopic=true with no matches.
+
+ */
+export const useRecommendMovies = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendMovies>>, TError,{data: BodyType<RecommendBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recommendMovies>>,
+        TError,
+        {data: BodyType<RecommendBody>},
+        TContext
+      > => {
+      return useMutation(getRecommendMoviesMutationOptions(options));
+    }
+
+export const getGetMovieDetailsUrl = (tmdbId: number,
+    params?: GetMovieDetailsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/movies/tmdb/${tmdbId}?${stringifiedParams}` : `/api/movies/tmdb/${tmdbId}`
 }
 
 /**
  * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
 
  */
-export const getMovieDetails = async (tmdbId: number, options?: RequestInit): Promise<TmdbMovieDetailsResponse> => {
+export const getMovieDetails = async (tmdbId: number,
+    params?: GetMovieDetailsParams, options?: RequestInit): Promise<TmdbMovieDetailsResponse> => {
 
-  return customFetch<TmdbMovieDetailsResponse>(getGetMovieDetailsUrl(tmdbId),
+  return customFetch<TmdbMovieDetailsResponse>(getGetMovieDetailsUrl(tmdbId,params),
   {
     ...options,
     method: 'GET'
@@ -731,23 +850,25 @@ export const getMovieDetails = async (tmdbId: number, options?: RequestInit): Pr
 
 
 
-export const getGetMovieDetailsQueryKey = (tmdbId: number,) => {
+export const getGetMovieDetailsQueryKey = (tmdbId: number,
+    params?: GetMovieDetailsParams,) => {
     return [
-    `/api/movies/tmdb/${tmdbId}`
+    `/api/movies/tmdb/${tmdbId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetMovieDetailsQueryOptions = <TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetMovieDetailsQueryOptions = <TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(tmdbId: number,
+    params?: GetMovieDetailsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetMovieDetailsQueryKey(tmdbId);
+  const queryKey =  queryOptions?.queryKey ?? getGetMovieDetailsQueryKey(tmdbId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMovieDetails>>> = ({ signal }) => getMovieDetails(tmdbId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMovieDetails>>> = ({ signal }) => getMovieDetails(tmdbId,params, { signal, ...requestOptions });
 
 
 
@@ -766,11 +887,12 @@ export type GetMovieDetailsQueryError = ErrorType<void>
  */
 
 export function useGetMovieDetails<TData = Awaited<ReturnType<typeof getMovieDetails>>, TError = ErrorType<void>>(
- tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ tmdbId: number,
+    params?: GetMovieDetailsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMovieDetails>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetMovieDetailsQueryOptions(tmdbId,options)
+  const queryOptions = getGetMovieDetailsQueryOptions(tmdbId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1886,77 +2008,6 @@ export const useMarkNotificationRead = <TError = ErrorType<void>,
       return useMutation(getMarkNotificationReadMutationOptions(options));
     }
 
-export const getReactToNotificationUrl = (id: number,) => {
-
-
-
-
-  return `/api/notifications/${id}/react`
-}
-
-/**
- * @summary Set an emoji or text reaction on a received notification
- */
-export const reactToNotification = async (id: number,
-    reactNotificationBody: ReactNotificationBody, options?: RequestInit): Promise<ReactNotificationResponse> => {
-
-  return customFetch<ReactNotificationResponse>(getReactToNotificationUrl(id),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(reactNotificationBody)
-  }
-);}
-
-
-
-
-export const getReactToNotificationMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reactToNotification>>, TError,{id: number;data: BodyType<ReactNotificationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof reactToNotification>>, TError,{id: number;data: BodyType<ReactNotificationBody>}, TContext> => {
-
-const mutationKey = ['reactToNotification'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reactToNotification>>, {id: number;data: BodyType<ReactNotificationBody>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  reactToNotification(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ReactToNotificationMutationResult = NonNullable<Awaited<ReturnType<typeof reactToNotification>>>
-    export type ReactToNotificationMutationBody = BodyType<ReactNotificationBody>
-    export type ReactToNotificationMutationError = ErrorType<void>
-
-    /**
- * @summary Set an emoji or text reaction on a received notification
- */
-export const useReactToNotification = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reactToNotification>>, TError,{id: number;data: BodyType<ReactNotificationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof reactToNotification>>,
-        TError,
-        {id: number;data: BodyType<ReactNotificationBody>},
-        TContext
-      > => {
-      return useMutation(getReactToNotificationMutationOptions(options));
-    }
-
 export const getGetNotificationThreadUrl = (userId: string,) => {
 
 
@@ -1966,7 +2017,8 @@ export const getGetNotificationThreadUrl = (userId: string,) => {
 }
 
 /**
- * @summary All recommendations from a specific user to the authenticated user
+ * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
+
  */
 export const getNotificationThread = async (userId: string, options?: RequestInit): Promise<NotificationThreadResponse> => {
 
@@ -2013,7 +2065,8 @@ export type GetNotificationThreadQueryError = ErrorType<void>
 
 
 /**
- * @summary All recommendations from a specific user to the authenticated user
+ * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
+
  */
 
 export function useGetNotificationThread<TData = Awaited<ReturnType<typeof getNotificationThread>>, TError = ErrorType<void>>(
@@ -2033,6 +2086,79 @@ export function useGetNotificationThread<TData = Awaited<ReturnType<typeof getNo
 
 
 
+
+export const getSendConversationMessageUrl = (userId: string,) => {
+
+
+
+
+  return `/api/notifications/thread/${userId}/messages`
+}
+
+/**
+ * @summary Send a reaction/message to a user from the fixed vocabulary — either a reply to a specific film recommendation (replyToNotificationId) or a standalone message. Allowed regardless of whether a recommendation exists, as long as a follow relationship exists in either direction.
+
+ */
+export const sendConversationMessage = async (userId: string,
+    sendConversationMessageBody: SendConversationMessageBody, options?: RequestInit): Promise<ConversationFeedItem> => {
+
+  return customFetch<ConversationFeedItem>(getSendConversationMessageUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendConversationMessageBody)
+  }
+);}
+
+
+
+
+export const getSendConversationMessageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendConversationMessage>>, TError,{userId: string;data: BodyType<SendConversationMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendConversationMessage>>, TError,{userId: string;data: BodyType<SendConversationMessageBody>}, TContext> => {
+
+const mutationKey = ['sendConversationMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendConversationMessage>>, {userId: string;data: BodyType<SendConversationMessageBody>}> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  sendConversationMessage(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendConversationMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendConversationMessage>>>
+    export type SendConversationMessageMutationBody = BodyType<SendConversationMessageBody>
+    export type SendConversationMessageMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a reaction/message to a user from the fixed vocabulary — either a reply to a specific film recommendation (replyToNotificationId) or a standalone message. Allowed regardless of whether a recommendation exists, as long as a follow relationship exists in either direction.
+
+ */
+export const useSendConversationMessage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendConversationMessage>>, TError,{userId: string;data: BodyType<SendConversationMessageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendConversationMessage>>,
+        TError,
+        {userId: string;data: BodyType<SendConversationMessageBody>},
+        TContext
+      > => {
+      return useMutation(getSendConversationMessageMutationOptions(options));
+    }
 
 export const getSyncUserUrl = () => {
 
@@ -2251,6 +2377,78 @@ export const useUpdateMe = <TError = ErrorType<void>,
       return useMutation(getUpdateMeMutationOptions(options));
     }
 
+export const getDeleteMeUrl = () => {
+
+
+
+
+  return `/api/users/me`
+}
+
+/**
+ * @summary Permanently delete the authenticated user's Film Locker data — their locker, comments, ratings, notifications, messages, follows, playlists, and feedback. Call this before deleting the Clerk identity itself; it does not touch Clerk.
+
+ */
+export const deleteMe = async ( options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMeUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteMeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMe>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMe>>, TError,void, TContext> => {
+
+const mutationKey = ['deleteMe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMe>>, void> = () => {
+
+
+          return  deleteMe(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMeMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMe>>>
+
+    export type DeleteMeMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete the authenticated user's Film Locker data — their locker, comments, ratings, notifications, messages, follows, playlists, and feedback. Call this before deleting the Clerk identity itself; it does not touch Clerk.
+
+ */
+export const useDeleteMe = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMe>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMe>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDeleteMeMutationOptions(options));
+    }
+
 export const getSearchUsersUrl = (params: SearchUsersParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -2323,6 +2521,162 @@ export function useSearchUsers<TData = Awaited<ReturnType<typeof searchUsers>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getSearchUsersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetUserProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/profile`
+}
+
+/**
+ * Headline stats (films watched, reviews given, public playlist count) are always included, even for a private account the caller doesn't follow. The actual list of public playlists is only included (non-null) when the account is public, the caller is viewing their own profile, or the caller is an accepted follower — otherwise publicPlaylists is null and publicPlaylistCount stands in for it.
+ * @summary Get another user's public profile
+ */
+export const getUserProfile = async (id: string, options?: RequestInit): Promise<UserProfileResponse> => {
+
+  return customFetch<UserProfileResponse>(getGetUserProfileUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserProfileQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/profile`
+    ] as const;
+    }
+
+
+export const getGetUserProfileQueryOptions = <TData = Awaited<ReturnType<typeof getUserProfile>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserProfileQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserProfile>>> = ({ signal }) => getUserProfile(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+export type GetUserProfileQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get another user's public profile
+ */
+
+export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfile>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserProfileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetUserWatchedUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/watched`
+}
+
+/**
+ * Only visible when both accounts follow each other (mutual — "Film Pals"), a stricter bar than the one-way accepted-follower gate used for playlists, since individual watched films are more personal.
+ * @summary Get another user's watched films
+ */
+export const getUserWatched = async (id: string, options?: RequestInit): Promise<ListMoviesResponse> => {
+
+  return customFetch<ListMoviesResponse>(getGetUserWatchedUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserWatchedQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/watched`
+    ] as const;
+    }
+
+
+export const getGetUserWatchedQueryOptions = <TData = Awaited<ReturnType<typeof getUserWatched>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserWatched>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserWatchedQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserWatched>>> = ({ signal }) => getUserWatched(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserWatched>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserWatchedQueryResult = NonNullable<Awaited<ReturnType<typeof getUserWatched>>>
+export type GetUserWatchedQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get another user's watched films
+ */
+
+export function useGetUserWatched<TData = Awaited<ReturnType<typeof getUserWatched>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserWatched>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserWatchedQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2421,11 +2775,12 @@ export const getFollowUserUrl = () => {
 }
 
 /**
- * @summary Follow another user
- */
-export const followUser = async (followBody: FollowBody, options?: RequestInit): Promise<void> => {
+ * @summary Follow another user. Accepted immediately if they're public; creates a pending follow request if they're private.
 
-  return customFetch<void>(getFollowUserUrl(),
+ */
+export const followUser = async (followBody: FollowBody, options?: RequestInit): Promise<FollowResponse> => {
+
+  return customFetch<FollowResponse>(getFollowUserUrl(),
   {
     ...options,
     method: 'POST',
@@ -2469,7 +2824,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type FollowUserMutationError = ErrorType<void>
 
     /**
- * @summary Follow another user
+ * @summary Follow another user. Accepted immediately if they're public; creates a pending follow request if they're private.
+
  */
 export const useFollowUser = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof followUser>>, TError,{data: BodyType<FollowBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -2491,7 +2847,7 @@ export const getUnfollowUserUrl = (userId: string,) => {
 }
 
 /**
- * @summary Unfollow a user
+ * @summary Unfollow a user, or cancel an outgoing follow request you sent them
  */
 export const unfollowUser = async (userId: string, options?: RequestInit): Promise<void> => {
 
@@ -2539,7 +2895,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UnfollowUserMutationError = ErrorType<void>
 
     /**
- * @summary Unfollow a user
+ * @summary Unfollow a user, or cancel an outgoing follow request you sent them
  */
 export const useUnfollowUser = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unfollowUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -2550,6 +2906,509 @@ export const useUnfollowUser = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUnfollowUserMutationOptions(options));
+    }
+
+export const getAcceptFollowRequestUrl = (userId: string,) => {
+
+
+
+
+  return `/api/follows/${userId}/accept`
+}
+
+/**
+ * @summary Accept an incoming follow request from userId
+ */
+export const acceptFollowRequest = async (userId: string, options?: RequestInit): Promise<FollowResponse> => {
+
+  return customFetch<FollowResponse>(getAcceptFollowRequestUrl(userId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getAcceptFollowRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptFollowRequest>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['acceptFollowRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptFollowRequest>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  acceptFollowRequest(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptFollowRequestMutationResult = NonNullable<Awaited<ReturnType<typeof acceptFollowRequest>>>
+
+    export type AcceptFollowRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Accept an incoming follow request from userId
+ */
+export const useAcceptFollowRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptFollowRequest>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getAcceptFollowRequestMutationOptions(options));
+    }
+
+export const getDeclineFollowRequestUrl = (userId: string,) => {
+
+
+
+
+  return `/api/follows/${userId}/request`
+}
+
+/**
+ * @summary Decline an incoming pending follow request from userId
+ */
+export const declineFollowRequest = async (userId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeclineFollowRequestUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeclineFollowRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof declineFollowRequest>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['declineFollowRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof declineFollowRequest>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  declineFollowRequest(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeclineFollowRequestMutationResult = NonNullable<Awaited<ReturnType<typeof declineFollowRequest>>>
+
+    export type DeclineFollowRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Decline an incoming pending follow request from userId
+ */
+export const useDeclineFollowRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineFollowRequest>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof declineFollowRequest>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getDeclineFollowRequestMutationOptions(options));
+    }
+
+export const getSubmitFeedbackUrl = () => {
+
+
+
+
+  return `/api/feedback`
+}
+
+/**
+ * @summary Send feedback from the account management page. Always saved to the database first; a notification email is best-effort on top of that.
+
+ */
+export const submitFeedback = async (submitFeedbackBody: SubmitFeedbackBody, options?: RequestInit): Promise<SubmitFeedbackResponse> => {
+
+  return customFetch<SubmitFeedbackResponse>(getSubmitFeedbackUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(submitFeedbackBody)
+  }
+);}
+
+
+
+
+export const getSubmitFeedbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitFeedback>>, TError,{data: BodyType<SubmitFeedbackBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitFeedback>>, TError,{data: BodyType<SubmitFeedbackBody>}, TContext> => {
+
+const mutationKey = ['submitFeedback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitFeedback>>, {data: BodyType<SubmitFeedbackBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitFeedback(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitFeedbackMutationResult = NonNullable<Awaited<ReturnType<typeof submitFeedback>>>
+    export type SubmitFeedbackMutationBody = BodyType<SubmitFeedbackBody>
+    export type SubmitFeedbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Send feedback from the account management page. Always saved to the database first; a notification email is best-effort on top of that.
+
+ */
+export const useSubmitFeedback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitFeedback>>, TError,{data: BodyType<SubmitFeedbackBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitFeedback>>,
+        TError,
+        {data: BodyType<SubmitFeedbackBody>},
+        TContext
+      > => {
+      return useMutation(getSubmitFeedbackMutationOptions(options));
+    }
+
+export const getGetBlocksUrl = () => {
+
+
+
+
+  return `/api/blocks`
+}
+
+/**
+ * @summary List users the authenticated user has blocked
+ */
+export const getBlocks = async ( options?: RequestInit): Promise<GetBlocksResponse> => {
+
+  return customFetch<GetBlocksResponse>(getGetBlocksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBlocksQueryKey = () => {
+    return [
+    `/api/blocks`
+    ] as const;
+    }
+
+
+export const getGetBlocksQueryOptions = <TData = Awaited<ReturnType<typeof getBlocks>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBlocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBlocksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBlocks>>> = ({ signal }) => getBlocks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBlocks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBlocksQueryResult = NonNullable<Awaited<ReturnType<typeof getBlocks>>>
+export type GetBlocksQueryError = ErrorType<void>
+
+
+/**
+ * @summary List users the authenticated user has blocked
+ */
+
+export function useGetBlocks<TData = Awaited<ReturnType<typeof getBlocks>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBlocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBlocksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getBlockUserUrl = () => {
+
+
+
+
+  return `/api/blocks`
+}
+
+/**
+ * @summary Block a user. Also removes any existing follow relationship between the two people, in either direction (including a still-pending request).
+
+ */
+export const blockUser = async (blockUserBody: BlockUserBody, options?: RequestInit): Promise<BlockUserResponse> => {
+
+  return customFetch<BlockUserResponse>(getBlockUserUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(blockUserBody)
+  }
+);}
+
+
+
+
+export const getBlockUserMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof blockUser>>, TError,{data: BodyType<BlockUserBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof blockUser>>, TError,{data: BodyType<BlockUserBody>}, TContext> => {
+
+const mutationKey = ['blockUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof blockUser>>, {data: BodyType<BlockUserBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  blockUser(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BlockUserMutationResult = NonNullable<Awaited<ReturnType<typeof blockUser>>>
+    export type BlockUserMutationBody = BodyType<BlockUserBody>
+    export type BlockUserMutationError = ErrorType<void>
+
+    /**
+ * @summary Block a user. Also removes any existing follow relationship between the two people, in either direction (including a still-pending request).
+
+ */
+export const useBlockUser = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof blockUser>>, TError,{data: BodyType<BlockUserBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof blockUser>>,
+        TError,
+        {data: BodyType<BlockUserBody>},
+        TContext
+      > => {
+      return useMutation(getBlockUserMutationOptions(options));
+    }
+
+export const getUnblockUserUrl = (userId: string,) => {
+
+
+
+
+  return `/api/blocks/${userId}`
+}
+
+/**
+ * @summary Unblock a user
+ */
+export const unblockUser = async (userId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUnblockUserUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getUnblockUserMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unblockUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unblockUser>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['unblockUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unblockUser>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  unblockUser(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnblockUserMutationResult = NonNullable<Awaited<ReturnType<typeof unblockUser>>>
+
+    export type UnblockUserMutationError = ErrorType<void>
+
+    /**
+ * @summary Unblock a user
+ */
+export const useUnblockUser = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unblockUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unblockUser>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getUnblockUserMutationOptions(options));
+    }
+
+export const getSubmitReportUrl = () => {
+
+
+
+
+  return `/api/reports`
+}
+
+/**
+ * @summary Report a user, optionally about a specific comment. Always saved to the database first; a notification email is best-effort on top of that — there's no in-app moderation queue yet.
+
+ */
+export const submitReport = async (submitReportBody: SubmitReportBody, options?: RequestInit): Promise<SubmitReportResponse> => {
+
+  return customFetch<SubmitReportResponse>(getSubmitReportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(submitReportBody)
+  }
+);}
+
+
+
+
+export const getSubmitReportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitReport>>, TError,{data: BodyType<SubmitReportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitReport>>, TError,{data: BodyType<SubmitReportBody>}, TContext> => {
+
+const mutationKey = ['submitReport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitReport>>, {data: BodyType<SubmitReportBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitReport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitReportMutationResult = NonNullable<Awaited<ReturnType<typeof submitReport>>>
+    export type SubmitReportMutationBody = BodyType<SubmitReportBody>
+    export type SubmitReportMutationError = ErrorType<void>
+
+    /**
+ * @summary Report a user, optionally about a specific comment. Always saved to the database first; a notification email is best-effort on top of that — there's no in-app moderation queue yet.
+
+ */
+export const useSubmitReport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitReport>>, TError,{data: BodyType<SubmitReportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitReport>>,
+        TError,
+        {data: BodyType<SubmitReportBody>},
+        TContext
+      > => {
+      return useMutation(getSubmitReportMutationOptions(options));
     }
 
 export const getGetMyPlaylistsUrl = () => {
@@ -2715,6 +3574,7 @@ export const getSearchPublicPlaylistsUrl = (params?: SearchPublicPlaylistsParams
 }
 
 /**
+ * Filter with `q` (by name), `tmdbId` (playlists containing that film), or `userId` (one user's public playlists — used by the profile screen). Any combination may be passed together. A public playlist owned by a private account is only included for that account's owner or an accepted follower.
  * @summary Search public playlists
  */
 export const searchPublicPlaylists = async (params?: SearchPublicPlaylistsParams, options?: RequestInit): Promise<PlaylistsResponse> => {
@@ -2782,6 +3642,225 @@ export function useSearchPublicPlaylists<TData = Awaited<ReturnType<typeof searc
 
 
 
+
+export const getGetFollowedPlaylistsUrl = () => {
+
+
+
+
+  return `/api/playlists/followed`
+}
+
+/**
+ * Separate from GET /playlists, which is the set of playlists the caller can add films to. A followed playlist is read-only and reflects whatever its owner currently has in it. Playlists that have since been made private, or whose owner has gone private and no longer accepts this follower, are omitted.
+ * @summary Playlists the caller follows but does not own
+ */
+export const getFollowedPlaylists = async ( options?: RequestInit): Promise<PlaylistsResponse> => {
+
+  return customFetch<PlaylistsResponse>(getGetFollowedPlaylistsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFollowedPlaylistsQueryKey = () => {
+    return [
+    `/api/playlists/followed`
+    ] as const;
+    }
+
+
+export const getGetFollowedPlaylistsQueryOptions = <TData = Awaited<ReturnType<typeof getFollowedPlaylists>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFollowedPlaylists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFollowedPlaylistsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFollowedPlaylists>>> = ({ signal }) => getFollowedPlaylists({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFollowedPlaylists>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFollowedPlaylistsQueryResult = NonNullable<Awaited<ReturnType<typeof getFollowedPlaylists>>>
+export type GetFollowedPlaylistsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Playlists the caller follows but does not own
+ */
+
+export function useGetFollowedPlaylists<TData = Awaited<ReturnType<typeof getFollowedPlaylists>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFollowedPlaylists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFollowedPlaylistsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getFollowPlaylistUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/follow`
+}
+
+/**
+ * A follow is a reference rather than a copy — the follower always sees the owner's current contents, so the owner's later changes are reflected automatically.
+ * @summary Follow someone else's public playlist
+ */
+export const followPlaylist = async (id: number, options?: RequestInit): Promise<FollowPlaylistResponse> => {
+
+  return customFetch<FollowPlaylistResponse>(getFollowPlaylistUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getFollowPlaylistMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof followPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof followPlaylist>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['followPlaylist'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof followPlaylist>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  followPlaylist(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FollowPlaylistMutationResult = NonNullable<Awaited<ReturnType<typeof followPlaylist>>>
+
+    export type FollowPlaylistMutationError = ErrorType<void>
+
+    /**
+ * @summary Follow someone else's public playlist
+ */
+export const useFollowPlaylist = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof followPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof followPlaylist>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getFollowPlaylistMutationOptions(options));
+    }
+
+export const getUnfollowPlaylistUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/follow`
+}
+
+/**
+ * @summary Stop following a playlist
+ */
+export const unfollowPlaylist = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUnfollowPlaylistUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getUnfollowPlaylistMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unfollowPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unfollowPlaylist>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['unfollowPlaylist'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unfollowPlaylist>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  unfollowPlaylist(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnfollowPlaylistMutationResult = NonNullable<Awaited<ReturnType<typeof unfollowPlaylist>>>
+
+    export type UnfollowPlaylistMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Stop following a playlist
+ */
+export const useUnfollowPlaylist = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unfollowPlaylist>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unfollowPlaylist>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getUnfollowPlaylistMutationOptions(options));
+    }
 
 export const getGetPlaylistUrl = (id: number,) => {
 

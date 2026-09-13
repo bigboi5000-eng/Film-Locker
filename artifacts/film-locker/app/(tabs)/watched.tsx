@@ -21,6 +21,7 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { confirmDestructive } from '@/lib/confirm';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -45,26 +46,20 @@ export default function WatchedScreen() {
 
   const handleDelete = useCallback(
     (id: number) => {
-      Alert.alert('Remove Film', 'Remove this film from your Watched list?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }
-            try {
-              await deleteMovie({ id });
-              await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-            } catch {
-              Alert.alert('Error', 'Could not remove the film.');
-            }
-          },
-        },
-      ]);
+      const title = allMovies.find((m) => m.id === id)?.title ?? 'this film';
+      confirmDestructive(`Would you like to remove "${title}" from your Watched list?`, 'Remove', async () => {
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        try {
+          await deleteMovie({ id });
+          await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+        } catch {
+          Alert.alert('Error', 'Could not remove the film.');
+        }
+      });
     },
-    [deleteMovie, queryClient]
+    [deleteMovie, queryClient, allMovies]
   );
 
   const renderMovie = useCallback(
@@ -89,7 +84,7 @@ export default function WatchedScreen() {
       <View
         style={[
           styles.screenHeader,
-          { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) },
+          { paddingTop: insets.top },
         ]}
       >
         <Text style={styles.screenTitle}>Watched</Text>
