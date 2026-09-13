@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Animated,
+  Linking,
 } from 'react-native';
 import { useToast } from '@/components/ToastProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -279,14 +280,31 @@ export default function WatchlistScreen() {
   // through the same confirmation sheet as a shared link.
   const runImageExtraction = useCallback(async (result: PickResult) => {
     if (!result.ok) {
+      const isCamera = result.source === 'camera';
       if (result.reason === 'permission-denied') {
-        showToast({
-          title: 'Permission needed',
-          subtitle: 'Allow photo access in Settings to identify films from an image.',
-          variant: 'error',
-        });
+        // Naming the right permission matters: this used to say "photo
+        // access" whichever picker had been refused, so someone who had
+        // declined the camera was sent to look for a setting that was
+        // already on. The Settings shortcut is the only action that can
+        // actually fix it — iOS never asks a second time.
+        Alert.alert(
+          isCamera ? 'Camera access needed' : 'Photo access needed',
+          isCamera
+            ? 'Film Locker needs camera access to photograph a poster or listing.'
+            : 'Film Locker needs photo access to read films from an image you pick.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+          ]
+        );
       } else if (result.reason === 'unreadable') {
         showToast({ title: 'Could not read that image', variant: 'error' });
+      } else if (result.reason === 'failed') {
+        showToast({
+          title: isCamera ? 'Could not open the camera' : 'Could not open your photos',
+          subtitle: 'Please try again.',
+          variant: 'error',
+        });
       }
       // 'cancelled' is the user changing their mind — say nothing.
       return;

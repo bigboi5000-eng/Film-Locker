@@ -26,11 +26,14 @@ export interface PickedFilmImage {
 }
 
 /** Reason a pick produced nothing, so the caller can stay quiet or explain. */
-export type PickFailure = 'cancelled' | 'permission-denied' | 'unreadable';
+export type PickFailure = 'cancelled' | 'permission-denied' | 'unreadable' | 'failed';
+
+/** Which of the two pickers was being used, so the caller can name it. */
+export type PickSource = 'camera' | 'library';
 
 export type PickResult =
   | { ok: true; image: PickedFilmImage }
-  | { ok: false; reason: PickFailure };
+  | { ok: false; reason: PickFailure; source: PickSource };
 
 /**
  * Map whatever the picker reports back to a mime type the API accepts.
@@ -55,11 +58,11 @@ function resolveMimeType(asset: ImagePicker.ImagePickerAsset): SupportedMime {
   return 'image/jpeg';
 }
 
-function toResult(response: ImagePicker.ImagePickerResult): PickResult {
-  if (response.canceled) return { ok: false, reason: 'cancelled' };
+function toResult(response: ImagePicker.ImagePickerResult, source: PickSource): PickResult {
+  if (response.canceled) return { ok: false, reason: 'cancelled', source };
 
   const asset = response.assets?.[0];
-  if (!asset?.base64) return { ok: false, reason: 'unreadable' };
+  if (!asset?.base64) return { ok: false, reason: 'unreadable', source };
 
   return { ok: true, image: { base64: asset.base64, mimeType: resolveMimeType(asset) } };
 }
@@ -74,16 +77,35 @@ const SHARED_OPTIONS = {
 
 /** Opens the photo library. */
 export async function pickImageFromLibrary(): Promise<PickResult> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) return { ok: false, reason: 'permission-denied' };
+  try {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return { ok: false, reason: 'permission-denied', source: 'library' };
 
-  return toResult(await ImagePicker.launchImageLibraryAsync(SHARED_OPTIONS));
+    return toResult(await ImagePicker.launchImageLibraryAsync(SHARED_OPTIONS), 'library');
+  } catch (err) {
+    console.error('pickImageFromLibrary failed', err);
+    return { ok: false, reason: 'failed', source: 'library' };
+  }
 }
 
-/** Opens the camera. */
+/**
+ * Opens the camera.
+ *
+ * The try/catch is not decoration. Both of these calls can reject rather than
+ * return — a camera that is unavailable, a permission request made while
+ * another is already in flight — and the caller invokes this as
+ * `void takeFilmPhoto().then(...)`. An unhandled rejection there produces
+ * exactly the symptom reported on iOS: the camera never opens and nothing at
+ * all is shown to explain why.
+ */
 export async function takeFilmPhoto(): Promise<PickResult> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) return { ok: false, reason: 'permission-denied' };
+  try {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) return { ok: false, reason: 'permission-denied', source: 'camera' };
 
-  return toResult(await ImagePicker.launchCameraAsync(SHARED_OPTIONS));
+    return toResult(await ImagePicker.launchCameraAsync(SHARED_OPTIONS), 'camera');
+  } catch (err) {
+    console.error('takeFilmPhoto failed', err);
+    return { ok: false, reason: 'failed', source: 'camera' };
+  }
 }
