@@ -353,6 +353,46 @@ All five variables are session-scoped. Use one terminal window.
 
 Processing takes roughly 10–30 minutes before the build appears in TestFlight.
 
+#### Picking this back up in a new terminal
+
+The five Apple variables and `EXPO_NO_CAPABILITY_SYNC` are session-scoped and
+vanish when the window closes. Keep them in `~/filmlocker-env.sh` — outside
+the repo, because the path points at a private key — and start every session
+with:
+
+```
+source ~/filmlocker-env.sh
+cd ~/Film-Locker
+git pull origin <branch>
+cd artifacts/film-locker
+```
+
+Then whichever of these is needed:
+
+```
+# iOS, for TestFlight and the App Store
+eas build --profile production --platform ios
+eas submit --platform ios --latest
+
+# Android APK, installable directly from the link EAS prints
+eas build --profile preview --platform android
+
+# What was built, and whether it ever reached Apple
+eas build:list --platform ios --limit 3
+```
+
+Android needs none of the environment variables; they are all Apple's.
+
+Two failure modes worth recognising rather than re-diagnosing:
+
+- **It asks to log in to your Apple account.** One of the variables did not
+  take. Check with `echo $EXPO_ASC_KEY_ID` rather than retyping them all.
+- **`submit` appears to hang on "waiting for an available submitter".** It is
+  queued, not stuck, and can sit for a while. Ctrl+C stops only the waiting,
+  not the submission. Confirm it finished on expo.dev under Submissions
+  before assuming it worked — a submission that never completed looks
+  identical to one still queued.
+
 ### 6.6 Before submitting for review
 
 - **Install from TestFlight and actually use it.** This is the first time the
