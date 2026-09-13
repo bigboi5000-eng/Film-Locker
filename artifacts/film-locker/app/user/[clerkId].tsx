@@ -89,7 +89,7 @@ export default function UserProfileScreen() {
     );
   }
 
-  const { user, followStatus, stats, publicPlaylists } = data;
+  const { user, followStatus, followsYou, stats, publicPlaylists } = data;
   const initials = (user.displayInitials || user.username || '??').slice(0, 5).toUpperCase();
 
   return (
@@ -113,8 +113,40 @@ export default function UserProfileScreen() {
           )}
           <View style={styles.usernameRow}>
             <Text style={styles.username}>{user.username ?? 'Unnamed user'}</Text>
-            {user.isPrivate && <Ionicons name="lock-closed" size={14} color="#9CA3AF" style={{ marginLeft: 6 }} />}
           </View>
+
+          {/* Account type, spelled out. A bare padlock told you nothing if you
+              had not already learned what it meant, and nothing at all on a
+              public account. */}
+          <View style={styles.badgeRow}>
+            <Ionicons
+              name={user.isPrivate ? 'lock-closed' : 'earth'}
+              size={12}
+              color="#6B7280"
+            />
+            <Text style={styles.badgeText}>
+              {user.isPrivate ? 'Private account' : 'Public account'}
+            </Text>
+          </View>
+
+          {/* Where the two of you stand. Messaging needs a follow each way, so
+              "Following" on its own is not enough to explain why a
+              conversation is or is not available. */}
+          {followStatus !== 'self' && (
+            <Text style={styles.relationshipText}>
+              {followStatus === 'accepted' && followsYou
+                ? 'Film Pals — you follow each other, so you can message'
+                : followStatus === 'accepted'
+                  ? `You follow ${user.username ?? 'them'}. They need to follow you back before you can message.`
+                  : followStatus === 'pending'
+                    ? 'Follow request sent, waiting for them to accept'
+                    : followsYou
+                      ? `${user.username ?? 'They'} follows you. Follow back to become Film Pals and message.`
+                      : user.isPrivate
+                        ? 'Send a request to follow this account'
+                        : 'Follow to see more and start messaging'}
+            </Text>
+          )}
 
           {followStatus !== 'self' && (
             busy ? (
@@ -223,6 +255,15 @@ const styles = StyleSheet.create({
   avatar: { width: 84, height: 84, borderRadius: 42 },
   avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 28, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  badgeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    marginTop: 6,
+  },
+  badgeText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+  relationshipText: {
+    fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280',
+    textAlign: 'center', marginTop: 10, paddingHorizontal: 24, lineHeight: 18,
+  },
   usernameRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   username: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
 

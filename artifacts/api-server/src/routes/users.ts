@@ -325,12 +325,25 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
   const isSelf = clerkUserId === targetId;
 
   let followStatus: "self" | "none" | "pending" | "accepted" = "self";
+  // The reverse edge matters to the caller now that messaging requires a
+  // mutual follow: without it the app can show that you follow someone but
+  // not why the conversation is unavailable.
+  let followsYou = false;
   if (!isSelf) {
-    const [edge] = await db
-      .select({ status: followsTable.status })
-      .from(followsTable)
-      .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, targetId)));
+    const [[edge], [reverseEdge]] = await Promise.all([
+      db
+        .select({ status: followsTable.status })
+        .from(followsTable)
+        .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, targetId))),
+      db
+        .select({ status: followsTable.status })
+        .from(followsTable)
+        .where(and(eq(followsTable.followerId, targetId), eq(followsTable.followeeId, clerkUserId))),
+    ]);
     followStatus = edge ? (edge.status as "pending" | "accepted") : "none";
+    // A pending request the other way is not a follow yet, so it does not
+    // count — only an accepted one puts them on the way to being Film Pals.
+    followsYou = reverseEdge?.status === "accepted";
   }
 
   const canViewDetails = isSelf || !target.isPrivate || followStatus === "accepted";
@@ -376,6 +389,7 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
   res.json({
     user: target,
     followStatus,
+    followsYou,
     stats: {
       watchedCount: watchedRow.value,
       reviewCount: reviewRow.value,

@@ -961,6 +961,7 @@ export const GetUserProfileResponse = zod.object({
   "avatarUrl": zod.string().nullish()
 }).describe('Another user\'s public profile — never includes their email address.'),
   "followStatus": zod.enum(['self', 'none', 'pending', 'accepted']).describe('The caller\'s relationship to this profile — \"self\" when viewing your own profile, otherwise the same pending\/accepted states as the rest of the follow system, or \"none\" if not followed at all.\n'),
+  "followsYou": zod.boolean().describe('Whether this person has an accepted follow pointing back at the caller. Combined with followStatus it gives the full picture: both accepted means they are Film Pals, which is the state that permits messaging. Always false when viewing your own profile.\n'),
   "stats": zod.object({
   "watchedCount": zod.number(),
   "reviewCount": zod.number(),

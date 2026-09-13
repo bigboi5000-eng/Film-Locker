@@ -485,6 +485,8 @@ export interface UserProfileResponse {
   user: PublicUserProfile;
   /** The caller's relationship to this profile — "self" when viewing your own profile, otherwise the same pending/accepted states as the rest of the follow system, or "none" if not followed at all. */
   followStatus: UserProfileResponseFollowStatus;
+  /** Whether this person has an accepted follow pointing back at the caller. Combined with followStatus it gives the full picture: both accepted means they are Film Pals, which is the state that permits messaging. Always false when viewing your own profile. */
+  followsYou: boolean;
   stats: UserProfileResponseStats;
   /** Null when the account is private and the caller isn't an accepted follower (and isn't the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them. */
   publicPlaylists: Playlist[] | null;

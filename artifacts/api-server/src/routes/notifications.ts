@@ -235,14 +235,27 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
   );
 });
 
-// ── Shared helper — is there any relationship (either direction follow, or an
-// existing recommendation between the two) that permits messaging? ──────────
+// ── Shared helper — may these two message each other? ───────────────────────
 
+/**
+ * Messaging requires a mutual follow: both people have an accepted row
+ * pointing at the other. This is what the app calls being Film Pals.
+ *
+ * It used to accept a follow in *either* direction, which meant following
+ * someone was enough to start messaging them whether or not they had ever
+ * followed back. That is a one-sided channel into a stranger's inbox, and it
+ * also made the interface incoherent — Film Pals was presented as the thing
+ * that connects two people while conferring no actual permission.
+ *
+ * Two accepted rows are required, and the unique index on
+ * (follower_id, followee_id) is what makes counting them safe: neither
+ * direction can be present twice, so two rows always means one each way.
+ */
 async function canMessage(userA: string, userB: string): Promise<boolean> {
   if (await isBlockedEitherWay(userA, userB)) return false;
 
-  const [followRow] = await db
-    .select({ id: followsTable.id })
+  const rows = await db
+    .select({ followerId: followsTable.followerId })
     .from(followsTable)
     .where(
       and(
@@ -253,7 +266,7 @@ async function canMessage(userA: string, userB: string): Promise<boolean> {
         )
       )
     );
-  return Boolean(followRow);
+  return rows.length === 2;
 }
 
 // ── GET /notifications/thread/:userId ─────────────────────────────────────────
@@ -380,7 +393,7 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
   if (!recipient) { res.status(404).json({ error: "User not found." }); return; }
 
   if (!(await canMessage(clerkUserId, otherUserId))) {
-    res.status(403).json({ error: "You can only message people you follow or who follow you." });
+    res.status(403).json({ error: "You can only message Film Pals — people you follow who follow you back." });
     return;
   }
 

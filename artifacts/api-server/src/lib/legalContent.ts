@@ -46,7 +46,7 @@ export function privacyPolicyHtml(): string {
       <li><strong>Sign-in security records:</strong> Clerk keeps a record of your sign-ins so it can run your session and flag suspicious activity — the device and browser used, the IP address it came from, and when each session started. This is held by Clerk rather than by us, and is used for account security only.</li>
       <li><strong>Your locker:</strong> films you add to your watchlist or mark as watched, and any star ratings you give them.</li>
       <li><strong>Your playlists:</strong> the playlists you create, the films in them, whether each one is public or private, and which other people's playlists you follow.</li>
-      <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, films you recommend to people you follow, and reactions/messages you send them (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
+      <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, films you recommend to people you follow, and reactions/messages exchanged with people you follow each other with (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
       <li><strong>Content you share for lookup:</strong> if you paste a social media link or caption to identify a film, that text (and, where needed, audio or video extracted from the link) is processed to figure out what film you mean. It is not stored beyond what's needed to complete that lookup.</li>
       <li><strong>Photos you choose to identify films from:</strong> if you take a photo or pick an image from your device to find the films in it — a poster, a cinema listing, a screenshot of a post — that image is sent to Google Gemini to be read. We do not store the image: it is held only for as long as the lookup takes, then deleted. Google does not use it to train its models — see the note on Gemini's paid tier below. The app only ever accesses the camera or a photo you specifically select; it never browses your photo library on its own.</li>
       <li><strong>Feedback:</strong> anything you submit through the in-app feedback form, along with the email on your account.</li>
@@ -77,7 +77,15 @@ export function privacyPolicyHtml(): string {
       without approval and see your comments on films. If your account is
       <strong>private</strong>, people need your approval to follow you, and
       only approved followers can see your comments, your public playlists,
-      send you film recommendations, or message you.
+      or send you film recommendations. Your account's setting is shown on
+      your profile, so anyone looking at it can see which applies.
+    </p>
+    <p>
+      <strong>Messaging is separate, and needs to go both ways.</strong> You
+      can only exchange messages with someone once you each follow the other
+      — what the app calls being Film Pals. Following someone who has not
+      followed you back does not let either of you message, on a public
+      account or a private one. Unfollowing ends it in both directions.
     </p>
     <p>
       Anyone who opens your profile can see your username, avatar, and three
@@ -193,8 +201,9 @@ export function termsOfServiceHtml(): string {
     <p>
       You own the comments, ratings, playlists, and messages you post. By
       posting them, you allow Film Locker to display them to other users
-      according to your account's privacy setting and each playlist's own
-      public/private setting, as described in our Privacy Policy. Making a
+      according to your account's privacy setting, each playlist's own
+      public/private setting, and — for messages — the mutual follow they
+      require, as described in our Privacy Policy. Making a
       playlist public allows other people to find it and follow it; if you
       later make it private or delete it, it stops being visible to them.
     </p>
