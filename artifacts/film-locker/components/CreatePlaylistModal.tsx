@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Switch, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Switch, ActivityIndicator,
+  KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { webInputReset } from '@/lib/webInputReset';
 
 export function CreatePlaylistModal({
@@ -29,7 +32,14 @@ export function CreatePlaylistModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={styles.overlay}>
+      {/* The sheet sits at the bottom of the screen and autofocuses its input,
+          so without this the keyboard opens straight over the field you are
+          being asked to type in. Same wrapper and behaviour the other sheets
+          use — padding on iOS, height on Android. */}
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <TouchableOpacity style={styles.backdrop} onPress={handleClose} activeOpacity={1} />
         <View style={styles.sheet}>
           <View style={styles.handle} />
@@ -73,7 +83,7 @@ export function CreatePlaylistModal({
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
