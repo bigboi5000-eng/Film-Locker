@@ -103,6 +103,15 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   res.json(row);
 });
 
+/**
+ * Postgres reports a violated unique constraint as SQLSTATE 23505. Drizzle
+ * passes the driver's error through, so the code is read off the error rather
+ * than matched against its message, which is not stable.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
+}
+
 // ── PUT /users/me ─────────────────────────────────────────────────────────────
 
 router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
@@ -113,11 +122,24 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [row] = await db
-    .update(usersTable)
-    .set(parsed.data)
-    .where(eq(usersTable.clerkId, clerkUserId))
-    .returning();
+  // Usernames are unique, and case-insensitively so. Without this catch a
+  // clash surfaced as an unhandled Postgres error and a 500 with no
+  // explanation — the one failure here a user can actually do something
+  // about, reported as though the server had broken.
+  let row;
+  try {
+    [row] = await db
+      .update(usersTable)
+      .set(parsed.data)
+      .where(eq(usersTable.clerkId, clerkUserId))
+      .returning();
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      res.status(409).json({ error: "That username is already taken." });
+      return;
+    }
+    throw err;
+  }
 
   if (!row) {
     res.status(404).json({ error: "User not found." });

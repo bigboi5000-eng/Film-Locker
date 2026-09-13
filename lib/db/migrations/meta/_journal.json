@@ -71,6 +71,13 @@
       "when": 1788875542682,
       "tag": "0009_kind_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789326444136,
+      "tag": "0010_silly_machine_man",
+      "breakpoints": true
     }
   ]
 }
