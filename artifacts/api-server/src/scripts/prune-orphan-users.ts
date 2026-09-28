@@ -16,7 +16,8 @@
  * plain node runs it and no dev dependency is needed:
  *
  *   node dist/scripts/prune-orphan-users.mjs            # dry run, changes nothing
- *   node dist/scripts/prune-orphan-users.mjs --delete   # actually removes them
+ *   node dist/scripts/prune-orphan-users.mjs --live     # also list the live accounts
+ *   node dist/scripts/prune-orphan-users.mjs --delete   # actually removes the orphans
  */
 import { clerkClient } from "@clerk/express";
 import { db, usersTable } from "@workspace/db";
@@ -39,6 +40,7 @@ async function existsInClerk(clerkId: string): Promise<boolean> {
 
 async function main() {
   const reallyDelete = process.argv.includes("--delete");
+  const showLive = process.argv.includes("--live");
 
   const users = await db
     .select({ clerkId: usersTable.clerkId, username: usersTable.username, email: usersTable.email })
@@ -47,8 +49,20 @@ async function main() {
   console.log(`Checking ${users.length} user row(s) against Clerk…\n`);
 
   const orphans: typeof users = [];
+  const live: typeof users = [];
   for (const user of users) {
-    if (!(await existsInClerk(user.clerkId))) orphans.push(user);
+    if (await existsInClerk(user.clerkId)) live.push(user);
+    else orphans.push(user);
+  }
+
+  console.log(`${live.length} live, ${orphans.length} orphaned.\n`);
+
+  if (showLive) {
+    console.log(`Live accounts (${live.length}):\n`);
+    for (const u of live) {
+      console.log(`  ${u.username ?? "(no username)"}  ${u.email}  ${u.clerkId}`);
+    }
+    console.log("");
   }
 
   if (orphans.length === 0) {
@@ -56,7 +70,7 @@ async function main() {
     return;
   }
 
-  console.log(`Found ${orphans.length} row(s) with no Clerk identity:\n`);
+  console.log(`Rows with no Clerk identity (${orphans.length}):\n`);
   for (const o of orphans) {
     console.log(`  ${o.username ?? "(no username)"}  ${o.email}  ${o.clerkId}`);
   }
