@@ -3,19 +3,40 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * One-off maintenance scripts, built alongside the server.
+ *
+ * They are written in TypeScript and were runnable only through tsx, which
+ * is a dev dependency and so absent from the production image — the one
+ * place several of them need to run, since that is where DATABASE_URL and
+ * CLERK_SECRET_KEY are. Bundling them here means they can be run with plain
+ * node, e.g.
+ *
+ *   node dist/scripts/prune-orphan-users.mjs
+ */
+async function scriptEntryPoints() {
+  const dir = path.resolve(artifactDir, "src/scripts");
+  try {
+    const names = await readdir(dir);
+    return names.filter((n) => n.endsWith(".ts")).map((n) => path.join(dir, n));
+  } catch {
+    return [];
+  }
+}
+
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: [path.resolve(artifactDir, "src/index.ts"), ...(await scriptEntryPoints())],
     platform: "node",
     bundle: true,
     format: "esm",

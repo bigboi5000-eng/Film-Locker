@@ -11,11 +11,12 @@
  * There is no webhook from Clerk, so nothing notices. This script is the
  * reconciliation.
  *
- * Dry run by default — prints what it would remove and changes nothing:
- *   pnpm --filter @workspace/api-server exec tsx src/scripts/prune-orphan-users.ts
+ * Run it where DATABASE_URL and CLERK_SECRET_KEY are set, which means the
+ * deployed container rather than a laptop. It is bundled by the build, so
+ * plain node runs it and no dev dependency is needed:
  *
- * Add --delete to actually remove them:
- *   pnpm --filter @workspace/api-server exec tsx src/scripts/prune-orphan-users.ts --delete
+ *   node dist/scripts/prune-orphan-users.mjs            # dry run, changes nothing
+ *   node dist/scripts/prune-orphan-users.mjs --delete   # actually removes them
  */
 import { clerkClient } from "@clerk/express";
 import { db, usersTable } from "@workspace/db";
