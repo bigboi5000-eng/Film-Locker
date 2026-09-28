@@ -20,6 +20,7 @@ import {
 import { UpdatePushTokenBody, ListMoviesResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
+import { deleteUserData } from "../lib/deleteUserData";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -167,53 +168,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
 router.delete("/users/me", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
 
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(conversationMessagesTable)
-      .where(
-        or(
-          eq(conversationMessagesTable.fromUserId, clerkUserId),
-          eq(conversationMessagesTable.toUserId, clerkUserId)
-        )
-      );
-    await tx
-      .delete(filmNotificationsTable)
-      .where(
-        or(
-          eq(filmNotificationsTable.fromUserId, clerkUserId),
-          eq(filmNotificationsTable.toUserId, clerkUserId)
-        )
-      );
-    await tx
-      .delete(followsTable)
-      .where(
-        or(
-          eq(followsTable.followerId, clerkUserId),
-          eq(followsTable.followeeId, clerkUserId)
-        )
-      );
-    await tx
-      .delete(blocksTable)
-      .where(
-        or(
-          eq(blocksTable.blockerId, clerkUserId),
-          eq(blocksTable.blockedId, clerkUserId)
-        )
-      );
-    // Reports you filed are yours to delete. Reports filed about you are
-    // retained as a safety record — deleting your account shouldn't erase
-    // evidence someone else submitted about your conduct.
-    await tx.delete(reportsTable).where(eq(reportsTable.reporterId, clerkUserId));
-    // Follows of other people's playlists. Follows OF this user's playlists
-    // go with the playlists themselves, which cascade on delete below.
-    await tx.delete(playlistFollowsTable).where(eq(playlistFollowsTable.userId, clerkUserId));
-    await tx.delete(filmCommentsTable).where(eq(filmCommentsTable.userId, clerkUserId));
-    await tx.delete(filmCommunityRatingsTable).where(eq(filmCommunityRatingsTable.userId, clerkUserId));
-    await tx.delete(playlistsTable).where(eq(playlistsTable.userId, clerkUserId));
-    await tx.delete(feedbackTable).where(eq(feedbackTable.userId, clerkUserId));
-    await tx.delete(moviesTable).where(eq(moviesTable.clerkUserId, clerkUserId));
-    await tx.delete(usersTable).where(eq(usersTable.clerkId, clerkUserId));
-  });
+  await deleteUserData(clerkUserId);
 
   // Delete the Clerk identity here rather than from the app.
   //
