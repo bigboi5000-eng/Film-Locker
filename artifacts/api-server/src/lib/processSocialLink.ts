@@ -21,6 +21,15 @@
  *        walls keep much of it out) — step 1 below regularly finds nothing
  *        for Instagram posts that this step picks up directly from the page.
  *
+ *   0.75. Preview image (previewImageExtractor.ts):
+ *        The post's og:image — a reel's cover frame — read by the same
+ *        extractor the in-app camera uses. This is the only part of an
+ *        Instagram post's content the platform will serve this server: the
+ *        HTML holds no og:video, no mp4 URL and no comments, and yt-dlp is
+ *        refused the media, but the cover image is on their CDN behind a
+ *        plain signed URL. On a film account it is usually a still from the
+ *        film, often with the title over it.
+ *
  *   1. Gemini + Google Search grounding (skipped for Instagram and TikTok):
  *        Gemini searches Google to find out what the URL is about, then
  *        identifies any films referenced. Fallback for content the direct
@@ -58,6 +67,7 @@
  *
  * The `source` field tells the UI how movies were found:
  *   "caption"   — search query or Gemini URL analysis found something
+ *   "image"     — the post's preview image, read by Gemini
  *   "audio"     — yt-dlp + Gemini native audio understanding
  *   "video"     — yt-dlp + Gemini native video understanding (on-screen text)
  *   "none"      — all steps returned empty
@@ -65,6 +75,7 @@
 
 import { unlinkSync } from "node:fs";
 import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
+import { extractMoviesFromPreviewImage } from "./previewImageExtractor";
 import { isPubliclyFetchableUrl } from "./safeUrl";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import {
@@ -79,7 +90,7 @@ import {
   type PipelineResult,
 } from "./moviePipeline";
 
-export type SocialLinkSource = "caption" | "audio" | "video" | "none";
+export type SocialLinkSource = "caption" | "image" | "audio" | "video" | "none";
 
 export interface ProcessSocialLinkResult extends PipelineResult {
   source: SocialLinkSource;
@@ -342,6 +353,33 @@ export async function processSocialLink(
     }
   } else {
     warn?.({ url }, "processSocialLink: page caption scrape found nothing — falling back");
+  }
+
+  // ── Step 0.75: the post's preview image ──────────────────────────────────
+  // The cover frame, via og:image. For Instagram this is the only piece of
+  // the post's actual content the platform will serve this server: a reel's
+  // HTML carries no og:video, no mp4 URL anywhere in it, and no comments,
+  // while yt-dlp is refused the media outright — but the cover image sits on
+  // their CDN behind a plain signed URL that an ordinary GET fetches fine.
+  //
+  // On a film account that frame is usually a still from the film, often
+  // with the title set over it, and the image extractor reads both. It runs
+  // before the downloads because it is cheaper than either and, on the
+  // platform that needs it most, the downloads cannot succeed at all.
+  try {
+    const preview = await timed("preview-image", warn, () => extractMoviesFromPreviewImage(url));
+    if (preview && preview.movies.length > 0) {
+      warn?.({ url, matchCount: preview.movies.length }, "processSocialLink: preview image found films");
+      const { matches, saved, listTitle } =
+        await enrichAndSaveMatches(preview.movies, warn, dryRun, clerkUserId, preview.list_title);
+      if (matches.length > 0) {
+        discardAudioDownload();
+        return { source: "image", text: null, matches, saved, listTitle };
+      }
+    }
+    warn?.({ url }, "processSocialLink: preview image found no films — falling back");
+  } catch (err) {
+    warn?.({ url, err }, "processSocialLink: preview image extraction failed — falling back");
   }
 
   // ── Step 1: Gemini + Google Search grounding (skipped for Instagram/TikTok) ─
