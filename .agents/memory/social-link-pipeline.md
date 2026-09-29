@@ -18,17 +18,22 @@ Temp files created by yt-dlp must be cleaned up in two places:
 1. In `downloadAudio`'s catch block (partial file yt-dlp may have written before failing).
 2. In `extractMoviesFromAudio`'s finally block (successful download; local temp file AND the Gemini-hosted upload are both deleted).
 
-## Caption/URL analysis (PRIMARY approach)
+## Caption/URL analysis
 
-**Gemini + Google Search grounding, not platform-specific scrapers.** `geminiUrlAnalyzer.ts` hands the raw URL to Gemini with search grounding enabled — it looks up what the URL is about and extracts film references directly. Works uniformly for Instagram, TikTok, YouTube, Facebook, or anything else Google has indexed, with no per-platform HTML scraping and no RapidAPI key.
+**Direct page scrape first, Gemini search-grounding for non-Instagram only, Gemini content-understanding as the real fallback.**
 
-**2025-11: removed the Instagram/TikTok scraper (`socialScraper.ts`) and its `POST /movies/debug-social-link` debug route.** `fetchSocialCaption` (its only production-facing export) was never called from `processSocialLink.ts` — the Gemini-grounding step above made it dead code. The RapidAPI waterfall it fell back to was also unreliable (endpoints under maintenance, aggressive rate limits) and cost money per call. Do not re-add a platform-specific scraper as the primary path — extend `geminiUrlAnalyzer.ts` instead.
+**2025-11: removed the RapidAPI-backed Instagram/TikTok scraper (`socialScraper.ts`) and its `POST /movies/debug-social-link` debug route**, in favour of `geminiUrlAnalyzer.ts` (Gemini + Google Search grounding) as the sole primary path. Do not bring RapidAPI back — per the person building this, it never reliably worked even as a backup tier in the old scraper, on top of costing money per call and having endpoints go under maintenance.
+
+**2026-08: Gemini search-grounding turned out to be unreliable specifically for Instagram** — Google's index of Instagram is sparse (login walls keep most of it out), so `analyzeUrlForFilms()` regularly found nothing, and when it couldn't verify a match it sometimes substituted plausible-sounding content from the creator's other posts instead of reporting nothing (fixed with a FOUND/NOT_FOUND verification prefix in the prompt, but the underlying index gap remains). Fix: added `pageCaptionScraper.ts` — a free HTTP GET for the page's `og:description` meta tag — as a step *before* Gemini search-grounding, and **`processSocialLink.ts` now skips the Gemini search-grounding step entirely for Instagram URLs**, falling straight through to the audio/video steps instead.
+
+**Guiding principle: Gemini's job is to understand content it's actually been given (a scraped caption, or downloaded audio/video), not to search the web trying to find the URL.** Search-grounding-by-URL is a guessing game for any platform Google doesn't index well; keep it only where it's actually earning its keep (currently: YouTube, TikTok, Facebook, generic URLs). If those start showing the same guessing failure mode, exclude them here the same way Instagram was excluded — don't reach for a platform-specific scraper or paid API as the fix.
 
 ## Architecture
-- `geminiUrlAnalyzer.ts` — Gemini + Google Search grounding, primary path for any URL
-- `audioExtractor.ts` — yt-dlp binary (system Nix package, confirmed working) + Gemini native audio, fallback path
+- `pageCaptionScraper.ts` — free direct HTML `og:description` scrape, tried first, no API cost. `detectPlatform()`/`Platform` are exported for reuse (e.g. by `processSocialLink.ts` to decide whether to skip Gemini search-grounding).
+- `geminiUrlAnalyzer.ts` — Gemini + Google Search grounding. Skipped for Instagram (see above); still primary fallback for other platforms after the caption scrape comes up empty.
+- `audioExtractor.ts` / `videoExtractor.ts` — yt-dlp binary (system Nix package, confirmed working) + Gemini native audio/video understanding. This is the real "Gemini understands the content" path — it's handed actual downloaded media, not asked to search for a URL.
 - `moviePipeline.ts` — shared Gemini→TMDB→DB logic
-- `processSocialLink.ts` — orchestrator: search-query fast path → Gemini URL analysis → audio fallback → pipeline
+- `processSocialLink.ts` — orchestrator: mixed-text/search-query fast path → direct caption scrape → Gemini URL search-grounding (non-Instagram only) → audio fallback → video fallback → pipeline
 
 ## Secrets & tooling
 - `GEMINI_API_KEY` — Gemini 2.5 Flash for both URL grounding and native audio extraction

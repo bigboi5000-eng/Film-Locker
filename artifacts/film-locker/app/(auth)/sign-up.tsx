@@ -9,12 +9,34 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Linking,
 } from 'react-native';
-import { useSignUp, useSSO, useAuth } from '@clerk/expo';
+import { useSignUp } from '@clerk/expo';
+// useSSO comes from the experimental entry point deliberately. The rest of
+// this screen uses Clerk's Core 3 ("future") API — signIn.password(),
+// signIn.finalize(), signIn.mfa — and the non-experimental useSSO is built on
+// the legacy resources instead. Clerk's own source says as much: "For Core 3
+// custom flows, use the experimental useSSO() hook from
+// '@clerk/expo/experimental'. It uses future auth resources and activates
+// completed sessions automatically."
+//
+// The difference that matters is what happens for a Google account that has
+// no Clerk user yet. Both versions transfer the sign-in attempt to a sign-up,
+// but the experimental one re-reads the verification straight off the client
+// after the OAuth callback and finalizes the resulting session itself,
+// instead of relying on a legacy resource kept in step with a future-mode
+// client.
+import { useSSO } from '@clerk/expo/experimental';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { webInputReset } from '@/lib/webInputReset';
+import { useToast } from '@/components/ToastProvider';
+import { SHOW_APPLE_SIGN_IN } from '@/lib/appleSignIn';
+import { getOAuthRedirectUrl } from '@/lib/oauthRedirect';
+import { clerkErrorMessage } from '@/lib/clerkErrors';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legalLinks';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,9 +51,9 @@ function useWarmUpBrowser() {
 export default function SignUpScreen() {
   useWarmUpBrowser();
   const router = useRouter();
-  const { isSignedIn } = useAuth();
   const { signUp, errors, fetchStatus } = useSignUp();
   const { startSSOFlow } = useSSO();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,7 +61,12 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
 
-  if (isSignedIn) return null;
+  // Deliberately no `if (isSignedIn) return null` here. That guard existed to
+  // avoid flashing the form while a redirect was in flight, but isSignedIn
+  // does not reliably flip on sign-out — so after signing out it rendered an
+  // empty screen instead of the form the user had just been sent to.
+  // Rendering the form to someone whose session is already gone is correct;
+  // rendering nothing never is.
 
   const handleSignUp = async () => {
     const { error } = await signUp.password({ emailAddress: email, password });
@@ -53,7 +80,7 @@ export default function SignUpScreen() {
       await signUp.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) return;
-          router.replace('/(tabs)');
+          router.replace('/welcome');
         },
       });
     }
@@ -62,25 +89,42 @@ export default function SignUpScreen() {
   const handleOAuth = useCallback(async (strategy: 'oauth_google' | 'oauth_apple') => {
     setOauthLoading(strategy === 'oauth_google' ? 'google' : 'apple');
     try {
-      const { createdSessionId, setActive } = await startSSOFlow({
+      // An explicit path makes the redirect URI more specific — Android's
+      // Custom Tabs sometimes report a false "dismiss" for a bare scheme
+      // redirect even after the OAuth provider actually completed. The URL
+      // itself lives in one place because it also has to be allowlisted in
+      // the Clerk Dashboard; see lib/oauthRedirect.ts.
+      // The experimental hook activates the session itself (it calls
+      // finalize internally), so there is no setActive to call here — a
+      // non-null createdSessionId means we are already signed in.
+      const { createdSessionId } = await startSSOFlow({
         strategy,
-        redirectUrl: AuthSession.makeRedirectUri(),
+        redirectUrl: getOAuthRedirectUrl(),
       });
       if (createdSessionId) {
-        await setActive!({
-          session: createdSessionId,
-          navigate: async ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace('/(tabs)');
-          },
+        router.replace('/welcome');
+      } else {
+        showToast({
+          title: 'Sign-in did not complete',
+          subtitle: 'Please try again.',
+          variant: 'error',
         });
       }
     } catch (err) {
+      // Show Clerk's own reason rather than a generic retry prompt: the
+      // failures that actually happen here are configuration problems
+      // (an un-allowlisted redirect URL, a provider not enabled on this
+      // instance), and "Please try again" is wrong advice for all of them.
       console.error('OAuth error:', err);
+      showToast({
+        title: 'Sign-in failed',
+        subtitle: clerkErrorMessage(err) ?? 'Please try again.',
+        variant: 'error',
+      });
     } finally {
       setOauthLoading(null);
     }
-  }, [startSSOFlow, router]);
+  }, [startSSOFlow, router, showToast]);
 
   // Email verification step
   if (
@@ -91,10 +135,7 @@ export default function SignUpScreen() {
     return (
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.inner}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandDot} />
-            <Text style={styles.logo}>FILM LOCKER</Text>
-          </View>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Verify your email</Text>
           <Text style={styles.subtitle}>We sent a code to {email}</Text>
 
@@ -139,10 +180,7 @@ export default function SignUpScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
           {/* Branding */}
-          <View style={styles.brandRow}>
-            <View style={styles.brandDot} />
-            <Text style={styles.logo}>FILM LOCKER</Text>
-          </View>
+          <Image source={require('@/assets/images/HEADER TRANS.png')} style={styles.logoImage} contentFit="contain" />
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>Start building your personal film collection</Text>
 
@@ -219,7 +257,7 @@ export default function SignUpScreen() {
           </TouchableOpacity>
 
           {/* Apple — iOS only */}
-          {Platform.OS === 'ios' && (
+          {SHOW_APPLE_SIGN_IN && (
             <TouchableOpacity
               style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && styles.btnDisabled]}
               onPress={() => handleOAuth('oauth_apple')}
@@ -243,6 +281,19 @@ export default function SignUpScreen() {
             </Link>
           </View>
 
+          {/* Legal */}
+          <Text style={styles.legalText}>
+            By creating an account you agree to our{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+              Privacy Policy
+            </Text>
+            .
+          </Text>
+
           {/* Required for Clerk bot protection */}
           <View nativeID="clerk-captcha" />
         </View>
@@ -255,9 +306,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { flexGrow: 1, justifyContent: 'center' },
   inner: { paddingHorizontal: 24, paddingVertical: 48 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 32 },
-  brandDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#0066FF' },
-  logo: { fontSize: 18, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
+  logoImage: { width: 200, height: 85, marginBottom: 24, alignSelf: 'flex-start' },
   title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 6 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 28 },
   label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151', marginBottom: 6 },
@@ -272,6 +321,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     marginBottom: 14,
+    ...webInputReset,
   },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 46 },
@@ -309,4 +359,9 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
   linkRow: { alignItems: 'center', paddingVertical: 8 },
   mutedText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
+  legalText: {
+    fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF',
+    textAlign: 'center', marginTop: 16, lineHeight: 18,
+  },
+  legalLink: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
 });

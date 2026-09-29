@@ -19,6 +19,8 @@ export interface FilterState {
   actor?: string;
   language?: string;
   streaming?: string;
+  /** One of LENGTH_BUCKETS' labels — a band, not an exact runtime. */
+  length?: string;
 }
 
 /** Minimal shape that both Movie and TmdbMovieCard satisfy after adding genres. */
@@ -28,6 +30,33 @@ export interface FilterableMovie {
   cast?: string[];
   language?: string;
   watchProviders?: Array<{ provider_name: string }>;
+  /** Minutes; null/undefined when TMDB has no runtime or enrichment is pending. */
+  runtime?: number | null;
+}
+
+/**
+ * Length is banded rather than listed, because every other filter picks from
+ * values that repeat across films — a director or a genre — whereas runtimes
+ * are near-unique. A dropdown of "127 min", "128 min", "131 min" would be
+ * useless; what people actually want to ask is "have I got time for this
+ * tonight?"
+ *
+ * Bounds are inclusive at both ends and must not overlap.
+ */
+export const LENGTH_BUCKETS: Array<{ label: string; min: number; max: number }> = [
+  { label: 'Under 90 min', min: 1, max: 89 },
+  { label: '90 min – 2 hr', min: 90, max: 120 },
+  { label: '2 – 2½ hr', min: 121, max: 150 },
+  { label: 'Over 2½ hr', min: 151, max: Infinity },
+];
+
+function matchesLengthBucket(runtime: number | null | undefined, label: string): boolean {
+  // Unknown length is excluded rather than swept into the shortest band —
+  // a film we have no runtime for is not evidence of a short film.
+  if (typeof runtime !== 'number' || runtime <= 0) return false;
+  const bucket = LENGTH_BUCKETS.find((b) => b.label === label);
+  if (!bucket) return false;
+  return runtime >= bucket.min && runtime <= bucket.max;
 }
 
 interface FilterBarProps {
@@ -44,9 +73,10 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   actor: 'Actor',
   language: 'Language',
   streaming: 'Streaming',
+  length: 'Length',
 };
 
-const FILTER_KEYS: FilterKey[] = ['genre', 'director', 'actor', 'language', 'streaming'];
+const FILTER_KEYS: FilterKey[] = ['genre', 'length', 'director', 'actor', 'language', 'streaming'];
 
 /** Apply all active filters to a movie list. */
 export function applyFilters<T extends FilterableMovie>(movies: T[], filters: FilterState): T[] {
@@ -60,6 +90,7 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     if (filters.language && m.language !== filters.language) return false;
     if (filters.streaming && !providers.some((p) => p.provider_name === filters.streaming))
       return false;
+    if (filters.length && !matchesLengthBucket(m.runtime, filters.length)) return false;
     return true;
   });
 }
@@ -77,6 +108,15 @@ function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
     else if (key === 'language') m.language && values.add(m.language);
     else if (key === 'streaming')
       providers.forEach((p) => p.provider_name && values.add(p.provider_name));
+    else if (key === 'length') {
+      const bucket = LENGTH_BUCKETS.find((b) => matchesLengthBucket(m.runtime, b.label));
+      if (bucket) values.add(bucket.label);
+    }
+  }
+  // Bands have a natural order that alphabetical sorting would destroy
+  // ("2 – 2½ hr" before "Under 90 min"), so keep them in the declared order.
+  if (key === 'length') {
+    return LENGTH_BUCKETS.filter((b) => values.has(b.label)).map((b) => b.label);
   }
   return Array.from(values).sort();
 }

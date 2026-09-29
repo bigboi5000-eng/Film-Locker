@@ -12,6 +12,8 @@
 import type { GoogleGenAI } from "@google/genai";
 import { Type } from "@google/genai";
 import type { GeminiExtractionResult, GeminiMovieMatch } from "./geminiParser";
+import { GEMINI_MODEL } from "./geminiModel";
+import { withGeminiRetry } from "./geminiRetry";
 
 export const MEDIA_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -82,15 +84,23 @@ export async function uploadAndAnalyzeMedia(
     // State transitions: PROCESSING → ACTIVE | FAILED
     {
       const MAX_WAIT_MS = 90_000;
-      const POLL_INTERVAL_MS = 2_000;
+      // Short social clips (the only thing this ever processes) typically
+      // reach ACTIVE well under 2s — poll faster to catch that sooner
+      // instead of averaging an extra ~1s of dead wait per request.
+      const POLL_INTERVAL_MS = 1_000;
       const deadline = Date.now() + MAX_WAIT_MS;
 
       let fileState = uploadedFile.state ?? "PROCESSING";
 
+      // Re-check before sleeping, not after. Sleeping first charged every
+      // single extraction a full poll interval even when the file was
+      // already ACTIVE by the time the upload call returned — which for the
+      // short clips this handles is the common case, not the exception.
       while (fileState === "PROCESSING" && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         const refreshed = await ai.files.get({ name: uploadedFileName! });
         fileState = (refreshed.state as string) ?? "PROCESSING";
+        if (fileState !== "PROCESSING") break;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
 
       if (fileState === "FAILED") {
@@ -104,23 +114,24 @@ export async function uploadAndAnalyzeMedia(
       // fileState === "ACTIVE" — safe to proceed
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { fileData: { mimeType, fileUri: uploadedFile.uri } },
-            { text: prompt },
-          ],
+    const response = await withGeminiRetry("media", () =>
+    ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { fileData: { mimeType, fileUri: uploadedFile.uri } },
+              { text: prompt },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: MEDIA_RESPONSE_SCHEMA,
+          temperature: 0,
         },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: MEDIA_RESPONSE_SCHEMA,
-        temperature: 0,
-      },
-    });
+      }));
 
     const raw = response.text ?? "{}";
     let parsed: { movies?: GeminiMovieMatch[]; list_title?: string | null };
@@ -156,11 +167,13 @@ export async function uploadAndAnalyzeMedia(
     return { movies: mapped, list_title };
   } finally {
     if (uploadedFileName) {
-      try {
-        await ai.files.delete({ name: uploadedFileName });
-      } catch {
-        // ignore — Gemini garbage-collects orphaned files after 48h anyway
-      }
+      // Not awaited: the caller is a user staring at a spinner, and the
+      // result is already in hand by this point. Gemini garbage-collects
+      // orphaned files after 48h regardless, so the only thing awaiting
+      // buys is a round trip added to every single extraction.
+      void ai.files.delete({ name: uploadedFileName }).catch(() => {
+        // ignore — see above
+      });
     }
   }
 }

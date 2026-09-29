@@ -1,41 +1,56 @@
 import { Router, type IRouter } from "express";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, followsTable, usersTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { isBlockedEitherWay } from "../lib/blocks";
+import { sendPush } from "../lib/push";
 import { z } from "zod";
 
 const router: IRouter = Router();
 
 const FollowBody = z.object({ followeeId: z.string().min(1) });
 
+const PUBLIC_PROFILE_COLUMNS = {
+  clerkId: usersTable.clerkId,
+  username: usersTable.username,
+  displayInitials: usersTable.displayInitials,
+  isPrivate: usersTable.isPrivate,
+  avatarUrl: usersTable.avatarUrl,
+};
+
 // ── GET /follows ──────────────────────────────────────────────────────────────
-// Returns two lists: people I follow, and people who follow me.
+// Four lists: people I actively follow, people who follow me (both accepted
+// only), and the pending follow requests in each direction.
 
 router.get("/follows", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
 
-  const [followingRows, followerRows] = await Promise.all([
+  const [followingRows, followerRows, incomingRequestRows, outgoingRequestRows] = await Promise.all([
     db
-      .select({
-        clerkId: usersTable.clerkId,
-        username: usersTable.username,
-        avatarUrl: usersTable.avatarUrl,
-        email: usersTable.email,
-      })
+      .select(PUBLIC_PROFILE_COLUMNS)
       .from(followsTable)
       .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
-      .where(eq(followsTable.followerId, clerkUserId)),
+      .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.status, "accepted"))),
 
     db
-      .select({
-        clerkId: usersTable.clerkId,
-        username: usersTable.username,
-        avatarUrl: usersTable.avatarUrl,
-        email: usersTable.email,
-      })
+      .select(PUBLIC_PROFILE_COLUMNS)
       .from(followsTable)
       .innerJoin(usersTable, eq(followsTable.followerId, usersTable.clerkId))
-      .where(eq(followsTable.followeeId, clerkUserId)),
+      .where(and(eq(followsTable.followeeId, clerkUserId), eq(followsTable.status, "accepted"))),
+
+    // People who have requested to follow me — awaiting my accept/decline
+    db
+      .select(PUBLIC_PROFILE_COLUMNS)
+      .from(followsTable)
+      .innerJoin(usersTable, eq(followsTable.followerId, usersTable.clerkId))
+      .where(and(eq(followsTable.followeeId, clerkUserId), eq(followsTable.status, "pending"))),
+
+    // People I've requested to follow — awaiting their accept/decline
+    db
+      .select(PUBLIC_PROFILE_COLUMNS)
+      .from(followsTable)
+      .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
+      .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.status, "pending"))),
   ]);
 
   // Build a set of who I follow so the UI can show follow-back state
@@ -47,11 +62,14 @@ router.get("/follows", requireAuth, async (req, res): Promise<void> => {
       ...r,
       iFollowBack: followingIds.has(r.clerkId),
     })),
+    incomingRequests: incomingRequestRows,
+    outgoingRequests: outgoingRequestRows,
   });
 });
 
 // ── POST /follows ─────────────────────────────────────────────────────────────
-// Follow a user.
+// Follow a user. Public accounts are followed immediately; private accounts
+// require the followee to accept via PATCH /follows/:userId/accept.
 
 router.post("/follows", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
@@ -67,9 +85,13 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Verify the target user exists
+  if (await isBlockedEitherWay(clerkUserId, followeeId)) {
+    res.status(403).json({ error: "You can't follow this user." });
+    return;
+  }
+
   const [target] = await db
-    .select({ clerkId: usersTable.clerkId })
+    .select({ clerkId: usersTable.clerkId, isPrivate: usersTable.isPrivate })
     .from(usersTable)
     .where(eq(usersTable.clerkId, followeeId));
 
@@ -78,17 +100,127 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Idempotent — ignore duplicate
-  await db
-    .insert(followsTable)
-    .values({ followerId: clerkUserId, followeeId })
-    .onConflictDoNothing();
+  const status = target.isPrivate ? "pending" : "accepted";
 
-  res.status(201).json({ followerId: clerkUserId, followeeId });
+  // Idempotent, but not a plain no-op on conflict: a request left "pending"
+  // against an account that has since gone public would otherwise stay
+  // pending forever, with the UI stuck on "Requested" and re-tapping Follow
+  // changing nothing — the only escape being cancel-then-follow. So when the
+  // target is public now, an existing row is promoted to "accepted".
+  // A row that is already "accepted" is never demoted back to "pending" when
+  // the target turns private: existing followers keep their access, which is
+  // how going private behaves everywhere else in the app.
+  const insert = db.insert(followsTable).values({ followerId: clerkUserId, followeeId, status });
+
+  const [inserted] = await (status === "accepted"
+    ? insert.onConflictDoUpdate({
+        target: [followsTable.followerId, followsTable.followeeId],
+        set: { status: "accepted" },
+        setWhere: eq(followsTable.status, "pending"),
+      })
+    : insert.onConflictDoNothing()
+  ).returning();
+
+  const row =
+    inserted ??
+    (
+      await db
+        .select()
+        .from(followsTable)
+        .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, followeeId)))
+    )[0];
+
+  // Announce it. Until now a follow request was invisible until the target
+  // happened to open the Film Pals tab and look — there was no push, no badge,
+  // and nothing in the inbox, so in practice people only discovered a pending
+  // request when the same person later sent them a recommendation.
+  //
+  // Gated on `inserted` rather than on `status`, which is what keeps this from
+  // becoming spam. A repeat tap on Follow hits onConflictDoNothing and returns
+  // no row, so no second notification goes out. The one case where `inserted`
+  // is set without a brand-new row is a pending request promoted to accepted
+  // because the target went public, and announcing that is correct: they have
+  // genuinely just become a follower.
+  if (inserted) {
+    const [[sender], [recipient]] = await Promise.all([
+      db
+        .select({ username: usersTable.username })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, clerkUserId)),
+      db
+        .select({ expoPushToken: usersTable.expoPushToken })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, followeeId)),
+    ]);
+
+    const who = sender?.username ?? "Someone";
+    const pending = (row?.status ?? status) === "pending";
+
+    void sendPush({
+      token: recipient?.expoPushToken,
+      title: pending ? "🎬 New Film Pal request" : "🎬 New follower",
+      body: pending
+        ? `${who} has asked to connect with you`
+        : `${who} started following you`,
+      screen: "/(tabs)/notifications",
+    });
+  }
+
+  res.status(201).json({ followerId: clerkUserId, followeeId, status: row?.status ?? status });
+});
+
+// ── PATCH /follows/:userId/accept ─────────────────────────────────────────────
+// Accept an incoming follow request from userId.
+
+router.patch("/follows/:userId/accept", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const followerId = String(req.params.userId ?? "").trim();
+  if (!followerId) { res.status(400).json({ error: "userId path param is required" }); return; }
+
+  const [updated] = await db
+    .update(followsTable)
+    .set({ status: "accepted" })
+    .where(
+      and(
+        eq(followsTable.followerId, followerId),
+        eq(followsTable.followeeId, clerkUserId),
+        eq(followsTable.status, "pending")
+      )
+    )
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "No pending request from this user." });
+    return;
+  }
+
+  res.json({ followerId: updated.followerId, followeeId: updated.followeeId, status: updated.status });
+});
+
+// ── DELETE /follows/:userId/request ───────────────────────────────────────────
+// Decline an incoming pending follow request from userId.
+
+router.delete("/follows/:userId/request", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const followerId = String(req.params.userId ?? "").trim();
+  if (!followerId) { res.status(400).json({ error: "userId path param is required" }); return; }
+
+  await db
+    .delete(followsTable)
+    .where(
+      and(
+        eq(followsTable.followerId, followerId),
+        eq(followsTable.followeeId, clerkUserId),
+        eq(followsTable.status, "pending")
+      )
+    );
+
+  res.status(204).send();
 });
 
 // ── DELETE /follows/:userId ───────────────────────────────────────────────────
-// Unfollow a user.
+// Unfollow a user, or cancel an outgoing follow request you sent them —
+// both are just removing the edge from me to them, regardless of status.
 
 router.delete("/follows/:userId", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;

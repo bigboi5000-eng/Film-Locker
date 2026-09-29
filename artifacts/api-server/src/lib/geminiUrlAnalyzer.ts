@@ -28,7 +28,9 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { GeminiExtractionResult } from "./geminiParser";
+import { GEMINI_MODEL } from "./geminiModel";
 import { extractMoviesWithGemini } from "./geminiParser";
+import { withGeminiRetry } from "./geminiRetry";
 
 let _client: GoogleGenAI | null = null;
 
@@ -74,16 +76,17 @@ async function fetchUrlDescription(url: string): Promise<string | null> {
     `what it's called) versus a single film being discussed.\n` +
     `If NOT_FOUND, write nothing else.`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      // Google Search grounding lets Gemini look up what this URL is about
-      // without us needing to scrape it ourselves.
-      tools: [{ googleSearch: {} }],
-      temperature: 0,
-    },
-  });
+  const response = await withGeminiRetry("url-grounding", () =>
+    ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        // Google Search grounding lets Gemini look up what this URL is about
+        // without us needing to scrape it ourselves.
+        tools: [{ googleSearch: {} }],
+        temperature: 0,
+      },
+    }));
 
   const text = (response.text ?? "").trim();
 

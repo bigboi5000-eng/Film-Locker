@@ -36,6 +36,10 @@ export const moviesTable = pgTable(
     cast: text("cast").array().notNull().default(sql`ARRAY[]::text[]`),
     genres: text("genres").array().notNull().default(sql`ARRAY[]::text[]`),
     language: text("language").notNull().default(""),
+    // Minutes. Nullable rather than defaulted, because "we have not enriched
+    // this row yet" and "TMDB has no runtime for this film" both have to be
+    // distinguishable from a real length — and 0 is not a real length.
+    runtime: integer("runtime"),
     watchProviders: jsonb("watch_providers")
       .$type<WatchProvider[]>()
       .notNull()

@@ -25,6 +25,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { webInputReset } from '@/lib/webInputReset';
 import {
   useGetNotificationUsers,
   getGetNotificationUsersQueryKey,
@@ -91,7 +92,7 @@ export function ShareToFriendSheet({
   }
 
   function UserRow({ user }: { user: NotificationUser }) {
-    const initials = (user.username ?? '?').slice(0, 2).toUpperCase();
+    const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
     const alreadySent = sentTo.has(user.clerkId);
     const sending = sendingTo === user.clerkId;
 
@@ -101,7 +102,7 @@ export function ShareToFriendSheet({
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
+            <Text style={styles.avatarInitials} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
         <Text style={styles.username}>{user.username ?? 'Unknown'}</Text>
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8,
     borderWidth: 1, borderColor: '#E5E7EB',
   },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827' },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827', ...webInputReset },
 
   list: { flex: 1 },
 

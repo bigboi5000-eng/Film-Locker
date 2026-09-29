@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +22,8 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { webInputReset } from '@/lib/webInputReset';
+import { getDeviceRegion } from '@/lib/region';
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -74,10 +75,12 @@ export default function DiscoverScreen() {
   const [filters, setFilters] = useState<FilterState>({});
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
 
+  const region = useMemo(() => getDeviceRegion(), []);
+
   // Fetch data for whichever section we're in
-  const { data: trendingData, isLoading: trendingLoading } = useGetTrending();
-  const { data: newReleasesData, isLoading: newReleasesLoading } = useGetNewReleases();
-  const { data: recommendationsData, isLoading: recommendationsLoading } = useGetRecommendations();
+  const { data: trendingData, isLoading: trendingLoading } = useGetTrending({ region });
+  const { data: newReleasesData, isLoading: newReleasesLoading } = useGetNewReleases({ region });
+  const { data: recommendationsData, isLoading: recommendationsLoading } = useGetRecommendations({ region });
   const { data: lockerData } = useListMovies();
 
   const rawMovies: TmdbMovieCard[] = useMemo(() => {
@@ -129,7 +132,7 @@ export default function DiscoverScreen() {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} hitSlop={12} style={styles.backBtn}>
@@ -285,6 +288,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#111827',
     height: '100%',
+    ...webInputReset,
   },
 
   // Sort chips

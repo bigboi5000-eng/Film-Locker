@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/expo';
 import { useUser } from '@clerk/expo';
 import { setAuthTokenGetter, useGetNotifications, getGetNotificationsQueryKey, useSyncUser } from '@workspace/api-client-react';
@@ -50,6 +51,7 @@ export default function TabLayout() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
   const { mutateAsync: syncUser } = useSyncUser();
+  const insets = useSafeAreaInsets();
 
   // Wire Clerk bearer token into the generated API client for every request
   useEffect(() => {
@@ -62,7 +64,17 @@ export default function TabLayout() {
     const email = user.primaryEmailAddress?.emailAddress;
     if (!email) return;
     syncUser({
-      data: { email, avatarUrl: user.imageUrl ?? null, username: user.username ?? null },
+      // avatarUrl is deliberately always null. Clerk's `imageUrl` is whatever
+      // the social provider supplied, and for an account with no photo Google
+      // returns a generated image of the first letter of the person's name —
+      // so syncing it put a "J" on other people's screens for someone who had
+      // chosen their own initials, and never uploaded a picture at all.
+      //
+      // Sent as an explicit null rather than omitted so that rows already
+      // carrying a provider image are cleared the next time the app opens.
+      // The column stays for a future in-app avatar upload; nothing writes it
+      // for now, so every avatar falls through to the initials.
+      data: { email, avatarUrl: null, username: user.username ?? null },
     }).catch(() => {
       // Non-fatal — best-effort
     });
@@ -90,8 +102,11 @@ export default function TabLayout() {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E5E7EB',
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          // Extra bottom space for the home-indicator/gesture-nav safe
+          // area, so the icons/labels sit above it instead of the
+          // indicator overlapping the tab bar's own bottom padding.
+          height: 60 + insets.bottom,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 6,
         },
         tabBarLabelStyle: {
