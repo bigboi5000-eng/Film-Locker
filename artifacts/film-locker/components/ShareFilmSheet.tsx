@@ -1043,8 +1043,17 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                   <View style={styles.emptyState}>
                     <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
                     <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No film identified</Text>
+                    {/* The old wording here asked for "a post with a visible
+                        film title or caption", which is advice nobody can act
+                        on — you cannot edit someone else's post. A post that
+                        names no film is unreachable from its link alone,
+                        because Instagram will not serve the video to us. A
+                        screenshot goes around that entirely: it is read on
+                        our side from an image the user already has. */}
                     <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                      Try sharing a post with a visible film title or caption.
+                      Some posts only show the film on screen. Screenshot the post,
+                      then use the camera button in the search bar to read the films
+                      out of it.
                     </Text>
                   </View>
                   <ManualFilmSearch />
