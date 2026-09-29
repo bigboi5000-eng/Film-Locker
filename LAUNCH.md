@@ -58,6 +58,35 @@ absorbed before real users existed; it is not a live concern now.
   reshapes the schema and records nothing in the migrations ledger; that is
   how the two fell out of step once already.
 
+## 2.1 Maintenance scripts
+
+They live in `artifacts/api-server/src/scripts`, are bundled by the build,
+and run with plain `node` — no `tsx`, which is a dev dependency and absent
+from the production image. Run them **in the Railway container**, which is
+where `DATABASE_URL`, `CLERK_SECRET_KEY` and the outbound IP that matters
+all are.
+
+```
+cd /app/artifacts/api-server
+
+# Users deleted outside the app. Deleting through the app's own button
+# removes everything; deleting from Clerk's dashboard leaves the row behind,
+# and there is no webhook, so nothing notices.
+node dist/scripts/prune-orphan-users.mjs            # dry run, changes nothing
+node dist/scripts/prune-orphan-users.mjs --live     # also list the live accounts
+node dist/scripts/prune-orphan-users.mjs --delete   # remove the orphans
+
+# What a social page actually serves this IP — meta tags, comment markers,
+# any mp4 URL. Answers "can we get X from Instagram" with evidence.
+node dist/scripts/inspect-instagram.mjs "https://www.instagram.com/reel/XXXX/"
+
+# Backfill genres, runtime and credits for films saved before enrichment.
+node dist/scripts/enrich-all.mjs
+```
+
+A new script placed in that directory is picked up by the build
+automatically; the entry points are read from disk rather than listed.
+
 ## 3. API domain — done
 
 `api.film-locker.com` points at the Railway service, DNS-only in Cloudflare.
