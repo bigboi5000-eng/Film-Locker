@@ -180,6 +180,13 @@ export function termsOfServiceHtml(): string {
     </p>
 
     <h2>Acceptable use</h2>
+    <p>
+      <strong>There is no tolerance for objectionable content or abusive
+      users.</strong> Comments are checked automatically before they are
+      posted, and anything objectionable is refused. Anything reported to us
+      is reviewed within 24 hours; content that breaks these rules is
+      removed and the account that posted it is suspended or deleted.
+    </p>
     <p>You agree not to:</p>
     <ul>
       <li>Harass, impersonate, or abuse other users;</li>
@@ -190,11 +197,10 @@ export function termsOfServiceHtml(): string {
     </ul>
     <p>
       You can block anyone directly from the app, and report a user or a
-      specific comment for us to review. We don't yet have an in-app
-      moderation queue — reports come straight to us — but you can also
-      always reach us at
-      <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>. We may
-      suspend or remove any account that violates these terms.
+      specific comment for us to review. You can delete your own comments at
+      any time, which removes them for everyone immediately. Reports come
+      straight to us rather than to a queue, and you can always reach us at
+      <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.
     </p>
 
     <h2>Your content</h2>

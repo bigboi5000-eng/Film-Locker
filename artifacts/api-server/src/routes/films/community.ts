@@ -17,6 +17,7 @@ import {
   DeleteFilmCommentParams,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
+import { moderateText } from "../../lib/moderateText";
 import { getMutualBlockSet } from "../../lib/blocks";
 
 const router: IRouter = Router();
@@ -235,6 +236,26 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
   }
 
   const { tmdbId } = params.data;
+
+  // Filter before storing, not after reporting. Guideline 1.2 asks for both,
+  // and reporting alone means the objectionable comment is published first
+  // and removed only once somebody has seen it and complained.
+  //
+  // A failure here refuses the comment rather than storing it unchecked: a
+  // filter that silently stops filtering when the model is unreachable is
+  // the hole the guideline exists to close. Asking someone to try again is
+  // recoverable; publishing abuse is not.
+  try {
+    const verdict = await moderateText(body.data.body);
+    if (!verdict.allowed) {
+      res.status(422).json({ error: verdict.reason });
+      return;
+    }
+  } catch (err) {
+    req.log.error({ err }, "comment moderation failed — refusing the comment");
+    res.status(503).json({ error: "We couldn't check that comment just now. Please try again." });
+    return;
+  }
 
   const [inserted] = await db
     .insert(filmCommentsTable)
