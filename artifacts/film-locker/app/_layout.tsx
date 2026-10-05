@@ -135,6 +135,13 @@ function RootLayoutNav() {
         name="welcome"
         options={{ headerShown: false, animation: 'fade', gestureEnabled: false }}
       />
+      {/* Follows the welcome tour. Also not swipeable: there is a Skip
+          button, and a half-dismissed setup screen would leave people
+          unsure whether anything had been saved. */}
+      <Stack.Screen
+        name="account-setup"
+        options={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: false }}
+      />
       <Stack.Screen name="discover/[section]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="inbox/[userId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="people" options={{ headerShown: false, animation: 'slide_from_right' }} />

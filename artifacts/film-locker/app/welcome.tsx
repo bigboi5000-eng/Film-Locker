@@ -372,7 +372,10 @@ export default function WelcomeScreen() {
     if (userId) {
       await AsyncStorage.setItem(WELCOME_SEEN_PREFIX + userId, 'true').catch(() => {});
     }
-    router.replace('/(tabs)');
+    // Into account setup rather than straight to the tabs. It is marked seen
+    // first, so someone who skips setup — or closes the app partway through
+    // it — is not shown the tour again on their next launch.
+    router.replace('/account-setup');
   };
 
   if (!ready) return null;
