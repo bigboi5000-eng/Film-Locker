@@ -21,6 +21,7 @@ import { UpdatePushTokenBody, ListMoviesResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
 import { deleteUserData } from "../lib/deleteUserData";
+import { generateUsername } from "../lib/generateUsername";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -69,13 +70,40 @@ router.post("/users/sync", requireAuth, async (req, res): Promise<void> => {
     })
     .returning();
 
+  // Nobody gets to stay nameless. An account with no username displayed as
+  // "Unnamed user" beside its own comments, which is posting anonymously —
+  // the thing guideline 1.2 rejected the app over. Filling it in here rather
+  // than demanding it through a form means the account is attributable from
+  // its first action, with nothing to skip or dismiss. The user can change
+  // it in Profile; they cannot end up without one.
+  //
+  // Best-effort on purpose: a failure to find a free name must not break
+  // sign-in, and the next sync will try again.
+  let finalRow = row;
+  if (!finalRow.username) {
+    const generated = await generateUsername(email);
+    if (generated) {
+      try {
+        const [updated] = await db
+          .update(usersTable)
+          .set({ username: generated })
+          .where(eq(usersTable.clerkId, clerkUserId))
+          .returning();
+        if (updated) finalRow = updated;
+      } catch (err) {
+        // Lost a race for the same name. Harmless — next sync picks another.
+        req.log.warn({ err, generated }, "sync: generated username was taken");
+      }
+    }
+  }
+
   res.json({
-    clerkId: row.clerkId,
-    email: row.email,
-    username: row.username,
-    displayInitials: row.displayInitials,
-    isPrivate: row.isPrivate,
-    avatarUrl: row.avatarUrl,
+    clerkId: finalRow.clerkId,
+    email: finalRow.email,
+    username: finalRow.username,
+    displayInitials: finalRow.displayInitials,
+    isPrivate: finalRow.isPrivate,
+    avatarUrl: finalRow.avatarUrl,
   });
 });
 
