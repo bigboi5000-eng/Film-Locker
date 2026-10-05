@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { SignedOutGate } from '@/components/SignedOutGate';
+import { useAuth } from '@clerk/expo';
 import {
   View,
   Text,
@@ -26,7 +28,7 @@ import { confirmDestructive } from '@/lib/confirm';
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
 
-export default function WatchedScreen() {
+function WatchedScreenInner() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
@@ -239,3 +241,28 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+
+
+/**
+ * Browsing films needs no account, and guideline 5.1.1(v) requires that it
+ * does not have one. This tab is account based, so it explains itself rather
+ * than redirecting anyone to a sign-in screen.
+ *
+ * The gate sits here, around the screen, rather than inside it: an early
+ * return within the component would run a different number of hooks when
+ * signed out than when signed in, which React does not allow.
+ */
+export default function WatchedScreen() {
+  const { isSignedIn, isLoaded } = useAuth();
+  if (!isLoaded) return null;
+  if (!isSignedIn) {
+    return (
+      <SignedOutGate
+        icon="checkmark-circle-outline"
+        title="Keep track of what you've seen"
+        blurb="Mark films watched, rate them, and build up a record of everything you've been through."
+      />
+    );
+  }
+  return <WatchedScreenInner />;
+}

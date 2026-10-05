@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { SignedOutGate } from '@/components/SignedOutGate';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/expo';
 import {
   View,
   Text,
@@ -21,12 +24,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import {
   useListMovies,
+  getListMoviesQueryKey,
   useDeleteMovie,
   useProcessSocialLink,
   useExtractFromImage,
   useRecommendMovies,
   useSearchMovies,
-  getListMoviesQueryKey,
   getSearchMoviesQueryKey,
   type Movie,
   type TmdbMovieCard,
@@ -178,6 +181,29 @@ interface ModalTarget {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function WatchlistScreen() {
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
+
+  /**
+   * Searching films needs no account; identifying them from a link or photo,
+   * and asking for recommendations, all exist to fill your own locker. A
+   * guest gets told why rather than nothing happening.
+   */
+  const requireAccount = useCallback(
+    (action: string) => {
+      if (isSignedIn) return true;
+      Alert.alert(
+        'Account needed',
+        `Create a free account to ${action}. Searching and browsing films works without one.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Create account', onPress: () => router.push('/(auth)/sign-up') },
+        ]
+      );
+      return false;
+    },
+    [isSignedIn, router]
+  );
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
@@ -210,7 +236,11 @@ export default function WatchlistScreen() {
   const isSearchActive =
     debouncedQuery.length >= 2 && !looksLikeUrl(debouncedQuery) && !looksLikeSentence(debouncedQuery);
 
-  const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies();
+  // The locker is this user's own films — nothing to fetch without an
+  // account, and it would 401 on every render for a guest.
+  const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies(
+    { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
+  );
   const { mutateAsync: deleteMovie } = useDeleteMovie();
   const { mutateAsync: processLink, isPending: isProcessingLink } = useProcessSocialLink();
   const { mutateAsync: extractFromImage, isPending: isExtractingImage } = useExtractFromImage();
@@ -257,6 +287,7 @@ export default function WatchlistScreen() {
   const handleSubmit = useCallback(async () => {
     const trimmed = searchQuery.trim();
     if (!trimmed || !looksLikeUrl(trimmed) || isProcessingLink) return;
+    if (!requireAccount('identify films from a link')) return;
     try {
       const result = await processLink({ data: { url: trimmed, dryRun: true } });
       setSearchQuery('');
@@ -272,7 +303,7 @@ export default function WatchlistScreen() {
     } catch {
       Alert.alert('Error', 'Could not process the link. Please try again.');
     }
-  }, [searchQuery, isProcessingLink, processLink]);
+  }, [searchQuery, isProcessingLink, processLink, requireAccount]);
 
   // Identify films from a photo or screenshot — a poster or listing shot in
   // the wild, or a post whose titles are printed in the image rather than
@@ -334,6 +365,7 @@ export default function WatchlistScreen() {
   }, [extractFromImage, showToast]);
 
   const handlePickImage = useCallback(() => {
+    if (!requireAccount('identify films from a photo')) return;
     Alert.alert(
       'Identify films from an image',
       'Photograph a poster or listing, or pick a screenshot of a post.',
@@ -343,12 +375,13 @@ export default function WatchlistScreen() {
         { text: 'Cancel', style: 'cancel' },
       ]
     );
-  }, [runImageExtraction]);
+  }, [runImageExtraction, requireAccount]);
 
   // AI bar submit — renders as a plain tappable results list (top 5, no
   // Gemini prose) below the bar, the same as a TMDB search result list.
   // Not a chat: one request in, a short list out, nothing conversational.
   const handleAiSubmit = useCallback(async () => {
+    if (!requireAccount('ask for recommendations')) return;
     const trimmed = aiQuery.trim();
     if (!trimmed || isRecommending) return;
     setAiResults([]);
@@ -375,7 +408,7 @@ export default function WatchlistScreen() {
     } catch {
       Alert.alert('Error', 'Could not get a recommendation. Please try again.');
     }
-  }, [aiQuery, isRecommending, recommend, showToast]);
+  }, [aiQuery, isRecommending, recommend, showToast, requireAccount]);
 
   // Grows the AI bar open from the left (flex 0 → 1, sibling toggle button
   // stays fixed-width so the box fills exactly the remaining row space) and
@@ -714,6 +747,17 @@ export default function WatchlistScreen() {
           ))}
         </View>
       ) : (
+        /* Signed out: the search above still works, because searching films
+           is browsing and guideline 5.1.1(v) requires that to need no
+           account. Only the saved list is account based, so only it is
+           replaced. */
+        !isSignedIn ? (
+          <SignedOutGate
+            icon="bookmark-outline"
+            title="Your watchlist lives here"
+            blurb="Search films above without an account. Saving them to a list, rating them and sharing them needs one."
+          />
+        ) : (
         /* WATCHLIST GRID */
         <FlatList<Movie>
           key="watchlist-grid"
@@ -752,6 +796,7 @@ export default function WatchlistScreen() {
             />
           }
         />
+        )
       )}
 
       {/* Film detail modal */}
@@ -978,3 +1023,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

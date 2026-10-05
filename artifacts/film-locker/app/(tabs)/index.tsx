@@ -19,7 +19,9 @@ import {
   useGetTrending,
   useGetNewReleases,
   useGetRecommendations,
+  getGetRecommendationsQueryKey,
   useListMovies,
+  getListMoviesQueryKey,
   useGetMyPlaylists,
   useCreatePlaylist,
   useGetMe,
@@ -111,8 +113,19 @@ export default function HomeScreen() {
 
   const { data: trendingData, isLoading: trendingLoading, refetch: refetchTrending, isRefetching: trendingRefetching } = useGetTrending({ region });
   const { data: newReleasesData, isLoading: newReleasesLoading, refetch: refetchNew, isRefetching: newRefetching } = useGetNewReleases({ region });
-  const { data: lockerData } = useListMovies();
-  const { data: recommendationsData, isLoading: recommendationsLoading, refetch: refetchRecommendations, isRefetching: recommendationsRefetching } = useGetRecommendations({ region });
+  // The locker is the signed-in user's own films, so there is nothing to
+  // fetch without an account. It also decides whether the Recommended
+  // section appears at all, which is why a guest simply does not see it.
+  const { data: lockerData } = useListMovies(
+    { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
+  );
+  // Trending and New Releases are public; recommendations are not — they are
+  // built from your own locker, so there is nothing to ask for without an
+  // account. Disabled rather than left to 401 on every render.
+  const { data: recommendationsData, isLoading: recommendationsLoading, refetch: refetchRecommendations, isRefetching: recommendationsRefetching } = useGetRecommendations(
+    { region },
+    { query: { queryKey: getGetRecommendationsQueryKey({ region }), enabled: Boolean(isSignedIn) } }
+  );
   const { data: playlistsData, refetch: refetchPlaylists, isRefetching: playlistsRefetching } = useGetMyPlaylists({
     query: { queryKey: getGetMyPlaylistsQueryKey(), enabled: Boolean(isSignedIn) },
   });
@@ -133,7 +146,7 @@ export default function HomeScreen() {
   // it carries whatever the social provider supplied, which for an account
   // with no photo is a generated picture of the first letter of the person's
   // name. Initials the user chose, else their username, else a person icon.
-  const { data: profile } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
+  const { data: profile } = useGetMe({ query: { queryKey: getGetMeQueryKey(), enabled: Boolean(isSignedIn) } });
   const displayInitials = profile?.displayInitials || profile?.username || null;
 
   const handleRefresh = useCallback(() => {
@@ -175,18 +188,30 @@ export default function HomeScreen() {
             <Text style={styles.appTitle}>FILM LOCKER</Text>
             <Text style={styles.appSubtitle}>Discover your next favourite film</Text>
           </View>
-          {/* Profile button (was static blue circle) */}
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={() => router.push('/profile')}
-            activeOpacity={0.8}
-          >
-            {displayInitials ? (
-              <Text style={styles.profileInitials}>{displayInitials.slice(0, 5).toUpperCase()}</Text>
-            ) : (
-              <Ionicons name="person" size={18} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
+          {/* Profile, or a way in for someone browsing without an account.
+              There is no profile to open when signed out, so the same
+              control offers sign-in rather than leading somewhere empty. */}
+          {isSignedIn ? (
+            <TouchableOpacity
+              style={styles.profileBtn}
+              onPress={() => router.push('/profile')}
+              activeOpacity={0.8}
+            >
+              {displayInitials ? (
+                <Text style={styles.profileInitials}>{displayInitials.slice(0, 5).toUpperCase()}</Text>
+              ) : (
+                <Ionicons name="person" size={18} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.signInBtn}
+              onPress={() => router.push('/(auth)/sign-in')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.signInBtnText}>Sign in</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Trending */}
@@ -330,6 +355,11 @@ const styles = StyleSheet.create({
   },
   appTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
   appSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 2 },
+  signInBtn: {
+    backgroundColor: '#0066FF', borderRadius: 18,
+    paddingHorizontal: 16, paddingVertical: 9,
+  },
+  signInBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
   profileBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#0066FF', alignItems: 'center', justifyContent: 'center',

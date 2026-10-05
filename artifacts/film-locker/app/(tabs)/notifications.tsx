@@ -1,4 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { SignedOutGate } from '@/components/SignedOutGate';
+import { useAuth } from '@clerk/expo';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, Alert,
@@ -293,7 +295,7 @@ function FilmPalsView() {
   );
 }
 
-export default function NotificationsScreen() {
+function NotificationsScreenInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'inbox' | 'filmPals'>('inbox');
@@ -508,3 +510,28 @@ const styles = StyleSheet.create({
   },
   findBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
 });
+
+
+/**
+ * Browsing films needs no account, and guideline 5.1.1(v) requires that it
+ * does not have one. This tab is account based, so it explains itself rather
+ * than redirecting anyone to a sign-in screen.
+ *
+ * The gate sits here, around the screen, rather than inside it: an early
+ * return within the component would run a different number of hooks when
+ * signed out than when signed in, which React does not allow.
+ */
+export default function NotificationsScreen() {
+  const { isSignedIn, isLoaded } = useAuth();
+  if (!isLoaded) return null;
+  if (!isSignedIn) {
+    return (
+      <SignedOutGate
+        icon="notifications-outline"
+        title="Recommendations from friends"
+        blurb="Follow people, swap film recommendations and message your Film Pals. All of it needs an account."
+      />
+    );
+  }
+  return <NotificationsScreenInner />;
+}

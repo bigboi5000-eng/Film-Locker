@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/expo';
@@ -89,8 +88,18 @@ export default function TabLayout() {
 
   if (!isLoaded) return null;
 
-  // Not signed in → send to auth screens
-  if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
+  // No redirect for signed-out visitors, deliberately.
+  //
+  // This used to send anyone without an account straight to the sign-in
+  // screen, which is what App Store guideline 5.1.1(v) rejected the app
+  // over: an app may not require registration to reach features that are
+  // not account based, and browsing films is not account based.
+  //
+  // The discovery endpoints never needed auth — trending, new releases,
+  // search, film details, community scores and comments are all public — so
+  // the wall was this line alone. The account-based tabs explain themselves
+  // instead, and the actions that genuinely need an account ask at the point
+  // of use.
 
   return (
     <Tabs
