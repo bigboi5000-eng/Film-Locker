@@ -42,6 +42,7 @@ import type {
   GetMovieDetailsParams,
   GetNewReleasesParams,
   GetRecommendationsParams,
+  GetSimilarMovies200,
   GetTrendingParams,
   HealthStatus,
   ListMoviesResponse,
@@ -52,6 +53,7 @@ import type {
   NotificationsResponse,
   PatchRatingBody,
   PatchWatchedBody,
+  PersonResponse,
   Playlist,
   PlaylistWithItems,
   PlaylistsResponse,
@@ -813,6 +815,164 @@ export const useRecommendMovies = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRecommendMoviesMutationOptions(options));
     }
+
+export const getGetSimilarMoviesUrl = (tmdbId: number,) => {
+
+
+
+
+  return `/api/movies/tmdb/${tmdbId}/similar`
+}
+
+/**
+ * @summary Films worth watching next. Built from TMDB's recommendations, which reflect what people who watched this film went on to watch, falling back to keyword and genre similarity when that list is thin.
+
+ */
+export const getSimilarMovies = async (tmdbId: number, options?: RequestInit): Promise<GetSimilarMovies200> => {
+
+  return customFetch<GetSimilarMovies200>(getGetSimilarMoviesUrl(tmdbId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSimilarMoviesQueryKey = (tmdbId: number,) => {
+    return [
+    `/api/movies/tmdb/${tmdbId}/similar`
+    ] as const;
+    }
+
+
+export const getGetSimilarMoviesQueryOptions = <TData = Awaited<ReturnType<typeof getSimilarMovies>>, TError = ErrorType<unknown>>(tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSimilarMovies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSimilarMoviesQueryKey(tmdbId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSimilarMovies>>> = ({ signal }) => getSimilarMovies(tmdbId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tmdbId !== null && tmdbId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSimilarMovies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSimilarMoviesQueryResult = NonNullable<Awaited<ReturnType<typeof getSimilarMovies>>>
+export type GetSimilarMoviesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Films worth watching next. Built from TMDB's recommendations, which reflect what people who watched this film went on to watch, falling back to keyword and genre similarity when that list is thin.
+
+ */
+
+export function useGetSimilarMovies<TData = Awaited<ReturnType<typeof getSimilarMovies>>, TError = ErrorType<unknown>>(
+ tmdbId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSimilarMovies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSimilarMoviesQueryOptions(tmdbId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPersonUrl = (personId: number,) => {
+
+
+
+
+  return `/api/people/${personId}`
+}
+
+/**
+ * @summary A director or actor and their filmography. Both lists are returned: whether someone is a director or an actor is not a property of the person, so the screen leads with whichever the user came looking for.
+
+ */
+export const getPerson = async (personId: number, options?: RequestInit): Promise<PersonResponse> => {
+
+  return customFetch<PersonResponse>(getGetPersonUrl(personId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPersonQueryKey = (personId: number,) => {
+    return [
+    `/api/people/${personId}`
+    ] as const;
+    }
+
+
+export const getGetPersonQueryOptions = <TData = Awaited<ReturnType<typeof getPerson>>, TError = ErrorType<void>>(personId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPersonQueryKey(personId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPerson>>> = ({ signal }) => getPerson(personId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: personId !== null && personId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPersonQueryResult = NonNullable<Awaited<ReturnType<typeof getPerson>>>
+export type GetPersonQueryError = ErrorType<void>
+
+
+/**
+ * @summary A director or actor and their filmography. Both lists are returned: whether someone is a director or an actor is not a property of the person, so the screen leads with whichever the user came looking for.
+
+ */
+
+export function useGetPerson<TData = Awaited<ReturnType<typeof getPerson>>, TError = ErrorType<void>>(
+ personId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPersonQueryOptions(personId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMovieDetailsUrl = (tmdbId: number,
     params?: GetMovieDetailsParams,) => {

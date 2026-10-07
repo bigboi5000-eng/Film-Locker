@@ -72,6 +72,14 @@ export interface TmdbMovieCard {
   runtime?: number | null;
 }
 
+/**
+ * A named person on a film, with the id to open their filmography.
+ */
+export interface PersonRef {
+  id: number;
+  name: string;
+}
+
 export interface TmdbMovieDetailsResponse {
   tmdbId: number;
   title: string;
@@ -88,6 +96,9 @@ export interface TmdbMovieDetailsResponse {
   tmdbVoteCount: number;
   /** Running time in minutes, or null when TMDB has no runtime on record for the film. TMDB reports both null and 0 for unknown; the server normalises 0 to null so clients only handle one case. */
   runtime: number | null;
+  directorRef?: PersonRef;
+  /** The same people as `director` and `cast`, carrying TMDB's person ids so a name can open that person's filmography. Alongside the plain-string fields rather than replacing them, because those are what the movies table stores. */
+  castRefs?: PersonRef[];
 }
 
 /**
@@ -125,12 +136,27 @@ export interface ListMoviesResponse {
   movies: Movie[];
 }
 
+export interface PersonResponse {
+  id: number;
+  name: string;
+  biography: string;
+  profileUrl: string;
+  /** TMDB's known_for_department, e.g. "Directing" or "Acting". */
+  knownFor: string;
+  /** Films they appeared in, newest first. */
+  actedIn: TmdbMovieCard[];
+  /** Films they directed, newest first. Empty for most actors. */
+  directed: TmdbMovieCard[];
+}
+
 export interface AddMovieBody {
   tmdbId: number;
   title: string;
   releaseYear: string;
   posterUrl: string;
   overview: string;
+  /** Add the film straight to the watched list rather than the watchlist. Adding and then patching meant two round trips and a film that was briefly on the wrong one. A film already in the locker is promoted to watched rather than left alone. */
+  isWatched?: boolean;
 }
 
 export interface AiExtractBody {
@@ -676,6 +702,10 @@ export type SearchMoviesParams = {
  * @minLength 1
  */
 q: string;
+};
+
+export type GetSimilarMovies200 = {
+  movies: TmdbMovieCard[];
 };
 
 export type GetMovieDetailsParams = {

@@ -24,7 +24,19 @@ import {
   SearchMoviesResponse,
   GetRecommendationsResponse,
 } from "@workspace/api-zod";
-import { searchTmdb, searchMoviesUI, fetchMovieDetails, fetchTrending, fetchNowPlaying, fetchTmdbRecommendations, enrichCandidates, normalizeRegion, type TmdbCandidate } from "../../lib/tmdb";
+import {
+  searchTmdb,
+  searchMoviesUI,
+  fetchMovieDetails,
+  fetchTrending,
+  fetchNowPlaying,
+  fetchTmdbRecommendations,
+  enrichCandidates,
+  normalizeRegion,
+  fetchSimilarMovies,
+  fetchPersonDetails,
+  type TmdbCandidate,
+} from "../../lib/tmdb";
 import { cached } from "../../lib/cache";
 
 // Trending/new-releases are identical for every user, and each load fans out
@@ -105,6 +117,48 @@ router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB detail fetch failed");
     res.status(502).json({ error: "Could not fetch movie details from TMDB" });
+  }
+});
+
+// GET /movies/tmdb/:tmdbId/similar — films worth watching next
+//
+// Public, like the rest of discovery: browsing needs no account.
+router.get("/movies/tmdb/:tmdbId/similar", async (req, res): Promise<void> => {
+  const params = GetMovieDetailsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  try {
+    const movies = await fetchSimilarMovies(params.data.tmdbId);
+    res.json({ movies });
+  } catch (err) {
+    req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB similar fetch failed");
+    res.status(502).json({ error: "Could not fetch similar films from TMDB" });
+  }
+});
+
+// GET /people/:personId — a director or actor, and everything they have made
+//
+// Returns both filmographies rather than picking one. Whether somebody is
+// "a director" or "an actor" is not a property of the person — plenty are
+// both — so the screen leads with whichever list the user came looking for.
+router.get("/people/:personId", async (req, res): Promise<void> => {
+  const personId = Number(req.params.personId);
+  if (!Number.isInteger(personId) || personId <= 0) {
+    res.status(400).json({ error: "personId must be a positive integer" });
+    return;
+  }
+  try {
+    const person = await fetchPersonDetails(personId);
+    if (!person) {
+      res.status(404).json({ error: "Person not found on TMDB" });
+      return;
+    }
+    res.json(person);
+  } catch (err) {
+    req.log.error({ err, personId }, "TMDB person fetch failed");
+    res.status(502).json({ error: "Could not fetch that person from TMDB" });
   }
 });
 
@@ -225,13 +279,45 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  // isWatched is optional and separate from the columns that describe the
+  // film, so it is pulled out rather than spread blindly into the insert.
+  // It exists so "I've seen this" is one action: adding and then patching
+  // meant two round trips and a film that was briefly on the wrong list.
+  const { isWatched, ...film } = parsed.data;
+
   const [movie] = await db
     .insert(moviesTable)
-    .values({ ...parsed.data, clerkUserId })
+    .values({
+      ...film,
+      clerkUserId,
+      isWatched: isWatched ?? false,
+      watchedAt: isWatched ? new Date() : null,
+    })
     .onConflictDoNothing()
     .returning();
 
   if (!movie) {
+    // Already in the locker. Adding it as watched should still mark it so,
+    // otherwise the button does nothing for a film already on the watchlist
+    // — which is the common case for "I've finally seen this".
+    if (isWatched) {
+      const [promoted] = await db
+        .update(moviesTable)
+        .set({ isWatched: true, watchedAt: new Date() })
+        .where(
+          and(
+            eq(moviesTable.tmdbId, parsed.data.tmdbId),
+            eq(moviesTable.clerkUserId, clerkUserId),
+            eq(moviesTable.isWatched, false)
+          )
+        )
+        .returning();
+      if (promoted) {
+        res.status(200).json(AddMovieResponse.parse(promoted));
+        return;
+      }
+    }
+
     const [existing] = await db
       .select()
       .from(moviesTable)

@@ -217,6 +217,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecommendResponse"
 
+  /movies/tmdb/{tmdbId}/similar:
+    get:
+      operationId: getSimilarMovies
+      tags: [movies]
+      summary: >
+        Films worth watching next. Built from TMDB's recommendations, which
+        reflect what people who watched this film went on to watch, falling
+        back to keyword and genre similarity when that list is thin.
+      parameters:
+        - name: tmdbId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Similar films
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TmdbMovieCard"
+                required:
+                  - movies
+
+  /people/{personId}:
+    get:
+      operationId: getPerson
+      tags: [movies]
+      summary: >
+        A director or actor and their filmography. Both lists are returned:
+        whether someone is a director or an actor is not a property of the
+        person, so the screen leads with whichever the user came looking for.
+      parameters:
+        - name: personId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The person and their films
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonResponse"
+        "404":
+          description: Person not found on TMDB
+
   /movies/tmdb/{tmdbId}:
     get:
       operationId: getMovieDetails
@@ -1420,6 +1473,17 @@ components:
             Running time in minutes, or null when TMDB has no runtime on
             record for the film. TMDB reports both null and 0 for unknown;
             the server normalises 0 to null so clients only handle one case.
+        directorRef:
+          $ref: "#/components/schemas/PersonRef"
+        castRefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonRef"
+          description: >
+            The same people as `director` and `cast`, carrying TMDB's person
+            ids so a name can open that person's filmography. Alongside the
+            plain-string fields rather than replacing them, because those are
+            what the movies table stores.
       required:
         - tmdbId
         - title
@@ -1521,6 +1585,51 @@ components:
       required:
         - movies
 
+    PersonResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        biography:
+          type: string
+        profileUrl:
+          type: string
+        knownFor:
+          type: string
+          description: TMDB's known_for_department, e.g. "Directing" or "Acting".
+        actedIn:
+          type: array
+          items:
+            $ref: "#/components/schemas/TmdbMovieCard"
+          description: Films they appeared in, newest first.
+        directed:
+          type: array
+          items:
+            $ref: "#/components/schemas/TmdbMovieCard"
+          description: Films they directed, newest first. Empty for most actors.
+      required:
+        - id
+        - name
+        - biography
+        - profileUrl
+        - knownFor
+        - actedIn
+        - directed
+
+    PersonRef:
+      type: object
+      description: A named person on a film, with the id to open their filmography.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+        - id
+        - name
+
     AddMovieBody:
       type: object
       properties:
@@ -1534,6 +1643,13 @@ components:
           type: string
         overview:
           type: string
+        isWatched:
+          type: boolean
+          description: >
+            Add the film straight to the watched list rather than the
+            watchlist. Adding and then patching meant two round trips and a
+            film that was briefly on the wrong one. A film already in the
+            locker is promoted to watched rather than left alone.
       required:
         - tmdbId
         - title

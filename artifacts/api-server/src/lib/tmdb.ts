@@ -37,8 +37,14 @@ interface TmdbSearchResponse {
 }
 
 interface TmdbCredits {
-  cast: Array<{ name: string; order: number }>;
-  crew: Array<{ name: string; job: string; department: string }>;
+  cast: Array<{ id: number; name: string; order: number }>;
+  crew: Array<{ id: number; name: string; job: string; department: string }>;
+}
+
+/** A named person on a film, with the id needed to open their filmography. */
+export interface TmdbPersonRef {
+  id: number;
+  name: string;
 }
 
 interface TmdbProviderEntry {
@@ -80,6 +86,14 @@ export interface TmdbCandidate {
   language?: string;
   director?: string;
   cast?: string[];
+  /**
+   * The same director and cast, with TMDB's person ids, so a name on screen
+   * can open that person's filmography. Added alongside the plain-string
+   * fields rather than replacing them: those are what the movies table
+   * stores and what every existing screen reads.
+   */
+  directorRef?: TmdbPersonRef | null;
+  castRefs?: TmdbPersonRef[];
   watchProviders?: WatchProvider[];
   /**
    * Minutes. Absent on TMDB's list responses, so it is only populated by
@@ -400,18 +414,20 @@ async function fetchMovieDetailsUncached(
 
   // Director — first crew member with job "Director"
   let director = "";
+  let directorRef: TmdbPersonRef | null = null;
   if (creditsResult.status === "fulfilled") {
-    director =
-      creditsResult.value.crew.find((c) => c.job === "Director")?.name ?? "";
+    const found = creditsResult.value.crew.find((c) => c.job === "Director");
+    director = found?.name ?? "";
+    directorRef = found ? { id: found.id, name: found.name } : null;
   }
 
   // Top 10 cast members by billing order
   let cast: string[] = [];
+  let castRefs: TmdbPersonRef[] = [];
   if (creditsResult.status === "fulfilled") {
-    cast = creditsResult.value.cast
-      .sort((a, b) => a.order - b.order)
-      .slice(0, 10)
-      .map((c) => c.name);
+    const top = creditsResult.value.cast.sort((a, b) => a.order - b.order).slice(0, 10);
+    cast = top.map((c) => c.name);
+    castRefs = top.map((c) => ({ id: c.id, name: c.name }));
   }
 
   // Genre names
@@ -475,6 +491,8 @@ async function fetchMovieDetailsUncached(
     overview: details.overview ?? "",
     director,
     cast,
+    directorRef,
+    castRefs,
     genres,
     language,
     watchProviders,
@@ -553,4 +571,135 @@ export async function fetchTmdbRecommendations(
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 20)
     .map(movieToCandidate);
+}
+
+
+// ── Similar films, and people ─────────────────────────────────────────────────
+
+/**
+ * Films worth suggesting alongside `tmdbId`.
+ *
+ * TMDB has two endpoints for this and they are not equivalent.
+ * `/recommendations` is built from what people who watched this film went on
+ * to watch, which is the better signal; `/similar` is keyword and genre
+ * overlap, which on an obscure film returns things that merely share a tag.
+ * Recommendations first, falling back only when it comes back thin, because
+ * a weak suggestion still beats an empty row.
+ */
+export async function fetchSimilarMovies(
+  tmdbId: number,
+  limit = 12
+): Promise<TmdbCandidate[]> {
+  return cached(
+    `tmdb:similar:${tmdbId}:${limit}`,
+    SEARCH_CACHE_TTL_MS,
+    async () => {
+      const apiKey = getApiKey();
+
+      const get = async (path: string): Promise<TmdbCandidate[]> => {
+        const res = await fetch(
+          `${TMDB_BASE}/movie/${tmdbId}/${path}?api_key=${apiKey}&language=en-US&page=1`
+        );
+        if (!res.ok) return [];
+        const data = (await res.json()) as TmdbSearchResponse;
+        return data.results
+          .filter((m) => m.poster_path)
+          .slice(0, limit)
+          .map(movieToCandidate);
+      };
+
+      const recommended = await get("recommendations");
+      if (recommended.length >= 4) return recommended;
+
+      // Merge rather than replace: a handful of recommendations plus
+      // keyword matches beats discarding the better list for the weaker one.
+      const similar = await get("similar");
+      const seen = new Set(recommended.map((m) => m.tmdbId));
+      return [...recommended, ...similar.filter((m) => !seen.has(m.tmdbId))].slice(0, limit);
+    },
+    { shouldCache: (results) => results.length > 0 }
+  );
+}
+
+interface TmdbPerson {
+  id: number;
+  name: string;
+  biography?: string;
+  profile_path?: string | null;
+  known_for_department?: string;
+  birthday?: string | null;
+  place_of_birth?: string | null;
+}
+
+export interface TmdbPersonDetails {
+  id: number;
+  name: string;
+  biography: string;
+  profileUrl: string;
+  knownFor: string;
+  /** Films they acted in, newest first. */
+  actedIn: TmdbCandidate[];
+  /** Films they directed, newest first. Empty for most actors. */
+  directed: TmdbCandidate[];
+}
+
+interface TmdbPersonCredits {
+  cast: Array<TmdbMovie & { id: number }>;
+  crew: Array<TmdbMovie & { id: number; job: string }>;
+}
+
+/**
+ * A person and their filmography.
+ *
+ * Both lists are returned rather than one chosen here: whether someone is
+ * "a director" or "an actor" is not a property of the person — plenty are
+ * both — so the screen decides what to lead with based on how the user
+ * arrived, and can show the other list underneath.
+ */
+export async function fetchPersonDetails(personId: number): Promise<TmdbPersonDetails | null> {
+  return cached(
+    `tmdb:person:${personId}`,
+    DETAILS_CACHE_TTL_MS,
+    async () => {
+      const apiKey = getApiKey();
+
+      const [personResult, creditsResult] = await Promise.allSettled([
+        fetch(`${TMDB_BASE}/person/${personId}?api_key=${apiKey}&language=en-US`).then((r) =>
+          r.ok ? (r.json() as Promise<TmdbPerson>) : Promise.reject(new Error(String(r.status)))
+        ),
+        fetch(`${TMDB_BASE}/person/${personId}/movie_credits?api_key=${apiKey}&language=en-US`).then(
+          (r) => (r.ok ? (r.json() as Promise<TmdbPersonCredits>) : Promise.reject(new Error(String(r.status))))
+        ),
+      ]);
+
+      if (personResult.status === "rejected") return null;
+      const person = personResult.value;
+
+      // Newest first, and only films with artwork — a filmography is browsed
+      // by looking at it, and a grid of blank tiles is not browsable.
+      const order = (films: TmdbMovie[]) =>
+        films
+          .filter((m) => m.poster_path)
+          .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
+          .map(movieToCandidate);
+
+      let actedIn: TmdbCandidate[] = [];
+      let directed: TmdbCandidate[] = [];
+      if (creditsResult.status === "fulfilled") {
+        actedIn = order(creditsResult.value.cast ?? []);
+        directed = order((creditsResult.value.crew ?? []).filter((c) => c.job === "Director"));
+      }
+
+      return {
+        id: person.id,
+        name: person.name,
+        biography: person.biography ?? "",
+        profileUrl: getPosterUrl(person.profile_path ?? null),
+        knownFor: person.known_for_department ?? "",
+        actedIn,
+        directed,
+      };
+    },
+    { shouldCache: (result) => result !== null }
+  );
 }

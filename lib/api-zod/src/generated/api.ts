@@ -354,6 +354,92 @@ export const RecommendMoviesResponse = zod.object({
 
 
 /**
+ * @summary Films worth watching next. Built from TMDB's recommendations, which reflect what people who watched this film went on to watch, falling back to keyword and genre similarity when that list is thin.
+
+ */
+export const GetSimilarMoviesParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const GetSimilarMoviesResponse = zod.object({
+  "movies": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
+}))
+})
+
+
+/**
+ * @summary A director or actor and their filmography. Both lists are returned: whether someone is a director or an actor is not a property of the person, so the screen leads with whichever the user came looking for.
+
+ */
+export const GetPersonParams = zod.object({
+  "personId": zod.coerce.number()
+})
+
+export const GetPersonResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "biography": zod.string(),
+  "profileUrl": zod.string(),
+  "knownFor": zod.string().describe('TMDB\'s known_for_department, e.g. \"Directing\" or \"Acting\".'),
+  "actedIn": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
+})).describe('Films they appeared in, newest first.'),
+  "directed": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "genres": zod.array(zod.string()).describe('Genre names mapped from TMDB genre_ids'),
+  "language": zod.string().optional().describe('Full display name of the original language (free on the TMDB list response)'),
+  "director": zod.string().optional(),
+  "cast": zod.array(zod.string()).optional(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})).optional(),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n')
+})).describe('Films they directed, newest first. Empty for most actors.')
+})
+
+
+/**
  * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
 
  */
@@ -384,7 +470,15 @@ export const GetMovieDetailsResponse = zod.object({
 })),
   "tmdbRating": zod.number().nullable().describe('TMDB\'s own aggregate user rating (0-10), null if the film has no votes yet. Not IMDb or Rotten Tomatoes — TMDB has no access to either; this is TMDB\'s own users\' average.\n'),
   "tmdbVoteCount": zod.number(),
-  "runtime": zod.number().nullable().describe('Running time in minutes, or null when TMDB has no runtime on record for the film. TMDB reports both null and 0 for unknown; the server normalises 0 to null so clients only handle one case.\n')
+  "runtime": zod.number().nullable().describe('Running time in minutes, or null when TMDB has no runtime on record for the film. TMDB reports both null and 0 for unknown; the server normalises 0 to null so clients only handle one case.\n'),
+  "directorRef": zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+}).optional().describe('A named person on a film, with the id to open their filmography.'),
+  "castRefs": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+}).describe('A named person on a film, with the id to open their filmography.')).optional().describe('The same people as `director` and `cast`, carrying TMDB\'s person ids so a name can open that person\'s filmography. Alongside the plain-string fields rather than replacing them, because those are what the movies table stores.\n')
 })
 
 
@@ -431,7 +525,8 @@ export const AddMovieBody = zod.object({
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
-  "overview": zod.string()
+  "overview": zod.string(),
+  "isWatched": zod.boolean().optional().describe('Add the film straight to the watched list rather than the watchlist. Adding and then patching meant two round trips and a film that was briefly on the wrong one. A film already in the locker is promoted to watched rather than left alone.\n')
 })
 
 export const addMovieResponseRatingMax = 5;
