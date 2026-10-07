@@ -120,15 +120,46 @@ jobs:
           EXPO_NO_CAPABILITY_SYNC: "1"
         run: eas build --profile ${{ inputs.profile }} --platform ios --non-interactive
 
+      # eas submit does not read the EXPO_ASC_* variables the build step
+      # uses. It looks for the key in eas.json's submit profile, and refuses
+      # to ask for it with --non-interactive: "App Store Connect API Keys
+      # cannot be set up in --non-interactive mode."
+      #
+      # So the fields are written in here, on the runner, from the same
+      # secrets. They never reach the repository, which is the only reason
+      # they can be committed nowhere: eas.json is tracked, and a key id and
+      # issuer id do not belong in it.
+      - name: Point eas.json at the API key
+        if: ${{ inputs.submit }}
+        working-directory: artifacts/film-locker
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          jq --arg path "$ASC_KEY_PATH" \
+             --arg keyId "$ASC_KEY_ID" \
+             --arg issuerId "$ASC_ISSUER_ID" \
+             '.submit.production.ios.ascApiKeyPath = $path
+              | .submit.production.ios.ascApiKeyId = $keyId
+              | .submit.production.ios.ascApiKeyIssuerId = $issuerId' \
+             eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+          # Confirm the shape without printing the values.
+          jq -e '.submit.production.ios | has("ascApiKeyPath") and has("ascApiKeyId") and has("ascApiKeyIssuerId")' eas.json > /dev/null
+          echo "eas.json now carries the API key fields."
+
       - name: Submit to App Store Connect
         if: ${{ inputs.submit }}
         working-directory: artifacts/film-locker
         env:
-          EXPO_ASC_API_KEY_PATH: ${{ env.ASC_KEY_PATH }}
-          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: eas submit --platform ios --latest --non-interactive
+
+      # The runner is destroyed either way, but eas.json is a tracked file
+      # and leaving a modified copy around invites a later step committing it.
+      - name: Restore eas.json
+        if: always()
+        working-directory: artifacts/film-locker
+        run: git checkout -- eas.json || true
 
       # The key is on an ephemeral runner that is destroyed either way, but
       # deleting it explicitly means a later step added to this file cannot
