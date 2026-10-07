@@ -29,9 +29,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # An iOS build takes 15-30 minutes and the submit queue adds more, so the
-    # default six hours is ample; this guards against a hung job burning them.
-    timeout-minutes: 90
+    # Generous because the submit step is unpredictable: it waits on Apple's
+    # ingest, which took 78 minutes on the run of 2026-10-07 — the build
+    # itself was 7. At the previous ceiling of 90 that run finished with four
+    # minutes to spare, and a job killed mid-submit is the expensive kind of
+    # failure, because the upload has to start over.
+    timeout-minutes: 240
 
     steps:
       - uses: actions/checkout@v4
