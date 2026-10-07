@@ -1,0 +1,105 @@
+# Builds and optionally submits the iOS app, so neither is tied to having a
+# particular laptop to hand.
+#
+# Everything happens on EAS's servers either way — this runner only resolves
+# the config plugins in app.json and hands the project over, which is why a
+# Linux runner is fine for an iOS build and why no Mac is involved anywhere.
+#
+# Apple authentication uses an App Store Connect API key rather than an Apple
+# ID. The Apple ID login fails from every environment we have tried it in
+# with "iTunes service key is empty", before it even asks for a two-factor
+# code; the API key talks to a different endpoint and works.
+#
+# Run it from the Actions tab: "Build iOS" → Run workflow.
+name: Build iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: "Submit to App Store Connect when the build finishes"
+        type: boolean
+        default: true
+      profile:
+        description: "EAS build profile"
+        type: choice
+        options: [production, preview]
+        default: production
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # An iOS build takes 15-30 minutes and the submit queue adds more, so the
+    # default six hours is ample; this guards against a hung job burning them.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The repo is a pnpm workspace and its root package.json refuses npm
+      # and yarn outright, so the package manager is not optional here.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # eas build reads app.json's config plugins from disk before uploading
+      # anything, so a checkout with no node_modules fails on expo-router.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # The .p8 cannot be committed, so it is held as a base64 secret and
+      # written out here. It lives under the runner's home directory rather
+      # than the workspace so it cannot be picked up by anything that walks
+      # the repo.
+      - name: Write the App Store Connect API key
+        run: |
+          mkdir -p "$HOME/asc"
+          echo "${{ secrets.ASC_API_KEY_BASE64 }}" | base64 -d > "$HOME/asc/AuthKey.p8"
+          chmod 600 "$HOME/asc/AuthKey.p8"
+          # Exported through GITHUB_ENV rather than referenced as
+          # ${{ env.HOME }} in a later step's env block: HOME is not resolved
+          # in that context and the path would come through empty.
+          echo "ASC_KEY_PATH=$HOME/asc/AuthKey.p8" >> "$GITHUB_ENV"
+
+      - name: Build
+        working-directory: artifacts/film-locker
+        env:
+          EXPO_ASC_API_KEY_PATH: ${{ env.ASC_KEY_PATH }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
+          # Without this the build dies at "Failed to sync capabilities". EAS
+          # reconciles the App ID against app.json, finds nothing declaring
+          # Sign in with Apple — the app uses Clerk's browser flow, not
+          # expo-apple-authentication — and tries to switch the capability
+          # off, which guideline 4.8 requires to stay on.
+          EXPO_NO_CAPABILITY_SYNC: "1"
+        run: eas build --profile ${{ inputs.profile }} --platform ios --non-interactive
+
+      - name: Submit to App Store Connect
+        if: ${{ inputs.submit }}
+        working-directory: artifacts/film-locker
+        env:
+          EXPO_ASC_API_KEY_PATH: ${{ env.ASC_KEY_PATH }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: eas submit --platform ios --latest --non-interactive
+
+      # The key is on an ephemeral runner that is destroyed either way, but
+      # deleting it explicitly means a later step added to this file cannot
+      # read it by accident.
+      - name: Remove the API key
+        if: always()
+        run: rm -f "$HOME/asc/AuthKey.p8"
