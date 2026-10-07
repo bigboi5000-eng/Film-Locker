@@ -61,11 +61,44 @@ jobs:
       # written out here. It lives under the runner's home directory rather
       # than the workspace so it cannot be picked up by anything that walks
       # the repo.
+      # Accepts the secret either as base64 or as the .p8 file's own text.
+      #
+      # The first attempt at this assumed base64 and failed with "base64:
+      # invalid input" — which does not say that the contents were pasted
+      # raw, and cannot say more, because GitHub masks the secret in the log
+      # so there is nothing to inspect. Taking both forms removes the choice
+      # rather than documenting it.
       - name: Write the App Store Connect API key
         run: |
           mkdir -p "$HOME/asc"
-          echo "${{ secrets.ASC_API_KEY_BASE64 }}" | base64 -d > "$HOME/asc/AuthKey.p8"
+          printf '%s' "${{ secrets.ASC_API_KEY_BASE64 }}" > "$HOME/asc/secret.raw"
+
+          if grep -q "BEGIN PRIVATE KEY" "$HOME/asc/secret.raw"; then
+            echo "Secret holds the key directly."
+            cp "$HOME/asc/secret.raw" "$HOME/asc/AuthKey.p8"
+          else
+            echo "Secret looks base64 encoded; decoding."
+            # Whitespace stripped first: a secret pasted from a wrapped
+            # terminal arrives with newlines in it.
+            tr -d '[:space:]' < "$HOME/asc/secret.raw" | base64 -d > "$HOME/asc/AuthKey.p8" || {
+              echo "::error::ASC_API_KEY_BASE64 is neither a .p8 file nor valid base64."
+              echo "::error::Set it to the whole AuthKey_XXXX.p8 file, headers included,"
+              echo "::error::or to the output of: base64 -i AuthKey_XXXX.p8 | tr -d '\n'"
+              exit 1
+            }
+          fi
+
+          rm -f "$HOME/asc/secret.raw"
           chmod 600 "$HOME/asc/AuthKey.p8"
+
+          # Fail here rather than letting eas report something vaguer later.
+          if ! grep -q "BEGIN PRIVATE KEY" "$HOME/asc/AuthKey.p8"; then
+            echo "::error::The decoded key is not a PEM private key. Check the secret"
+            echo "::error::contains the whole .p8 file, BEGIN and END lines included."
+            exit 1
+          fi
+          echo "Key written, $(wc -c < "$HOME/asc/AuthKey.p8") bytes."
+
           # Exported through GITHUB_ENV rather than referenced as
           # ${{ env.HOME }} in a later step's env block: HOME is not resolved
           # in that context and the path would come through empty.
