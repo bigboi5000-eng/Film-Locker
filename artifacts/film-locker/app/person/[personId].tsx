@@ -1,0 +1,178 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  FlatList,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useGetPerson, getGetPersonQueryKey, type TmdbMovieCard } from '@workspace/api-client-react';
+import { FilmDetailModal } from '@/components/FilmDetailModal';
+
+/**
+ * A director or actor, and everything they have made.
+ *
+ * Both filmographies come back from the API because plenty of people do
+ * both. Which one leads is decided here: somebody with directing credits is
+ * almost always being looked up as a director, so those come first and the
+ * acting roles become the footnote rather than the other way round.
+ */
+export default function PersonScreen() {
+  const { personId } = useLocalSearchParams<{ personId: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const id = Number(personId);
+
+  const [selected, setSelected] = useState<TmdbMovieCard | null>(null);
+
+  const { data: person, isLoading, isError } = useGetPerson(id, {
+    query: { queryKey: getGetPersonQueryKey(id), enabled: Number.isInteger(id) && id > 0 },
+  });
+
+  const sections = useMemo(() => {
+    if (!person) return [];
+    const out: Array<{ key: string; title: string; films: TmdbMovieCard[] }> = [];
+    if (person.directed.length > 0) {
+      out.push({ key: 'directed', title: 'Directed', films: person.directed });
+    }
+    if (person.actedIn.length > 0) {
+      out.push({
+        key: 'acted',
+        title: person.directed.length > 0 ? 'Also appeared in' : 'Films',
+        films: person.actedIn,
+      });
+    }
+    return out;
+  }, [person]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.root, styles.centred]}>
+        <ActivityIndicator color="#0066FF" />
+      </View>
+    );
+  }
+
+  if (isError || !person) {
+    return (
+      <View style={[styles.root, styles.centred, { paddingTop: insets.top }]}>
+        <Text style={styles.errorTitle}>Couldn&apos;t load that person</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backLink} activeOpacity={0.7}>
+          <Text style={styles.backLinkText}>Go back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={24} color="#111827" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>{person.name}</Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.identity}>
+          {person.profileUrl ? (
+            <Image source={{ uri: person.profileUrl }} style={styles.portrait} contentFit="cover" />
+          ) : (
+            <View style={[styles.portrait, styles.portraitFallback]}>
+              <Ionicons name="person" size={34} color="#9CA3AF" />
+            </View>
+          )}
+          <Text style={styles.name}>{person.name}</Text>
+          {person.knownFor ? <Text style={styles.knownFor}>{person.knownFor}</Text> : null}
+        </View>
+
+        {person.biography ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Biography</Text>
+            <Text style={styles.bio} numberOfLines={6}>{person.biography}</Text>
+          </View>
+        ) : null}
+
+        {sections.map((section) => (
+          <View key={section.key} style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {section.title} ({section.films.length})
+            </Text>
+            <FlatList
+              data={section.films}
+              horizontal
+              keyExtractor={(m) => `${section.key}-${m.tmdbId}`}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingVertical: 4 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() => setSelected(item)}
+                  activeOpacity={0.8}
+                >
+                  <Image source={{ uri: item.posterUrl }} style={styles.poster} contentFit="cover" />
+                  <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.cardYear}>{item.releaseYear}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        ))}
+
+        {sections.length === 0 && (
+          <View style={styles.section}>
+            <Text style={styles.bio}>No films listed for this person on TMDB.</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {selected && (
+        <FilmDetailModal
+          visible
+          onClose={() => setSelected(null)}
+          tmdbId={selected.tmdbId}
+          title={selected.title}
+          posterUrl={selected.posterUrl}
+          releaseYear={selected.releaseYear}
+          overview={selected.overview}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  centred: { alignItems: 'center', justifyContent: 'center' },
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 8, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  backBtn: { padding: 6 },
+  headerTitle: { flex: 1, fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827', marginLeft: 4 },
+  identity: { alignItems: 'center', paddingTop: 24, paddingHorizontal: 24 },
+  portrait: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#F3F4F6' },
+  portraitFallback: { alignItems: 'center', justifyContent: 'center' },
+  name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: '#111827', marginTop: 14, textAlign: 'center' },
+  knownFor: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 4 },
+  section: { paddingHorizontal: 20, marginTop: 26 },
+  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 10 },
+  bio: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#4B5563', lineHeight: 21 },
+  card: { width: 112 },
+  poster: { width: 112, height: 168, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  cardTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
+  cardYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+  errorTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  backLink: { marginTop: 12 },
+  backLinkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+});

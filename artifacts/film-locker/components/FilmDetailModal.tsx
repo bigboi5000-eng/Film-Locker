@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef, useMemo } from 'react';
+import React, { useCallback, useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,8 @@ import {
   getGetFollowsQueryKey,
   getListMoviesQueryKey,
   type Movie,
+  useGetSimilarMovies,
+  getGetSimilarMoviesQueryKey,
   type TmdbMovieCard,
   type WatchProvider,
   type FilmComment,
@@ -1020,16 +1022,94 @@ const rsStyles = StyleSheet.create({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
+/**
+ * Films worth watching next.
+ *
+ * Fetched only while the sheet is open, because the row sits well below the
+ * fold and a list that nobody scrolls to is not worth a TMDB round trip on
+ * every card tap.
+ *
+ * Tapping one swaps this sheet for that film's, rather than stacking sheets
+ * on top of each other — three deep and there is no way back but to close
+ * them one at a time.
+ */
+function SimilarFilms({
+  tmdbId,
+  visible,
+  onPick,
+}: {
+  tmdbId: number;
+  visible: boolean;
+  onPick: (movie: TmdbMovieCard) => void;
+}) {
+  const { data, isLoading } = useGetSimilarMovies(tmdbId, {
+    query: { queryKey: getGetSimilarMoviesQueryKey(tmdbId), enabled: visible },
+  });
+
+  const movies = data?.movies ?? [];
+  if (!isLoading && movies.length === 0) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>More like this</Text>
+      {isLoading ? (
+        <ActivityIndicator color="#0066FF" style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+          {movies.map((m) => (
+            <TouchableOpacity
+              key={m.tmdbId}
+              style={styles.similarCard}
+              onPress={() => onPick(m)}
+              activeOpacity={0.8}
+            >
+              <Image source={{ uri: m.posterUrl }} style={styles.similarPoster} contentFit="cover" />
+              <Text style={styles.similarTitle} numberOfLines={2}>{m.title}</Text>
+              <Text style={styles.similarYear}>{m.releaseYear}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 export function FilmDetailModal({
   visible,
   onClose,
-  tmdbId,
-  title,
-  posterUrl,
-  releaseYear,
-  overview,
-  savedMovie,
+  tmdbId: tmdbIdProp,
+  title: titleProp,
+  posterUrl: posterUrlProp,
+  releaseYear: releaseYearProp,
+  overview: overviewProp,
+  savedMovie: savedMovieProp,
 }: FilmDetailModalProps) {
+  /**
+   * The film currently on screen, which starts as the one the parent asked
+   * for and changes when someone taps through "More like this".
+   *
+   * Held here rather than pushed back up to the parent because every screen
+   * that renders this modal would otherwise need to learn about swapping,
+   * and held instead of stacking a second modal because three deep there is
+   * no way back but to dismiss them one at a time.
+   */
+  const [swapped, setSwapped] = useState<TmdbMovieCard | null>(null);
+
+  const tmdbId = swapped?.tmdbId ?? tmdbIdProp;
+  const title = swapped?.title ?? titleProp;
+  const posterUrl = swapped?.posterUrl ?? posterUrlProp;
+  const releaseYear = swapped?.releaseYear ?? releaseYearProp;
+  const overview = swapped?.overview ?? overviewProp;
+  // A film arrived at through the similar row is not the one the parent
+  // knows about, so it has no saved-movie record to carry over — its own
+  // state is fetched like any other unsaved film.
+  const savedMovie = swapped ? undefined : savedMovieProp;
+
+  // Back to the film the parent opened whenever the sheet is dismissed, so
+  // reopening does not resume somewhere the user did not leave off.
+  useEffect(() => {
+    if (!visible) setSwapped(null);
+  }, [visible]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -1072,6 +1152,13 @@ export function FilmDetailModal({
 
   const displayDirector = details?.director ?? '';
   const displayCast = details?.cast ?? [];
+  // Person ids, when the details call has returned them. A name is only
+  // tappable if we know who it points at; the saved-movie path has the
+  // names but not the ids, so it stays plain text rather than offering a
+  // link that would go nowhere.
+  const directorRef = details?.directorRef ?? null;
+  const castRefs = details?.castRefs ?? [];
+
   const displayGenres = details?.genres ?? [];
   const displayLanguage = details?.language ?? '';
   const displayProviders = details?.watchProviders ?? [];
@@ -1117,7 +1204,30 @@ export function FilmDetailModal({
     onClose();
   }, [onClose]);
 
-  const handleAddToWatchlist = useCallback(async () => {
+  /**
+   * Add the film, either to the watchlist or straight to watched.
+   *
+   * One call rather than add-then-patch: the server takes isWatched on the
+   * way in, and a film already on the watchlist is promoted instead of
+   * ignored — which is the usual case for "I've finally seen this".
+   */
+  /**
+   * Tapping a similar film swaps this sheet for that one.
+   *
+   * Closing first, then reopening, rather than stacking a second modal on
+   * top: three deep and the only way back is dismissing them one at a time.
+   * The parent owns which film is shown, so this goes out through onClose
+   * and a push, which every screen that renders this modal already handles.
+   */
+  const onSimilarPick = useCallback((movie: TmdbMovieCard) => setSwapped(movie), []);
+
+  /** Open a director or actor's filmography, closing this sheet first. */
+  const openPerson = useCallback((personId: number) => {
+    handleClose();
+    router.push(`/person/${personId}`);
+  }, [handleClose, router]);
+
+  const handleAdd = useCallback(async (asWatched: boolean) => {
     try {
       await addMovie({
         data: {
@@ -1126,15 +1236,19 @@ export function FilmDetailModal({
           releaseYear: details?.releaseYear ?? releaseYear,
           posterUrl: details?.posterUrl ?? posterUrl,
           overview: displayOverview,
+          ...(asWatched ? { isWatched: true } : {}),
         },
       });
       await invalidate();
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast({ title: 'Added to Watchlist', subtitle: `"${title}" is now in your watchlist.`, variant: 'success' });
+      showToast({
+        title: asWatched ? 'Added to Watched' : 'Added to Watchlist',
+        subtitle: `"${title}" is now in your ${asWatched ? 'watched list' : 'watchlist'}.`,
+        variant: 'success',
+      });
       handleClose();
-      // Always land back on the Watchlist tab, regardless of which screen
-      // this film was added from (Home, Discover, a playlist, etc.).
-      router.push('/(tabs)/watchlist');
+      // Land on whichever list it went to, rather than always the watchlist.
+      router.push(asWatched ? '/(tabs)/watched' : '/(tabs)/watchlist');
     } catch {
       showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
     }
@@ -1223,7 +1337,16 @@ export function FilmDetailModal({
                 <View style={styles.metaRow}>
                   <Ionicons name="film-outline" size={15} color="#6B7280" style={styles.metaIcon} />
                   <Text style={styles.metaLabel}>Director</Text>
-                  <Text style={styles.metaValue}>{displayDirector}</Text>
+                  {directorRef ? (
+                    <Text
+                      style={[styles.metaValue, styles.metaValueLink]}
+                      onPress={() => openPerson(directorRef.id)}
+                    >
+                      {displayDirector}
+                    </Text>
+                  ) : (
+                    <Text style={styles.metaValue}>{displayDirector}</Text>
+                  )}
                 </View>
               ) : null}
 
@@ -1244,11 +1367,30 @@ export function FilmDetailModal({
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{ gap: 8 }}
                   >
-                    {displayCast.slice(0, 8).map((name) => (
-                      <View key={name} style={styles.actorPill}>
-                        <Text style={styles.actorName}>{name}</Text>
-                      </View>
-                    ))}
+                    {displayCast.slice(0, 8).map((name, i) => {
+                      const ref = castRefs[i];
+                      // Matched by position: castRefs is built from the same
+                      // billing-ordered slice as cast, so index i is the same
+                      // person in both. Falls back to a plain pill when the
+                      // ids are not present.
+                      if (!ref || ref.name !== name) {
+                        return (
+                          <View key={name} style={styles.actorPill}>
+                            <Text style={styles.actorName}>{name}</Text>
+                          </View>
+                        );
+                      }
+                      return (
+                        <TouchableOpacity
+                          key={`${ref.id}`}
+                          style={[styles.actorPill, styles.actorPillLink]}
+                          onPress={() => openPerson(ref.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.actorName, styles.actorNameLink]}>{name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
                 </View>
               )}
@@ -1284,6 +1426,8 @@ export function FilmDetailModal({
               {/* ── Community Section — Film Locker's own ratings and
                   written comments. The TMDB rating above is just a number;
                   this is the only place actual written opinions live. ── */}
+              <SimilarFilms tmdbId={tmdbId} visible={visible} onPick={onSimilarPick} />
+
               <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
 
               {/* Divider */}
@@ -1331,27 +1475,47 @@ export function FilmDetailModal({
                   </TouchableOpacity>
                 </>
               ) : (
-                /* Add to Watchlist (for home screen movies) */
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.actionButtonPrimary]}
-                  onPress={handleAddToWatchlist}
-                  disabled={isAddingPending}
-                  activeOpacity={0.85}
-                >
-                  {isAddingPending ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="bookmark-outline"
-                        size={20}
-                        color="#FFFFFF"
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.actionButtonText}>Add to Watchlist</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                /* Add to Watchlist, with Watched beside it.
+                   Flex 1 against flex 0.4 gives the second button 40% of the
+                   first's width, which keeps the primary action primary —
+                   most films are added to watch later, not already seen. */
+                <View style={styles.addRow}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.actionButtonPrimary, styles.addPrimary]}
+                    onPress={() => handleAdd(false)}
+                    disabled={isAddingPending}
+                    activeOpacity={0.85}
+                  >
+                    {isAddingPending ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="bookmark-outline"
+                          size={20}
+                          color="#FFFFFF"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.actionButtonText}>Add to Watchlist</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.actionButtonWatched, styles.addSecondary]}
+                    onPress={() => handleAdd(true)}
+                    disabled={isAddingPending}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color="#0066FF"
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={styles.actionButtonWatchedText} numberOfLines={1}>Watched</Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               {/* Recommend to a friend — shown whenever the user is signed in */}
@@ -1495,6 +1659,19 @@ const styles = StyleSheet.create({
   },
   divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 20 },
   savingText: { fontSize: 12, color: '#9CA3AF', marginTop: 6, fontFamily: 'Inter_400Regular' },
+  addRow: { flexDirection: 'row', gap: 8 },
+  // 1 : 0.4 — the second button is 40% the width of the first.
+  addPrimary: { flex: 1, marginBottom: 0 },
+  addSecondary: { flex: 0.4, marginBottom: 0, paddingHorizontal: 4 },
+  actionButtonWatched: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' },
+  actionButtonWatchedText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  metaValueLink: { color: '#0066FF', textDecorationLine: 'underline' },
+  actorPillLink: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' },
+  actorNameLink: { color: '#0066FF' },
+  similarCard: { width: 108 },
+  similarPoster: { width: 108, height: 162, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  similarTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
+  similarYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
   actionButton: {
     height: 52,
     borderRadius: 12,

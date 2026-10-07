@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  TextInput,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +23,8 @@ import {
   useGetRecommendations,
   getGetRecommendationsQueryKey,
   useListMovies,
+  useSearchMovies,
+  getSearchMoviesQueryKey,
   getListMoviesQueryKey,
   useGetMyPlaylists,
   useCreatePlaylist,
@@ -99,6 +103,18 @@ function SectionHeader({
 
 // ── Home Screen ───────────────────────────────────────────────────────────────
 
+/** Wait for typing to settle before querying TMDB. */
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+const SEARCH_DEBOUNCE_MS = 350;
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -116,6 +132,24 @@ export default function HomeScreen() {
   // The locker is the signed-in user's own films, so there is nothing to
   // fetch without an account. It also decides whether the Recommended
   // section appears at all, which is why a guest simply does not see it.
+  // Search on Home as well as on the Watchlist tab. Testers kept looking for
+  // it here first, which is reasonable — Home is where you land, and the
+  // search endpoint is public, so it works signed out too.
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
+  const isSearching = debouncedQuery.length >= 2;
+
+  const { data: searchData, isFetching: isSearchFetching } = useSearchMovies(
+    { q: debouncedQuery || '' },
+    {
+      query: {
+        enabled: isSearching,
+        queryKey: getSearchMoviesQueryKey({ q: debouncedQuery }),
+      },
+    }
+  );
+  const searchResults = searchData?.movies ?? [];
+
   const { data: lockerData } = useListMovies(
     { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
   );
@@ -213,6 +247,60 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Search */}
+        <View style={styles.searchWrap}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={18} color="#9CA3AF" />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search for a film…"
+              placeholderTextColor="#9CA3AF"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={10}>
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Results replace the browse sections while a search is running, so
+            the answer is not buried under rows the user has stopped looking
+            at. Clearing the box puts everything back. */}
+        {isSearching ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {isSearchFetching
+                ? 'Searching…'
+                : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`}
+            </Text>
+            {!isSearchFetching && searchResults.length === 0 ? (
+              <Text style={styles.searchEmpty}>No films found for “{debouncedQuery}”.</Text>
+            ) : (
+              <View style={styles.searchGrid}>
+                {searchResults.map((m) => (
+                  <TouchableOpacity
+                    key={m.tmdbId}
+                    style={styles.searchCard}
+                    onPress={() => setSelectedMovie(m)}
+                    activeOpacity={0.8}
+                  >
+                    <Image source={{ uri: m.posterUrl }} style={styles.searchPoster} contentFit="cover" />
+                    <Text style={styles.searchTitle} numberOfLines={2}>{m.title}</Text>
+                    <Text style={styles.searchYear}>{m.releaseYear}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+        <>
 
         {/* Trending */}
         <View style={styles.section}>
@@ -319,6 +407,9 @@ export default function HomeScreen() {
             )}
           </View>
         )}
+        </>
+        )}
+
       </ScrollView>
 
       {/* Film detail modal */}
@@ -355,6 +446,23 @@ const styles = StyleSheet.create({
   },
   appTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
   appSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 2 },
+  searchWrap: { paddingHorizontal: 16, paddingBottom: 4 },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  searchInput: {
+    flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    padding: 0,
+  },
+  searchEmpty: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
+  searchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  searchCard: { width: '30%' },
+  searchPoster: { width: '100%', aspectRatio: 2 / 3, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  searchTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
+  searchYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
   signInBtn: {
     backgroundColor: '#0066FF', borderRadius: 18,
     paddingHorizontal: 16, paddingVertical: 9,

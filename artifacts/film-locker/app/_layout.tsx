@@ -150,6 +150,7 @@ function RootLayoutNav() {
       <Stack.Screen name="playlist/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="playlists" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="user/[clerkId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="person/[personId]" options={{ headerShown: false, animation: 'slide_from_right' }} />
     </Stack>
   );
 }
