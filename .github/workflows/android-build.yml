@@ -1,0 +1,74 @@
+# Builds the Android app, so testers on Android can be given a build
+# without anyone needing Android Studio or a Play Console upload.
+#
+# Everything happens on EAS's servers; this runner only resolves the config
+# plugins in app.json and hands the project over.
+#
+# Deliberately separate from ios-build.yml rather than a platform input on
+# it. That workflow is most of the way Apple credential handling — writing
+# out a .p8, patching eas.json for submit, cleaning both up — and none of it
+# applies here. Android signing is a keystore EAS holds for the project, and
+# there is nothing to submit: the preview profile builds for internal
+# distribution, so EAS returns an install link that can be sent straight to
+# a tester.
+#
+# Run it from the Actions tab: "Build Android" → Run workflow.
+name: Build Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "preview gives an installable APK; production gives an .aab for the Play Store"
+        type: choice
+        options: [preview, production]
+        default: preview
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Android builds are quicker than iOS, but the queue is shared and can
+    # be slow at times; this only guards against a hung job.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The repo is a pnpm workspace and its root package.json refuses npm
+      # and yarn outright, so the package manager is not optional here.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # eas build reads app.json's config plugins from disk before uploading
+      # anything, so a checkout with no node_modules fails on expo-router.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build
+        working-directory: artifacts/film-locker
+        run: eas build --profile ${{ inputs.profile }} --platform android --non-interactive
+
+      # The build log ends with the artifact URL, but it is easier to find
+      # here than by scrolling a log, and the preview build's URL is the
+      # thing actually being handed to a tester.
+      - name: Where the build landed
+        if: success()
+        working-directory: artifacts/film-locker
+        run: |
+          echo "### Android build finished" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          eas build:list --platform android --limit 1 --non-interactive \
+            >> "$GITHUB_STEP_SUMMARY" 2>&1 || \
+            echo "Build list unavailable; the artifact URL is at the end of the Build step's log." \
+              >> "$GITHUB_STEP_SUMMARY"
