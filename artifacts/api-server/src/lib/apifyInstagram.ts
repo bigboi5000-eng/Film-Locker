@@ -39,6 +39,8 @@
 // Declared here rather than imported: processSocialLink.ts and
 // moviePipeline.ts each declare their own copy of this one-line structural
 // type, so this follows the file-local convention already in place.
+import { cached } from "./cache";
+
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
 /** Apify's default actor, overridable in case a different one is preferred. */
@@ -53,6 +55,32 @@ const RUN_TIMEOUT_SECONDS = 90;
 
 /** Comments are a secondary signal; the newest few are where titles appear. */
 const MAX_COMMENTS = 20;
+
+/**
+ * How long a fetched post is reused.
+ *
+ * A caption is written once and effectively never edited, so the thing this
+ * route exists to read does not change. Comments accumulate, which is why
+ * this is hours rather than days.
+ *
+ * The win is not one user sharing twice, it is many users sharing the same
+ * reel: these accounts go viral, and the second share onward costs nothing
+ * and returns instantly instead of waiting out another actor boot.
+ */
+const POST_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The post's shortcode — the stable part of an Instagram URL.
+ *
+ * Cache keys are built from this rather than the URL because the URL is not
+ * stable: every share appends its own tracking parameter, and the same reel
+ * arrived three separate times as ?psln=, ?dlrf= and ?srtk=. Keyed on the
+ * URL, those are three different posts and the cache never hits.
+ */
+function instagramShortcode(url: string): string | null {
+  const match = /\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/.exec(url);
+  return match?.[1] ?? null;
+}
 
 /** What the pipeline needs, lifted out of a much larger dataset item. */
 export type ApifyInstagramPost = {
@@ -126,6 +154,30 @@ export async function fetchInstagramPostViaApify(
   const token = process.env["APIFY_TOKEN"];
   if (!token) return null;
 
+  // Keyed on the shortcode, not the URL — see instagramShortcode. A URL with
+  // no shortcode in it is not cached rather than sharing one key with every
+  // other such URL.
+  const shortcode = instagramShortcode(url);
+  if (!shortcode) {
+    return fetchFromApify(url, token, warn);
+  }
+
+  return cached(
+    `apify:ig:${shortcode}`,
+    POST_CACHE_TTL_MS,
+    () => fetchFromApify(url, token, warn),
+    // A miss is never remembered: a post that was private or unavailable a
+    // moment ago should not be unavailable for the next six hours.
+    { shouldCache: (post) => post !== null },
+  );
+}
+
+/** The actual call, separated so the cache wraps it rather than reimplements it. */
+async function fetchFromApify(
+  url: string,
+  token: string,
+  warn?: WarnFn
+): Promise<ApifyInstagramPost | null> {
   // run-sync-get-dataset-items runs the actor and returns its output in one
   // request, so there is no run id to poll and no state to keep here.
   const endpoint =
