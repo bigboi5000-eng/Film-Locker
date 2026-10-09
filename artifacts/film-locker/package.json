@@ -63,6 +63,7 @@
   },
   "dependencies": {
     "expo-build-properties": "^1.0.10",
+    "expo-file-system": "~19.0.23",
     "expo-localization": "~17.0.9",
     "expo-notifications": "^0.32.17",
     "expo-share-intent": "^5.1.1"

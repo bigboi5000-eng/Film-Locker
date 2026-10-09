@@ -81,13 +81,15 @@
           "iosActivationRules": {
             "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
             "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
-            "NSExtensionActivationSupportsText": true
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1
           },
           "iosShareExtensionName": "Film Locker Share",
           "iosShareExtensionBundleIdentifier": "com.filmlocker.app.ShareExtension",
           "iosAppGroupIdentifier": "group.com.filmlocker.app",
           "androidIntentFilters": [
-            "text/*"
+            "text/*",
+            "image/*"
           ]
         }
       ]

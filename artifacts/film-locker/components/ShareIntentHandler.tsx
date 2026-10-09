@@ -23,27 +23,50 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, Modal, ActivityIndicator, StyleSheet, Platform, Alert } from 'react-native';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useRouter } from 'expo-router';
+import { File } from 'expo-file-system';
 import {
   useProcessSocialLink,
+  useExtractFromImage,
+  ExtractFromImageBodyMimeType,
   type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 import { useColors } from '@/hooks/useColors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+/**
+ * Narrow a shared file's reported type to one the extractor accepts.
+ *
+ * The share extension passes on whatever the sending app declared, which is
+ * a free string and occasionally carries parameters ("image/jpeg; charset=…")
+ * or odd casing. Anything outside the accepted set is rejected here, with a
+ * message, rather than cast and refused by the server — a GIF or a PDF
+ * shared by mistake should say what happened.
+ */
+function supportedMimeType(reported: string | undefined): ExtractFromImageBodyMimeType | null {
+  const base = reported?.split(';')[0]?.trim().toLowerCase();
+  if (!base) return null;
+  return base in ExtractFromImageBodyMimeType ? (base as ExtractFromImageBodyMimeType) : null;
+}
+
 export function ShareIntentHandler() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { mutateAsync: processLink } = useProcessSocialLink();
+  const { mutateAsync: extractFromImage } = useExtractFromImage();
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
 
-  // Hold processLink in a ref so the effect below doesn't need it as a
-  // dependency (it would otherwise re-fire on every render).
+  // Held in refs so the effect below doesn't need them as dependencies (it
+  // would otherwise re-fire on every render).
   const processLinkRef = useRef(processLink);
   useEffect(() => { processLinkRef.current = processLink; }, [processLink]);
+  const extractFromImageRef = useRef(extractFromImage);
+  useEffect(() => { extractFromImageRef.current = extractFromImage; }, [extractFromImage]);
 
   const [isPending, setIsPending] = useState(false);
+  /** Which kind of share is being worked on, so the overlay can say so. */
+  const [pendingKind, setPendingKind] = useState<'link' | 'image'>('link');
   const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
   const [listTitle, setListTitle] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
@@ -59,41 +82,85 @@ export function ShareIntentHandler() {
   useEffect(() => {
     if (!hasShareIntent) return;
 
+    // An image takes precedence over any text that came with it: someone
+    // sharing a screenshot is sharing the picture, and the accompanying text
+    // on a screenshot share is usually a filename.
+    const image = shareIntent.files?.find((f) => f.mimeType?.startsWith('image/')) ?? null;
+
     // Prefer the extracted URL over raw shared text.
     const url = shareIntent.webUrl ?? shareIntent.text ?? null;
-    if (!url) return;
+
+    const key = image?.path ?? url;
+    if (!key) return;
 
     // Deduplicate — the same intent can resurface on AppState resume.
-    if (handledRef.current === url) return;
-    handledRef.current = url;
+    if (handledRef.current === key) return;
+    handledRef.current = key;
 
     // Sharing into the app should always land the user on the Watchlist tab
     // (same place the in-app paste-link flow lives), not wherever the app
     // happened to be showing when the OS launched/resumed it.
     router.replace('/(tabs)/watchlist');
 
+    setPendingKind(image ? 'image' : 'link');
     setIsPending(true);
 
+    const finish = (matches: GeminiMovieMatch[], title: string | null) => {
+      if (!mountedRef.current) return;
+      setMatches(matches);
+      setListTitle(title);
+      setShowSheet(true);
+    };
+
+    const fail = (message: string) => {
+      if (!mountedRef.current) return;
+      Alert.alert('Could not identify film', message, [{ text: 'OK' }]);
+      handledRef.current = null;
+    };
+
+    const done = () => {
+      if (mountedRef.current) setIsPending(false);
+    };
+
+    if (image) {
+      // The extension hands over a path, not the bytes, so this reads the
+      // file itself — unlike the in-app picker, which returns base64
+      // directly. Guarded on size because base64 inflates a file by about a
+      // third and the server refuses anything beyond its own ceiling: a
+      // screenshot is a megabyte or two, but a full-resolution photo shared
+      // from a library can be far more, and "too large" is a better answer
+      // than a failed upload.
+      const MAX_SHARED_IMAGE_BYTES = 10 * 1024 * 1024;
+      if (typeof image.size === 'number' && image.size > MAX_SHARED_IMAGE_BYTES) {
+        setIsPending(false);
+        fail('That image is too large to read. Try a screenshot rather than a full-resolution photo.');
+        return;
+      }
+
+      const mimeType = supportedMimeType(image.mimeType);
+      if (!mimeType) {
+        setIsPending(false);
+        fail('Film Locker can read JPEG, PNG, WebP and HEIC images. That file is a different format.');
+        return;
+      }
+
+      (async () => {
+        const base64 = await new File(image.path).base64();
+        return extractFromImageRef.current({
+          data: { imageBase64: base64, mimeType, dryRun: true },
+        });
+      })()
+        .then((data) => finish(data.matches ?? [], data.listTitle ?? null))
+        .catch(() => fail("Film Locker couldn't read films from that image. Try sharing again."))
+        .finally(done);
+      return;
+    }
+
     // Call in dry-run mode: identify films without saving to DB.
-    processLinkRef.current({ data: { url, dryRun: true } })
-      .then((data) => {
-        if (!mountedRef.current) return;
-        setMatches(data.matches ?? []);
-        setListTitle(data.listTitle ?? null);
-        setShowSheet(true);
-      })
-      .catch(() => {
-        if (!mountedRef.current) return;
-        Alert.alert(
-          'Could not identify film',
-          "Film Locker couldn't read this link. Try sharing again.",
-          [{ text: 'OK' }]
-        );
-        handledRef.current = null;
-      })
-      .finally(() => {
-        if (mountedRef.current) setIsPending(false);
-      });
+    processLinkRef.current({ data: { url: url!, dryRun: true } })
+      .then((data) => finish(data.matches ?? [], data.listTitle ?? null))
+      .catch(() => fail("Film Locker couldn't read this link. Try sharing again."))
+      .finally(done);
   }, [hasShareIntent, shareIntent]);
 
   // Receiving the intent failed at the native level — show an error so the
@@ -135,7 +202,9 @@ export function ShareIntentHandler() {
               Identifying Film…
             </Text>
             <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
-              Gemini is reading the shared link
+              {pendingKind === 'image'
+                ? 'Gemini is reading the shared image'
+                : 'Gemini is reading the shared link'}
             </Text>
           </View>
         </View>
