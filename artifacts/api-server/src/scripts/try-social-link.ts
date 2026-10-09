@@ -14,6 +14,25 @@
  */
 import { processSocialLink } from "../lib/processSocialLink";
 
+/**
+ * A JSON.stringify replacer that turns Errors into something readable.
+ *
+ * JSON.stringify(new Error("x")) is "{}" — message, name and stack are all
+ * non-enumerable — so every failure this script reported arrived as
+ * `{"err":{}}`. That cost two separate investigations: an Apify 404 and a
+ * yt-dlp refusal both showed up as an empty object, with the one fact
+ * needed to tell them apart thrown away at the point of logging.
+ *
+ * The server does not have this problem; pino serialises errors properly.
+ * This is the script's own logger being naive.
+ */
+function errorsAsText(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message };
+  }
+  return value;
+}
+
 async function main() {
   const url = process.argv[2];
   if (!url) {
@@ -25,7 +44,7 @@ async function main() {
 
   const result = await processSocialLink(
     url,
-    (data, msg) => console.log(`  ${msg}`, JSON.stringify(data)),
+    (data, msg) => console.log(`  ${msg}`, JSON.stringify(data, errorsAsText)),
     true, // dryRun — identify only, save nothing
     ""
   );
