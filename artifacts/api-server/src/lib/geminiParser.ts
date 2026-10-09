@@ -83,6 +83,15 @@ const SYSTEM_PROMPT =
   "(leave empty if genuinely unknown), and a confidence_score from 0.0 to 1.0 " +
   "reflecting how certain you are this is a real movie reference and not a song, " +
   "book, or figure of speech. Exclude TV series and short films.\n\n" +
+  "The confidence_score must ALSO reflect whether the film is what the text is " +
+  "actually about. A film the text discusses, reviews, recommends or lists scores " +
+  "high. A film named only in passing scores 0.3 or below — a comparison ('I don't " +
+  "remember this scene from X', 'this looks like X'), a joke, a cast or crew " +
+  "member's other credits, 'from the director of X', or 'if you liked X'. Score it " +
+  "low even when it is unmistakably a real film and you have identified it " +
+  "perfectly: whether you recognised it is not the question, whether the person " +
+  "sharing this wants it is. This does not apply to lists — every film in a 'Top N' " +
+  "or curated list is a subject of the text and scores high.\n\n" +
   "If the text is a 'Top N', countdown, ranked, or curated list of films " +
   "(e.g. 'Top 10 Horror Films of All Time', 'My 5 favorite heist movies'), " +
   "you MUST extract every single title in the list, not just the first few — " +
