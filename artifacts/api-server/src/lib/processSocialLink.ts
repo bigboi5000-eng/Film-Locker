@@ -63,11 +63,13 @@
  *        step 2 would miss entirely. Slower/costlier, so it only runs when
  *        steps 1 and 2 both come up empty.
  *
- *        Both download steps are skipped entirely on Instagram unless
- *        YT_DLP_COOKIES_FILE is set: Instagram serves no media to an
- *        unauthenticated datacenter IP, so the attempts cannot succeed and
- *        only delay step 3.5. TikTok still uses them — it downloads from
- *        the server without complaint. See ytDlp.ts.
+ *        On Instagram both download steps back off: the platform turns this
+ *        server's anonymous requests away in spells, and while one is on
+ *        each attempt is a timeout spent getting nowhere. So a refusal
+ *        skips them for the next half hour, after which one reel tries
+ *        again — the spells end, and this is the only route that reads the
+ *        video itself. YT_DLP_COOKIES_FILE removes the problem entirely.
+ *        TikTok is unaffected. See ytDlp.ts.
  *
  *   4. Nothing worked → return an empty result (never throws).
  *
@@ -90,7 +92,12 @@ import {
   startAudioDownload,
 } from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
-import { hasYtDlpCookies } from "./ytDlp";
+import {
+  hasYtDlpCookies,
+  instagramMediaBlocked,
+  noteInstagramMediaBlocked,
+  looksLikeInstagramRefusal,
+} from "./ytDlp";
 import {
   runMoviePipeline,
   enrichAndSaveMatches,
@@ -309,26 +316,32 @@ export async function processSocialLink(
   // next to making every user wait for it in series.
   const skipGrounding = detectPlatform(url) === "instagram" || detectPlatform(url) === "tiktok";
 
-  // Instagram will not serve media to an unauthenticated datacenter IP. It
-  // comes back as a rate limit —
+  // Instagram turns this server's anonymous requests away in spells, saying
   //
   //   The webpage request was redirected to the login page. You have
   //   exceeded the rate-limit for accessing posts anonymously.
   //
-  // — which reads like something that will pass, but the limit for a cloud
-  // IP with no cookies is effectively zero and every attempt has failed
-  // this way. Trying anyway cost three downloads per reel (the speculative
-  // one below, then steps 2 and 3), each able to sit there until its
-  // timeout, before anything that works was reached.
-  //
-  // So on Instagram the download routes are skipped unless cookies are
-  // configured, and the caption scrape, preview image and last-resort
-  // grounding carry the link instead. TikTok is left alone: it serves
-  // anonymous downloads from the server perfectly well.
-  const canDownloadMedia = detectPlatform(url) !== "instagram" || hasYtDlpCookies();
+  // While a spell is on, every download attempt costs a timeout and gets
+  // nowhere — three of them per reel here, counting the speculative one
+  // below and steps 2 and 3. But the spells end, and the download is the
+  // only route that reads the video itself, so this backs off instead of
+  // writing the platform off: the first reel after the window tries, and if
+  // it is refused the next half hour goes straight to the routes that work.
+  // See ytDlp.ts. TikTok is unaffected — it downloads from the server
+  // without complaint.
+  const isInstagram = detectPlatform(url) === "instagram";
+  const canDownloadMedia = !isInstagram || hasYtDlpCookies() || !instagramMediaBlocked();
   if (!canDownloadMedia) {
-    warn?.({ url }, "processSocialLink: Instagram without yt-dlp cookies — skipping audio/video download, caption and preview image only");
+    warn?.({ url }, "processSocialLink: Instagram download refused recently — backing off, caption and preview image only");
   }
+
+  /** Start the back-off when a failure is Instagram turning us away. */
+  const noteIfRefusal = (err: unknown) => {
+    if (isInstagram && !hasYtDlpCookies() && looksLikeInstagramRefusal(err)) {
+      noteInstagramMediaBlocked();
+      warn?.({ url }, "processSocialLink: Instagram refused the download — skipping it for the next 30 minutes");
+    }
+  };
 
   const audioDownload = skipGrounding && canDownloadMedia
     ? (() => {
@@ -338,7 +351,10 @@ export async function processSocialLink(
         // unhandled rejection while the caption path is still running.
         p.then(
           () => warn?.({ stage: "audio-download", ms: Date.now() - startedAt }, "processSocialLink: speculative audio download finished"),
-          (err) => warn?.({ err, ms: Date.now() - startedAt }, "processSocialLink: speculative audio download failed"),
+          (err) => {
+            warn?.({ err, ms: Date.now() - startedAt }, "processSocialLink: speculative audio download failed");
+            noteIfRefusal(err);
+          },
         );
         return p;
       })()
@@ -482,6 +498,7 @@ export async function processSocialLink(
       warn?.({ url }, "processSocialLink: audio extraction returned no matches — falling back to video");
     } catch (err) {
       warn?.({ url, err }, "processSocialLink: audio extraction failed — falling back to video");
+      noteIfRefusal(err);
     }
 
     // ── Step 3: yt-dlp video fallback ──────────────────────────────────────
@@ -498,6 +515,7 @@ export async function processSocialLink(
       return { source: "video", text: null, matches, saved, listTitle };
     } catch (err) {
       warn?.({ url, err }, "processSocialLink: video extraction failed — no data available");
+      noteIfRefusal(err);
     }
   }
 

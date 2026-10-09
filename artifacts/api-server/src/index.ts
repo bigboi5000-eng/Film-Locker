@@ -28,8 +28,16 @@ async function logYtDlpDiagnostics(): Promise<void> {
     const lines = stderr.split("\n");
     const libLine = lines.find((l) => l.includes("Optional libraries")) ?? null;
     const handlersLine = lines.find((l) => l.includes("Request Handlers")) ?? null;
+    // The version, because the Dockerfile takes it from the latest release
+    // unless YT_DLP_VERSION pins one — so a rebuild can change the binary
+    // with nothing in the repository to show it. When extraction stops
+    // working on a platform, the first question is whether the version
+    // moved, and without this there is no way to answer it after the fact,
+    // or to know what to pin to.
+    const versionLine = lines.find((l) => l.includes("yt-dlp version")) ?? null;
     logger.info(
       {
+        ytDlpVersion: versionLine?.replace(/^\[debug\]\s*/, "").trim() ?? null,
         curlCffiAvailable: handlersLine?.includes("curl_cffi") ?? false,
         optionalLibraries: libLine,
         requestHandlers: handlersLine,

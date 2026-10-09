@@ -4,20 +4,25 @@
  * The bits of yt-dlp invocation that audioExtractor.ts and videoExtractor.ts
  * both need: where the binary is, and whether we have cookies for it.
  *
- * Cookies matter because Instagram no longer serves media to anonymous
- * requests from a datacenter IP. yt-dlp reports it as a rate limit:
+ * Cookies matter because Instagram periodically stops serving media to
+ * anonymous requests from this server. yt-dlp reports it as a rate limit:
  *
  *   WARNING: [Instagram] <id>: Instagram API is not granting access
  *   ERROR: [Instagram] <id>: The webpage request was redirected to the
  *   login page. You have exceeded the rate-limit for accessing posts
  *   anonymously. Use --cookies-from-browser or --cookies [...]
  *
- * It reads as something that will pass, but it does not: the limit for an
- * unauthenticated cloud IP is effectively zero, and every Instagram media
- * download from the server has failed this way. So processSocialLink.ts
- * checks hasYtDlpCookies() before spending a download attempt on Instagram
- * at all, and falls through to the routes that do work — the caption
- * scrape, the post's preview image, and search grounding.
+ * The operative part is the redirect to the login page, not the word
+ * "rate-limit". The block is real but temporary, and while it is up it takes
+ * the caption scrape and the preview image with it, because those read the
+ * same page (see fetchPageHtml in pageCaptionScraper.ts) — so a reel that
+ * fails every route at once is more likely one page nobody could read than
+ * three separate dead ends.
+ *
+ * Hence the back-off below rather than giving up on the download routes:
+ * an earlier version of this skipped them outright on Instagram, which
+ * stopped the wasted attempts but also meant never noticing the block had
+ * lifted. Cookies remove the problem, for whoever is willing to supply them.
  *
  * Supplying cookies is a deliberate choice, not a default, which is why
  * this only reads them from the environment and never tries to obtain them.
@@ -64,4 +69,55 @@ export function hasYtDlpCookies(): boolean {
 export function ytDlpCookieArgs(): string[] {
   const path = cookieFile();
   return path ? ["--cookies", path] : [];
+}
+
+// ── Instagram media back-off ──────────────────────────────────────────────────
+//
+// Instagram's refusal is not permanent and not a property of the code: it
+// redirects this server's requests to the login page for a while, then
+// stops. Skipping the download routes for good — which is what the first
+// version of this did — trades three wasted timeouts per reel for never
+// recovering when the block lifts, and that is the worse side of the trade,
+// because the download is the only route that reads the video itself.
+//
+// So it backs off instead. The first Instagram reel after the window expires
+// tries the download; if that attempt is refused, the next half hour skips
+// it. One reel pays for the discovery and the rest go straight to the routes
+// that work.
+//
+// Deliberately in-process and not persisted: it resets on deploy, which is
+// when the IP or the yt-dlp version may well have changed anyway, and an
+// empty back-off only ever costs one extra attempt.
+
+const BLOCK_BACKOFF_MS = 30 * 60_000;
+
+let instagramBlockedUntil = 0;
+
+/** Whether a recent download was refused and the back-off is still running. */
+export function instagramMediaBlocked(): boolean {
+  return Date.now() < instagramBlockedUntil;
+}
+
+/** Start the back-off window after a refusal. */
+export function noteInstagramMediaBlocked(): void {
+  instagramBlockedUntil = Date.now() + BLOCK_BACKOFF_MS;
+}
+
+/**
+ * Whether a yt-dlp failure is Instagram turning the request away rather than
+ * something about this particular post.
+ *
+ * Matched on the message because that is all yt-dlp gives us: it exits
+ * non-zero with the text below on stderr, with no distinct status code for
+ * "blocked" as against "this post does not exist".
+ */
+export function looksLikeInstagramRefusal(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return [
+    "redirected to the login page",
+    "rate-limit for accessing posts anonymously",
+    "Instagram API is not granting access",
+    "empty media response",
+    "login required",
+  ].some((marker) => message.toLowerCase().includes(marker.toLowerCase()));
 }

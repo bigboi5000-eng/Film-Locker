@@ -16,9 +16,26 @@ RUN chmod a+rx /usr/local/bin/deno
 # TLS fingerprint — without it, yt-dlp warns "no impersonate target is
 # available" and TikTok rejects the plain request outright ("Unexpected
 # response from webpage request").
+# Which release to install. "latest" tracks whatever yt-dlp has shipped most
+# recently, which is usually what you want — extractors break when platforms
+# change and the fixes only arrive in new releases.
+#
+# The cost is that an image rebuild can change the binary with nothing in the
+# repository to show it, so a platform that stops working gives no way to
+# tell a new block from a version regression. Set YT_DLP_VERSION to a release
+# tag to pin it (Railway: a service variable, or --build-arg locally). The
+# version in use is logged on startup — see logYtDlpDiagnostics in
+# artifacts/api-server/src/index.ts — which is where to read the tag to pin.
+ARG YT_DLP_VERSION=latest
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg curl ca-certificates python3 \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
+    && if [ "$YT_DLP_VERSION" = "latest" ]; then \
+         YT_DLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux"; \
+       else \
+         YT_DLP_URL="https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp_linux"; \
+       fi \
+    && curl -fL "$YT_DLP_URL" -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
