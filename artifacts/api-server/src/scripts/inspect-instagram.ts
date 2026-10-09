@@ -71,12 +71,32 @@ async function main() {
 
   const html = await res.text();
 
+  // Where the request ended up is the reliable signal. The two string
+  // markers below used to be enough, but Instagram stopped emitting both
+  // while still redirecting to /accounts/login/ — so this printed "login
+  // wall no" directly underneath a final url of the login page, which is
+  // the one thing the whole script exists to tell you. The redirect target
+  // does not depend on their markup or its wording.
+  const redirectedToLogin = (() => {
+    try {
+      return new URL(res.url).pathname.startsWith("/accounts/login");
+    } catch {
+      return false;
+    }
+  })();
+  const loginMarkersInHtml =
+    html.includes("Log in to Instagram") || html.includes('"requiresLogin":true');
+
   console.log(`status       ${res.status}`);
   console.log(`final url    ${res.url}`);
   console.log(`html bytes   ${html.length.toLocaleString()}`);
   console.log(
     `login wall   ${
-      html.includes("Log in to Instagram") || html.includes('"requiresLogin":true') ? "YES" : "no"
+      redirectedToLogin
+        ? "YES — redirected to the login page"
+        : loginMarkersInHtml
+          ? "YES — login markers in the HTML"
+          : "no"
     }\n`
   );
 
