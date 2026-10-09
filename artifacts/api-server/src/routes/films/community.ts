@@ -1,7 +1,14 @@
 import { Router, type IRouter } from "express";
 import { and, eq, avg, count, desc, notInArray, or, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
-import { db, filmCommunityRatingsTable, filmCommentsTable, usersTable, followsTable } from "@workspace/db";
+import {
+  db,
+  filmCommunityRatingsTable,
+  filmCommentsTable,
+  usersTable,
+  followsTable,
+  moviesTable,
+} from "@workspace/db";
 import {
   GetFilmCommunityScoreParams,
   GetFilmCommunityScoreResponse,
@@ -98,6 +105,28 @@ router.post("/films/:tmdbId/community-rating", requireAuth, async (req, res): Pr
       target: [filmCommunityRatingsTable.userId, filmCommunityRatingsTable.tmdbId],
       set: { rating },
     });
+
+  // A public rating is also your own rating of the film, so it carries across
+  // to the private one rather than leaving you to give the same stars twice.
+  //
+  // One direction only. Rating privately must stay private — that is the
+  // whole point of a private rating — so PATCH /movies/:id/rating writes
+  // nothing here.
+  //
+  // Only an existing saved row is updated. Creating one would silently add
+  // the film to the rater's watchlist, which is not what pressing a star on
+  // a public score asks for, and the `where` below simply matches nothing
+  // when the film is not saved.
+  const mirrored = await db
+    .update(moviesTable)
+    .set({ rating })
+    .where(and(eq(moviesTable.clerkUserId, clerkUserId), eq(moviesTable.tmdbId, tmdbId)))
+    .returning({ id: moviesTable.id });
+
+  req.log.info(
+    { tmdbId, rating, privateRowsUpdated: mirrored.length },
+    "community rating set",
+  );
 
   const [agg] = await db
     .select({

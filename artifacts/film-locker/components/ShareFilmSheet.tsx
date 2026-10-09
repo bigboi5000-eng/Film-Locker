@@ -39,6 +39,7 @@ import {
   type Playlist,
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
+import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
@@ -69,10 +70,12 @@ function FilmCard({
   match,
   onAdded,
   onNotAMatch,
+  onOpenFilm,
 }: {
   match: GeminiMovieMatch;
   onAdded: () => void;
   onNotAMatch?: () => void;
+  onOpenFilm?: (match: GeminiMovieMatch) => void;
 }) {
   const colors = useColors();
   const queryClient = useQueryClient();
@@ -108,15 +111,22 @@ function FilmCard({
 
   return (
     <View style={[cardStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {/* Poster */}
+      {/* Poster — opens the full sheet, so a matched film can be looked at
+          before it is added rather than only after. */}
       {posterUri ? (
-        <Image
-          source={{ uri: posterUri }}
-          style={cardStyles.poster}
-          contentFit="cover"
-          transition={200}
-          placeholder={require('@/assets/images/icon.png')}
-        />
+        <TouchableOpacity
+          onPress={() => onOpenFilm?.(match)}
+          disabled={!onOpenFilm || !match.tmdb_id}
+          activeOpacity={0.8}
+        >
+          <Image
+            source={{ uri: posterUri }}
+            style={cardStyles.poster}
+            contentFit="cover"
+            transition={200}
+            placeholder={require('@/assets/images/icon.png')}
+          />
+        </TouchableOpacity>
       ) : (
         <View style={[cardStyles.poster, cardStyles.posterFallback, { backgroundColor: colors.secondary }]}>
           <Text style={{ fontSize: 28 }}>🎬</Text>
@@ -125,14 +135,22 @@ function FilmCard({
 
       {/* Info */}
       <View style={cardStyles.info}>
-        <Text style={[cardStyles.title, { color: colors.foreground }]} numberOfLines={2}>
-          {displayTitle}
-        </Text>
-        {match.release_year ? (
-          <Text style={[cardStyles.year, { color: colors.primary }]}>
-            {match.release_year}
+        {/* Title and year open the sheet too. Kept as its own touchable so
+            the Add button below kicks off adding, not opening. */}
+        <TouchableOpacity
+          onPress={() => onOpenFilm?.(match)}
+          disabled={!onOpenFilm || !match.tmdb_id}
+          activeOpacity={0.7}
+        >
+          <Text style={[cardStyles.title, { color: colors.foreground }]} numberOfLines={2}>
+            {displayTitle}
           </Text>
-        ) : null}
+          {match.release_year ? (
+            <Text style={[cardStyles.year, { color: colors.primary }]}>
+              {match.release_year}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
         {match.overview ? (
           <Text style={[cardStyles.overview, { color: colors.mutedForeground }]} numberOfLines={3}>
             {match.overview}
@@ -253,11 +271,13 @@ function FilmSelectRow({
   selected,
   onToggle,
   onNotAMatch,
+  onOpenFilm,
 }: {
   match: GeminiMovieMatch;
   selected: boolean;
   onToggle: () => void;
   onNotAMatch?: () => void;
+  onOpenFilm?: (match: GeminiMovieMatch) => void;
 }) {
   const colors = useColors();
   const displayTitle = match.title ?? match.movie_title;
@@ -288,11 +308,21 @@ function FilmSelectRow({
         {match.release_year ? (
           <Text style={[selectStyles.year, { color: colors.mutedForeground }]}>{match.release_year}</Text>
         ) : null}
-        {onNotAMatch && (
-          <TouchableOpacity onPress={onNotAMatch} hitSlop={6} style={selectStyles.notAMatchBtn}>
-            <Text style={[selectStyles.notAMatchText, { color: colors.mutedForeground }]}>Not a match?</Text>
-          </TouchableOpacity>
-        )}
+        {/* The row itself toggles the checkbox, so opening the film needs
+            its own target rather than the poster — a tap meant for
+            selection must never open a sheet instead. */}
+        <View style={selectStyles.linkRow}>
+          {onOpenFilm && match.tmdb_id ? (
+            <TouchableOpacity onPress={() => onOpenFilm(match)} hitSlop={6} style={selectStyles.notAMatchBtn}>
+              <Text style={[selectStyles.notAMatchText, { color: colors.primary }]}>Details</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onNotAMatch && (
+            <TouchableOpacity onPress={onNotAMatch} hitSlop={6} style={selectStyles.notAMatchBtn}>
+              <Text style={[selectStyles.notAMatchText, { color: colors.mutedForeground }]}>Not a match?</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       <Ionicons
         name={selected ? 'checkbox' : 'square-outline'}
@@ -318,6 +348,7 @@ const selectStyles = StyleSheet.create({
   title: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   year: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
   notAMatchBtn: { alignSelf: 'flex-start', marginTop: 3, paddingVertical: 2 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   notAMatchText: {
     fontSize: 11,
     fontFamily: 'Inter_500Medium',
@@ -877,6 +908,15 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
   // Which match the correction sheet is open for; null when closed.
   const [correctingIndex, setCorrectingIndex] = useState<number | null>(null);
 
+  /**
+   * The matched film whose detail sheet is open, if any.
+   *
+   * A match arrives with enough to show immediately — title, year, poster,
+   * synopsis — so the sheet opens populated and only the rest of the TMDB
+   * detail has to load.
+   */
+  const [openFilm, setOpenFilm] = useState<GeminiMovieMatch | null>(null);
+
   // Candidates are matches that passed confidence threshold and have a TMDB id
   const candidates = matches
     .map((m, i) => {
@@ -1128,6 +1168,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       selected={selectedIds.has(String(match.tmdb_id))}
                       onToggle={() => match.tmdb_id != null && toggleSelected(match.tmdb_id)}
                       onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
+                      onOpenFilm={setOpenFilm}
                     />
                   ))}
                 </ScrollView>
@@ -1189,6 +1230,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       match={match}
                       onAdded={handleAdded}
                       onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
+                      onOpenFilm={setOpenFilm}
                     />
                   ))}
                 </ScrollView>
@@ -1236,6 +1278,24 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
       onPick={handleCorrection}
       onClose={() => setCorrectingIndex(null)}
     />
+
+    {/* Also a sibling, for the same reason as the sheet above: a Modal
+        nested inside another Modal is unreliable on Android, and this file
+        has already produced one blank-sheet bug from exactly that.
+
+        Mounted only while a film is open, so it refetches for whichever one
+        was tapped rather than keeping the first. */}
+    {openFilm?.tmdb_id != null && (
+      <FilmDetailModal
+        visible
+        onClose={() => setOpenFilm(null)}
+        tmdbId={openFilm.tmdb_id}
+        title={openFilm.title ?? openFilm.movie_title}
+        posterUrl={openFilm.poster_url ?? ''}
+        releaseYear={openFilm.release_year ?? ''}
+        overview={openFilm.overview ?? ''}
+      />
+    )}
     </>
   );
 }

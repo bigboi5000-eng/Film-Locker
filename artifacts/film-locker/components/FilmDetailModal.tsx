@@ -1221,6 +1221,21 @@ export function FilmDetailModal({
    */
   const onSimilarPick = useCallback((movie: TmdbMovieCard) => setSwapped(movie), []);
 
+  /**
+   * Google, for the things the app does not hold — reviews, trivia, where a
+   * remake sits in the sequence, whether the follow-up is worth it.
+   *
+   * The year and the word "film" go into the query because a title on its
+   * own is ambiguous more often than it looks: remakes share names, and
+   * plenty of films share theirs with a band or a novel.
+   */
+  const openWebSearch = useCallback(() => {
+    const query = releaseYear ? `${title} ${releaseYear} film` : `${title} film`;
+    Linking.openURL(`https://www.google.com/search?q=${encodeURIComponent(query)}`).catch(() => {
+      Alert.alert('Unable to open link', 'Could not open a web search for this film.');
+    });
+  }, [title, releaseYear]);
+
   /** Open a director or actor's filmography, closing this sheet first. */
   const openPerson = useCallback((personId: number) => {
     handleClose();
@@ -1422,6 +1437,21 @@ export function FilmDetailModal({
                   <Text style={styles.synopsisText}>{displayOverview}</Text>
                 </View>
               ) : null}
+
+              {/* Out to the web, for everything the app does not hold. Sits
+                  under the synopsis because that is the point someone has
+                  read what we have and wants more of it. */}
+              <View style={styles.section}>
+                <TouchableOpacity
+                  style={styles.webSearchRow}
+                  onPress={openWebSearch}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="globe-outline" size={16} color="#0066FF" />
+                  <Text style={styles.webSearchText}>Search the web for this film</Text>
+                  <Ionicons name="open-outline" size={14} color="#0066FF" />
+                </TouchableOpacity>
+              </View>
 
               {/* ── Community Section — Film Locker's own ratings and
                   written comments. The TMDB rating above is just a number;
@@ -1660,6 +1690,23 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 20 },
   savingText: { fontSize: 12, color: '#9CA3AF', marginTop: 6, fontFamily: 'Inter_400Regular' },
   addRow: { flexDirection: 'row', gap: 8 },
+  webSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    backgroundColor: '#F5F9FF',
+  },
+  webSearchText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#0066FF',
+  },
   // 1 : 0.4 — the second button is 40% the width of the first.
   addPrimary: { flex: 1, marginBottom: 0 },
   addSecondary: { flex: 0.4, marginBottom: 0, paddingHorizontal: 4 },

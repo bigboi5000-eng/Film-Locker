@@ -22,6 +22,7 @@ import {
   type ConversationFeedItem,
   type ConversationMessageContent,
 } from '@workspace/api-client-react';
+import { FilmDetailModal } from '@/components/FilmDetailModal';
 
 // Top row — ordered by how likely each is to be someone's go-to reaction to
 // a friend's film pick (warm/positive first, niche ones toward the end).
@@ -327,19 +328,34 @@ function RecommendationCard({
   isMine,
   onOpenReply,
   onAddToWatchlist,
+  onOpenFilm,
 }: {
   item: ConversationFeedItem;
   isMine: boolean;
   onOpenReply: (item: ConversationFeedItem) => void;
   onAddToWatchlist: (item: ConversationFeedItem) => void;
+  onOpenFilm: (item: ConversationFeedItem) => void;
 }) {
+  // Someone sending you a film is the point at which you most want to know
+  // what it is, and the only thing on offer used to be adding it unseen.
+  // Tapping the poster or the title opens the full sheet instead.
+  const canOpen = item.tmdbId != null;
+  const open = () => onOpenFilm(item);
+
   return (
     <View style={[styles.filmCard, isMine ? styles.filmCardMine : styles.filmCardTheirs]}>
-      <Image source={{ uri: item.posterUrl! }} style={styles.poster} contentFit="cover" transition={200} />
+      <TouchableOpacity onPress={open} disabled={!canOpen} activeOpacity={0.8}>
+        <Image source={{ uri: item.posterUrl! }} style={styles.poster} contentFit="cover" transition={200} />
+      </TouchableOpacity>
       <View style={styles.filmInfo}>
-        <Text style={styles.filmMeta}>{isMine ? 'You recommended' : 'Recommended'}</Text>
-        <Text style={styles.filmTitle}>{item.filmTitle}</Text>
-        <Text style={styles.time}>{formatRelative(new Date(item.createdAt))}</Text>
+        {/* The text block opens the film; the action row below is a sibling
+            rather than nested inside it, so Add and React keep their own
+            taps instead of competing with this one. */}
+        <TouchableOpacity onPress={open} disabled={!canOpen} activeOpacity={0.7}>
+          <Text style={styles.filmMeta}>{isMine ? 'You recommended' : 'Recommended'}</Text>
+          <Text style={styles.filmTitle}>{item.filmTitle}</Text>
+          <Text style={styles.time}>{formatRelative(new Date(item.createdAt))}</Text>
+        </TouchableOpacity>
 
         <View style={styles.actionRow}>
           {!isMine && (
@@ -438,6 +454,15 @@ export default function InboxThreadScreen() {
   const [sending, setSending] = useState(false);
   const [replyTarget, setReplyTarget] = useState<{ id: number; filmTitle: string } | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+
+  /**
+   * The film whose detail sheet is open, if any.
+   *
+   * A thread item carries only the id, title and poster, which is all the
+   * sheet needs to start: it fetches the rest by TMDB id, and the year and
+   * synopsis fill in as that lands.
+   */
+  const [openFilm, setOpenFilm] = useState<ConversationFeedItem | null>(null);
 
   // Animates the panel's height open/closed, like a real keyboard sliding
   // up — the chat feed above it (flex: 1) shrinks to make room rather than
@@ -581,6 +606,7 @@ export default function InboxThreadScreen() {
                     isMine={isMine}
                     onOpenReply={openReplyTo}
                     onAddToWatchlist={handleAddToWatchlist}
+                    onOpenFilm={setOpenFilm}
                   />
                 </SwipeToReplyRow>
               );
@@ -621,6 +647,22 @@ export default function InboxThreadScreen() {
           bottomInset={insets.bottom}
         />
       </Animated.View>
+
+      {/* The sheet for a film tapped in the thread. Only mounted while one is
+          open, so it refetches for whichever film was picked rather than
+          holding the first one's data. The year and synopsis come from its
+          own lookup — a thread item carries neither. */}
+      {openFilm?.tmdbId != null && (
+        <FilmDetailModal
+          visible
+          onClose={() => setOpenFilm(null)}
+          tmdbId={openFilm.tmdbId}
+          title={openFilm.filmTitle ?? ''}
+          posterUrl={openFilm.posterUrl ?? ''}
+          releaseYear=""
+          overview=""
+        />
+      )}
     </View>
   );
 }
