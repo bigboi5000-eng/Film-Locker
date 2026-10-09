@@ -58,7 +58,23 @@ export async function extractMoviesFromPreviewImage(
 ): Promise<GeminiExtractionResult | null> {
   const imageUrl = await fetchPagePreviewImage(url);
   if (!imageUrl) return null;
+  return extractMoviesFromImageUrl(imageUrl);
+}
 
+/**
+ * Fetch an image by URL and extract any films visible in it.
+ *
+ * Split out from the function above because the image does not always come
+ * from scraping the page ourselves: Apify returns a reel's cover frame as a
+ * plain CDN URL, and that arrives already in hand. Same fetch, same guards,
+ * same extractor — only the source of the URL differs.
+ *
+ * Returns null when the image cannot be fetched, is not a type Gemini
+ * accepts, or is implausibly large. Only a Gemini failure throws.
+ */
+export async function extractMoviesFromImageUrl(
+  imageUrl: string
+): Promise<GeminiExtractionResult | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 

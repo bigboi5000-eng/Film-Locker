@@ -30,6 +30,25 @@
  *        plain signed URL. On a film account it is usually a still from the
  *        film, often with the title over it.
  *
+ *   0.9. Instagram via Apify (apifyInstagram.ts):
+ *        The post fetched from residential infrastructure instead of from
+ *        here, because Instagram stopped answering this server at all — a
+ *        reel redirects to /accounts/login/, so steps 0.5 and 0.75 above
+ *        read a login page and correctly find nothing in it. Returns the
+ *        post's content rather than its markup: caption, hashtags,
+ *        comments, the cover frame and the mp4, all on plain CDN URLs.
+ *
+ *        Read in that order and separately. The caption is the only part
+ *        the author wrote and almost always names the film; comments are
+ *        tried only when it names nothing, because they are equally full of
+ *        jokes about other films and merging them into a caption that
+ *        worked adds a wrong film beside the right one.
+ *
+ *        Costs a fraction of a penny per run, so it sits behind the free
+ *        attempts: if Instagram relaxes, those start working again and this
+ *        stops being reached on its own. Needs APIFY_TOKEN; without it the
+ *        pipeline behaves exactly as it did before.
+ *
  *   1. Gemini + Google Search grounding (skipped for Instagram and TikTok):
  *        Gemini searches Google to find out what the URL is about, then
  *        identifies any films referenced. Fallback for content the direct
@@ -83,7 +102,13 @@
 
 import { unlinkSync } from "node:fs";
 import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
-import { extractMoviesFromPreviewImage } from "./previewImageExtractor";
+import { extractMoviesFromPreviewImage, extractMoviesFromImageUrl } from "./previewImageExtractor";
+import {
+  hasApifyToken,
+  fetchInstagramPostViaApify,
+  captionText,
+  commentsText,
+} from "./apifyInstagram";
 import { isPubliclyFetchableUrl } from "./safeUrl";
 import { analyzeUrlForFilms } from "./geminiUrlAnalyzer";
 import {
@@ -425,6 +450,84 @@ export async function processSocialLink(
     warn?.({ url }, "processSocialLink: preview image found no films — falling back");
   } catch (err) {
     warn?.({ url, err }, "processSocialLink: preview image extraction failed — falling back");
+  }
+
+  // ── Step 0.9: Instagram via Apify ────────────────────────────────────────
+  // Everything above this asks Instagram directly, and Instagram no longer
+  // answers this server: a reel now redirects to /accounts/login/, with no
+  // og:description and no og:image, which is why the two steps above came
+  // up empty rather than because the post held nothing. Apify fetches it
+  // from residential infrastructure instead and returns the post's content,
+  // which is both more than the markup held and no longer refusable.
+  //
+  // It costs a fraction of a penny per run, so it sits behind the free
+  // attempts rather than in front of them — if Instagram ever relaxes, the
+  // scrape above starts working again and this stops being reached without
+  // anyone changing anything.
+  //
+  // The caption is read first and alone. It is the only part an author
+  // wrote, and where a film is named it is nearly always there. Comments
+  // only run if the caption named nothing: they are where these accounts'
+  // audiences answer "movie name?", but they are also full of jokes about
+  // other films, and blending them into a caption that already worked would
+  // put a second, wrong film in somebody's list.
+  if (isInstagram && hasApifyToken()) {
+    try {
+      const post = await timed("apify-instagram", warn, () =>
+        fetchInstagramPostViaApify(url, warn));
+
+      if (post) {
+        // 0.9a — the caption, on its own.
+        const caption = captionText(post);
+        if (caption) {
+          const { matches, saved, listTitle } = await timed("apify-caption-pipeline", warn, () =>
+            runMoviePipeline(caption, warn, dryRun, clerkUserId));
+          if (matches.length > 0) {
+            warn?.({ url, matchCount: matches.length }, "processSocialLink: Apify caption found films");
+            discardAudioDownload();
+            return { source: "caption", text: caption, matches, saved, listTitle };
+          }
+          warn?.({ url }, "processSocialLink: Apify caption named no films — trying comments");
+        }
+
+        // 0.9b — the audience, only now that the caption has given nothing.
+        const comments = commentsText(post);
+        if (comments) {
+          const { matches, saved, listTitle } = await timed("apify-comments-pipeline", warn, () =>
+            runMoviePipeline(comments, warn, dryRun, clerkUserId));
+          if (matches.length > 0) {
+            warn?.({ url, matchCount: matches.length }, "processSocialLink: Apify comments found films");
+            discardAudioDownload();
+            return { source: "caption", text: comments, matches, saved, listTitle };
+          }
+          warn?.({ url }, "processSocialLink: Apify comments named no films — trying the cover frame");
+        }
+
+        // 0.9c — the cover frame, from Apify's CDN URL rather than a page
+        // this server cannot load.
+        if (post.imageUrl) {
+          const image = await timed("apify-cover-image", warn, () =>
+            extractMoviesFromImageUrl(post.imageUrl!));
+          if (image && image.movies.length > 0) {
+            const { matches, saved, listTitle } =
+              await enrichAndSaveMatches(image.movies, warn, dryRun, clerkUserId, image.list_title);
+            if (matches.length > 0) {
+              warn?.({ url, matchCount: matches.length }, "processSocialLink: Apify cover frame found films");
+              discardAudioDownload();
+              return { source: "image", text: null, matches, saved, listTitle };
+            }
+          }
+          warn?.({ url }, "processSocialLink: Apify cover frame found no films");
+        }
+      }
+    } catch (err) {
+      // An exhausted Apify plan and a broken actor both land here, and both
+      // are worth saying out loud — this is a paid dependency whose silent
+      // failure would look exactly like Instagram blocking us again.
+      warn?.({ url, err }, "processSocialLink: Apify lookup failed — falling back");
+    }
+  } else if (isInstagram && !hasApifyToken()) {
+    warn?.({ url }, "processSocialLink: Instagram and no APIFY_TOKEN — the direct routes above are all there is");
   }
 
   // ── Step 1: Gemini + Google Search grounding (skipped for Instagram/TikTok) ─
