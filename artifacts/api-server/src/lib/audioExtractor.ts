@@ -26,6 +26,7 @@ import { randomUUID } from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
 import type { GeminiExtractionResult } from "./geminiParser";
 import { uploadAndAnalyzeMedia } from "./geminiMediaExtractor";
+import { ytDlpBin, ytDlpCookieArgs } from "./ytDlp";
 
 const execFileAsync = promisify(execFile);
 
@@ -53,14 +54,6 @@ const AUDIO_PROMPT =
   "Format the result into the requested JSON schema.";
 
 // ── yt-dlp helper ─────────────────────────────────────────────────────────────
-
-function ytDlpBin(): string {
-  if (process.env["YT_DLP_PATH"]) return process.env["YT_DLP_PATH"];
-  const home = process.env["HOME"] ?? "/root";
-  const localBin = join(home, ".local", "bin", "yt-dlp");
-  if (existsSync(localBin)) return localBin;
-  return "yt-dlp";
-}
 
 /**
  * Download the audio track of `videoUrl` to a temp mp3 file.
@@ -94,6 +87,8 @@ async function downloadAudio(videoUrl: string): Promise<string> {
     "--max-filesize", "50M",
     "--no-playlist",
     "--quiet",
+    // Empty unless YT_DLP_COOKIES_FILE is set — see ytDlp.ts.
+    ...ytDlpCookieArgs(),
     "-o", outPath,
     videoUrl,
   ];

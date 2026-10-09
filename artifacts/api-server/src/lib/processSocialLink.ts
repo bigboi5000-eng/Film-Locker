@@ -63,6 +63,12 @@
  *        step 2 would miss entirely. Slower/costlier, so it only runs when
  *        steps 1 and 2 both come up empty.
  *
+ *        Both download steps are skipped entirely on Instagram unless
+ *        YT_DLP_COOKIES_FILE is set: Instagram serves no media to an
+ *        unauthenticated datacenter IP, so the attempts cannot succeed and
+ *        only delay step 3.5. TikTok still uses them — it downloads from
+ *        the server without complaint. See ytDlp.ts.
+ *
  *   4. Nothing worked → return an empty result (never throws).
  *
  * The `source` field tells the UI how movies were found:
@@ -84,6 +90,7 @@ import {
   startAudioDownload,
 } from "./audioExtractor";
 import { extractMoviesFromVideo } from "./videoExtractor";
+import { hasYtDlpCookies } from "./ytDlp";
 import {
   runMoviePipeline,
   enrichAndSaveMatches,
@@ -301,7 +308,29 @@ export async function processSocialLink(
   // quota, so a speculative one that turns out to be unnecessary is cheap
   // next to making every user wait for it in series.
   const skipGrounding = detectPlatform(url) === "instagram" || detectPlatform(url) === "tiktok";
-  const audioDownload = skipGrounding
+
+  // Instagram will not serve media to an unauthenticated datacenter IP. It
+  // comes back as a rate limit —
+  //
+  //   The webpage request was redirected to the login page. You have
+  //   exceeded the rate-limit for accessing posts anonymously.
+  //
+  // — which reads like something that will pass, but the limit for a cloud
+  // IP with no cookies is effectively zero and every attempt has failed
+  // this way. Trying anyway cost three downloads per reel (the speculative
+  // one below, then steps 2 and 3), each able to sit there until its
+  // timeout, before anything that works was reached.
+  //
+  // So on Instagram the download routes are skipped unless cookies are
+  // configured, and the caption scrape, preview image and last-resort
+  // grounding carry the link instead. TikTok is left alone: it serves
+  // anonymous downloads from the server perfectly well.
+  const canDownloadMedia = detectPlatform(url) !== "instagram" || hasYtDlpCookies();
+  if (!canDownloadMedia) {
+    warn?.({ url }, "processSocialLink: Instagram without yt-dlp cookies — skipping audio/video download, caption and preview image only");
+  }
+
+  const audioDownload = skipGrounding && canDownloadMedia
     ? (() => {
         const startedAt = Date.now();
         const p = startAudioDownload(url);
@@ -426,43 +455,50 @@ export async function processSocialLink(
     warn?.({ url }, "processSocialLink: Instagram/TikTok URL — skipping Gemini search grounding, going straight to audio");
   }
 
-  // ── Step 2: yt-dlp audio fallback ────────────────────────────────────────
-  // For private posts, very new content, or anything Gemini's search index
-  // hasn't indexed yet — download the audio and analyse it directly. Only
-  // catches films that are actually narrated aloud.
-  try {
-    const { movies: audioMatches, list_title: audioListTitle } = await timed("audio-extraction", warn, async () =>
-      // Reuse the head start when there is one; otherwise download now.
-      audioDownload
-        ? extractMoviesFromAudioFile(await audioDownload)
-        : extractMoviesFromAudio(url));
-    warn?.({ url, matchCount: audioMatches.length }, "processSocialLink: audio extraction complete");
+  // ── Steps 2 and 3: the yt-dlp download routes ────────────────────────────
+  // Both are skipped on Instagram without cookies, for the reason given
+  // where canDownloadMedia is set: the download cannot succeed, and the
+  // attempt is three timeouts standing between the user and the grounding
+  // call below.
+  if (canDownloadMedia) {
+    // ── Step 2: yt-dlp audio fallback ──────────────────────────────────────
+    // For private posts, very new content, or anything Gemini's search index
+    // hasn't indexed yet — download the audio and analyse it directly. Only
+    // catches films that are actually narrated aloud.
+    try {
+      const { movies: audioMatches, list_title: audioListTitle } = await timed("audio-extraction", warn, async () =>
+        // Reuse the head start when there is one; otherwise download now.
+        audioDownload
+          ? extractMoviesFromAudioFile(await audioDownload)
+          : extractMoviesFromAudio(url));
+      warn?.({ url, matchCount: audioMatches.length }, "processSocialLink: audio extraction complete");
 
-    if (audioMatches.length > 0) {
-      const { matches, saved, listTitle } =
-        await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId, audioListTitle);
-      return { source: "audio", text: null, matches, saved, listTitle };
+      if (audioMatches.length > 0) {
+        const { matches, saved, listTitle } =
+          await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId, audioListTitle);
+        return { source: "audio", text: null, matches, saved, listTitle };
+      }
+
+      warn?.({ url }, "processSocialLink: audio extraction returned no matches — falling back to video");
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: audio extraction failed — falling back to video");
     }
 
-    warn?.({ url }, "processSocialLink: audio extraction returned no matches — falling back to video");
-  } catch (err) {
-    warn?.({ url, err }, "processSocialLink: audio extraction failed — falling back to video");
-  }
+    // ── Step 3: yt-dlp video fallback ──────────────────────────────────────
+    // Catches silent "Top N" countdown posts where the list is shown as
+    // on-screen text/graphics with no voiceover — audio-only (step 2) misses
+    // these entirely. Slower and costlier, so it's the last resort.
+    try {
+      const { movies: videoMatches, list_title: videoListTitle } = await timed("video-extraction", warn, () =>
+        extractMoviesFromVideo(url));
+      warn?.({ url, matchCount: videoMatches.length }, "processSocialLink: video extraction complete");
 
-  // ── Step 3: yt-dlp video fallback ────────────────────────────────────────
-  // Catches silent "Top N" countdown posts where the list is shown as
-  // on-screen text/graphics with no voiceover — audio-only (step 2) misses
-  // these entirely. Slower and costlier, so it's the last resort.
-  try {
-    const { movies: videoMatches, list_title: videoListTitle } = await timed("video-extraction", warn, () =>
-      extractMoviesFromVideo(url));
-    warn?.({ url, matchCount: videoMatches.length }, "processSocialLink: video extraction complete");
-
-    const { matches, saved, listTitle } =
-      await enrichAndSaveMatches(videoMatches, warn, dryRun, clerkUserId, videoListTitle);
-    return { source: "video", text: null, matches, saved, listTitle };
-  } catch (err) {
-    warn?.({ url, err }, "processSocialLink: video extraction failed — no data available");
+      const { matches, saved, listTitle } =
+        await enrichAndSaveMatches(videoMatches, warn, dryRun, clerkUserId, videoListTitle);
+      return { source: "video", text: null, matches, saved, listTitle };
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: video extraction failed — no data available");
+    }
   }
 
   // ── Step 3.5: grounding as a last resort on the platforms that skip it ────
