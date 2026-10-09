@@ -162,17 +162,31 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
   const { mutateAsync: extractFromImage, isPending: isExtractingImage } = useExtractFromImage();
   const { mutateAsync: recommend, isPending: isRecommending } = useRecommendMovies();
 
-  /** Send a pasted link through the identification pipeline. */
+  /**
+   * Send a pasted link through the identification pipeline.
+   *
+   * Resolves true when a link was actually handled, so the caller can clear
+   * the field — the bar does, since leaving the URL sitting there after the
+   * results have opened reads as though nothing happened.
+   */
   const submitLink = useCallback(
-    async (raw: string) => {
+    async (raw: string): Promise<boolean> => {
       const trimmed = raw.trim();
-      if (!trimmed || !looksLikeUrl(trimmed) || isProcessingLink) return;
-      if (!requireAccount('identify films from a link')) return;
+      if (!trimmed || !looksLikeUrl(trimmed) || isProcessingLink) return false;
+      if (!requireAccount('identify films from a link')) return false;
       try {
         const result = await processLink({ data: { url: trimmed, dryRun: true } });
-        onMatches(result.matches ?? [], result.listTitle ?? null);
+        const matches = result.matches ?? [];
+        if (matches.length > 0 && Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        // Zero matches still opens the sheet — its "No film identified" state
+        // offers a manual search, so the flow is not a dead end.
+        onMatches(matches, result.listTitle ?? null);
+        return true;
       } catch {
         Alert.alert('Error', 'Could not process the link. Please try again.');
+        return false;
       }
     },
     [isProcessingLink, processLink, requireAccount, onMatches]
@@ -364,6 +378,13 @@ export function FilmSearchBar({
     toggleAi,
   } = tools;
 
+  /** Clear the field once a link has actually been taken up. */
+  const sendLink = useCallback(() => {
+    void submitLink(query).then((handled) => {
+      if (handled) onQueryChange('');
+    });
+  }, [submitLink, query, onQueryChange]);
+
   return (
     <View style={styles.searchRow} onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
       {aiVisible ? (
@@ -398,7 +419,7 @@ export function FilmSearchBar({
             returnKeyType="go"
             autoCapitalize="none"
             autoCorrect={false}
-            onSubmitEditing={() => void submitLink(query)}
+            onSubmitEditing={sendLink}
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => onQueryChange('')} hitSlop={8} style={{ marginRight: 6 }}>
@@ -418,7 +439,7 @@ export function FilmSearchBar({
             </TouchableOpacity>
           )}
           {looksLikeUrl(query.trim()) && (
-            <TouchableOpacity onPress={() => void submitLink(query)} disabled={isProcessingLink} hitSlop={8}>
+            <TouchableOpacity onPress={sendLink} disabled={isProcessingLink} hitSlop={8}>
               {isProcessingLink ? (
                 <ActivityIndicator color="#0066FF" size="small" />
               ) : (

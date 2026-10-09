@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { SignedOutGate } from '@/components/SignedOutGate';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
@@ -8,13 +8,10 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  TextInput,
   Alert,
   Platform,
   ActivityIndicator,
   RefreshControl,
-  Animated,
-  Linking,
 } from 'react-native';
 import { useToast } from '@/components/ToastProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,9 +23,6 @@ import {
   useListMovies,
   getListMoviesQueryKey,
   useDeleteMovie,
-  useProcessSocialLink,
-  useExtractFromImage,
-  useRecommendMovies,
   useSearchMovies,
   getSearchMoviesQueryKey,
   type Movie,
@@ -40,7 +34,13 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 import { confirmDestructive } from '@/lib/confirm';
-import { pickImageFromLibrary, takeFilmPhoto, type PickResult } from '@/lib/pickFilmImage';
+import {
+  useFilmSearchTools,
+  FilmSearchBar,
+  AiResultRow,
+  looksLikeUrl,
+  looksLikeSentence,
+} from '@/components/FilmSearchTools';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -55,30 +55,6 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-// ── Unified search-bar input classification ─────────────────────────────────
-// The single bar handles three inputs: a pasted URL, a plain title (live TMDB
-// search), or a natural-language recommendation request. No scheme required —
-// people paste "instagram.com/reel/…" without "https://" all the time.
-const URL_LIKE_RE = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i;
-// Google's share sheet (and similar) prepends the page title before the link,
-// e.g. "Schindler's List https://share.google/5PhWqNwJU80K34PTK" — that fails
-// URL_LIKE_RE (it's not ENTIRELY a URL) but still needs to go through the
-// link-processing path, not a literal TMDB title search for the whole string.
-// The backend's processSocialLink already strips the title/URL apart
-// (extractUrlFromMixedText) — this just needs to recognize and forward it.
-const EMBEDDED_URL_RE = /https?:\/\/\S+/i;
-
-function looksLikeUrl(text: string): boolean {
-  const trimmed = text.trim();
-  return URL_LIKE_RE.test(trimmed) || EMBEDDED_URL_RE.test(trimmed);
-}
-
-/** A multi-word request or a question reads as a recommendation ask, not a title fragment — skip the live TMDB dropdown so it doesn't flash "no results" mid-sentence. */
-function looksLikeSentence(text: string): boolean {
-  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-  return wordCount > 5 || text.includes('?');
 }
 
 // ── Search result row ─────────────────────────────────────────────────────────
@@ -110,52 +86,6 @@ function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRo
         </Text>
         {movie.releaseYear ? (
           <Text style={styles.resultYear}>{movie.releaseYear}</Text>
-        ) : null}
-      </View>
-      {isSaved && (
-        <View style={styles.savedBadge}>
-          <Ionicons name="bookmark" size={14} color="#FFFFFF" />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-}
-
-// ── AI recommendation row — same shape as SearchResultRow, plus the
-// one-sentence synopsis Gemini writes specifically for these results ──────────
-
-interface AiResultRowProps {
-  match: GeminiMovieMatch;
-  isSaved: boolean;
-  savedMovie?: Movie;
-  onPress: (match: GeminiMovieMatch, savedMovie?: Movie) => void;
-}
-
-function AiResultRow({ match, isSaved, savedMovie, onPress }: AiResultRowProps) {
-  return (
-    <TouchableOpacity
-      style={styles.resultRow}
-      onPress={() => onPress(match, savedMovie)}
-      activeOpacity={0.75}
-    >
-      <Image
-        source={{ uri: match.poster_url ?? undefined }}
-        style={styles.resultPoster}
-        contentFit="cover"
-        transition={200}
-        placeholder={require('@/assets/images/icon.png')}
-      />
-      <View style={styles.resultInfo}>
-        <Text style={styles.resultTitle} numberOfLines={2}>
-          {match.title ?? match.movie_title}
-        </Text>
-        {match.release_year ? (
-          <Text style={styles.resultYear}>{match.release_year}</Text>
-        ) : null}
-        {match.synopsis ? (
-          <Text style={styles.resultSynopsis} numberOfLines={2}>
-            {match.synopsis}
-          </Text>
         ) : null}
       </View>
       {isSaved && (
@@ -215,22 +145,19 @@ export default function WatchlistScreen() {
   const [resultListTitle, setResultListTitle] = useState<string | null>(null);
   const [showResultSheet, setShowResultSheet] = useState(false);
 
-  // AI recommendation bar — separate from the main search bar, revealed by
-  // tapping the sparkles toggle. aiVisible controls mounting; aiOpen is the
-  // target state driving the animation direction (kept apart so the closing
-  // animation gets to finish playing before the bar unmounts).
-  const [aiVisible, setAiVisible] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiQuery, setAiQuery] = useState('');
-  const [aiResults, setAiResults] = useState<GeminiMovieMatch[]>([]);
-  const [searchRowWidth, setSearchRowWidth] = useState(0);
-  const aiAnim = useRef(new Animated.Value(0)).current;
-  const aiInputRef = useRef<TextInput>(null);
-  // Row minus the fixed 44px toggle button and the 8px gap between them —
-  // the pixel width the AI bar animates open to. Flex can't be animated
-  // smoothly here since it's the row's only flex-grow child (nothing to
-  // proportionally share space with), so this measures a concrete target.
-  const aiTargetWidth = Math.max(searchRowWidth - 44 - 8, 0);
+  /**
+   * The camera, the link pipeline and the recommendation bar, shared with
+   * Home. Results from a link or a photo land in the same confirmation sheet
+   * either way, so one callback covers both.
+   */
+  const tools = useFilmSearchTools({
+    requireAccount,
+    onMatches: useCallback((matches: GeminiMovieMatch[], listTitle: string | null) => {
+      setResultMatches(matches);
+      setResultListTitle(listTitle);
+      setShowResultSheet(true);
+    }, []),
+  });
 
   const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
   const isSearchActive =
@@ -242,9 +169,6 @@ export default function WatchlistScreen() {
     { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
   );
   const { mutateAsync: deleteMovie } = useDeleteMovie();
-  const { mutateAsync: processLink, isPending: isProcessingLink } = useProcessSocialLink();
-  const { mutateAsync: extractFromImage, isPending: isExtractingImage } = useExtractFromImage();
-  const { mutateAsync: recommend, isPending: isRecommending } = useRecommendMovies();
 
   // TMDB search — only fires when query has ≥ 2 chars.
   // params.q and queryKey both derive from debouncedQuery so they stay aligned;
@@ -279,157 +203,6 @@ export default function WatchlistScreen() {
   const searchResults = searchData?.movies ?? [];
 
   // ── Handlers ────────────────────────────────────────────────────────────────
-
-  // Main bar submit — URL only now that AI has its own bar. Dry-run: identify
-  // films without saving, then let ShareFilmSheet decide the flow —
-  // individual add-to-watchlist for 1-2 films, or a playlist/watchlist/both
-  // prompt (prefilled with a detected list title) for 3 or more.
-  const handleSubmit = useCallback(async () => {
-    const trimmed = searchQuery.trim();
-    if (!trimmed || !looksLikeUrl(trimmed) || isProcessingLink) return;
-    if (!requireAccount('identify films from a link')) return;
-    try {
-      const result = await processLink({ data: { url: trimmed, dryRun: true } });
-      setSearchQuery('');
-      const matches = result.matches ?? [];
-      if (matches.length > 0 && Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      // Zero matches still opens the sheet — its "No film identified" state
-      // offers a manual TMDB search so the flow isn't a dead end.
-      setResultMatches(matches);
-      setResultListTitle(result.listTitle ?? null);
-      setShowResultSheet(true);
-    } catch {
-      Alert.alert('Error', 'Could not process the link. Please try again.');
-    }
-  }, [searchQuery, isProcessingLink, processLink, requireAccount]);
-
-  // Identify films from a photo or screenshot — a poster or listing shot in
-  // the wild, or a post whose titles are printed in the image rather than
-  // written in its caption (which the link pipeline can't read). Results go
-  // through the same confirmation sheet as a shared link.
-  const runImageExtraction = useCallback(async (result: PickResult) => {
-    if (!result.ok) {
-      const isCamera = result.source === 'camera';
-      if (result.reason === 'permission-denied') {
-        // Naming the right permission matters: this used to say "photo
-        // access" whichever picker had been refused, so someone who had
-        // declined the camera was sent to look for a setting that was
-        // already on. The Settings shortcut is the only action that can
-        // actually fix it — iOS never asks a second time.
-        Alert.alert(
-          isCamera ? 'Camera access needed' : 'Photo access needed',
-          isCamera
-            ? 'Film Locker needs camera access to photograph a poster or listing.'
-            : 'Film Locker needs photo access to read films from an image you pick.',
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
-          ]
-        );
-      } else if (result.reason === 'unreadable') {
-        showToast({ title: 'Could not read that image', variant: 'error' });
-      } else if (result.reason === 'failed') {
-        showToast({
-          title: isCamera ? 'Could not open the camera' : 'Could not open your photos',
-          subtitle: 'Please try again.',
-          variant: 'error',
-        });
-      }
-      // 'cancelled' is the user changing their mind — say nothing.
-      return;
-    }
-
-    try {
-      const response = await extractFromImage({
-        data: {
-          imageBase64: result.image.base64,
-          mimeType: result.image.mimeType,
-          dryRun: true,
-        },
-      });
-
-      const matches = response.matches ?? [];
-      if (matches.length > 0 && Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      // Zero matches still opens the sheet — its "No film identified" state
-      // offers a manual search, same as the link flow.
-      setResultMatches(matches);
-      setResultListTitle(response.listTitle ?? null);
-      setShowResultSheet(true);
-    } catch {
-      Alert.alert('Error', 'Could not read films from that image. Please try again.');
-    }
-  }, [extractFromImage, showToast]);
-
-  const handlePickImage = useCallback(() => {
-    if (!requireAccount('identify films from a photo')) return;
-    Alert.alert(
-      'Identify films from an image',
-      'Photograph a poster or listing, or pick a screenshot of a post.',
-      [
-        { text: 'Take a photo', onPress: () => { void takeFilmPhoto().then(runImageExtraction); } },
-        { text: 'Choose from library', onPress: () => { void pickImageFromLibrary().then(runImageExtraction); } },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  }, [runImageExtraction, requireAccount]);
-
-  // AI bar submit — renders as a plain tappable results list (top 5, no
-  // Gemini prose) below the bar, the same as a TMDB search result list.
-  // Not a chat: one request in, a short list out, nothing conversational.
-  const handleAiSubmit = useCallback(async () => {
-    if (!requireAccount('ask for recommendations')) return;
-    const trimmed = aiQuery.trim();
-    if (!trimmed || isRecommending) return;
-    setAiResults([]);
-    try {
-      const result = await recommend({ data: { query: trimmed, dryRun: true } });
-      if (result.offTopic) {
-        showToast({
-          title: 'Film & TV only',
-          subtitle: 'Try something like "a 90 minute horror film similar to Texas Chainsaw".',
-          variant: 'error',
-        });
-        return;
-      }
-      const matches = (result.matches ?? []).filter((m) => m.tmdb_id != null).slice(0, 6);
-      if (matches.length === 0) {
-        showToast({
-          title: 'No Recommendations Found',
-          subtitle: 'Try rephrasing your request.',
-          variant: 'error',
-        });
-        return;
-      }
-      setAiResults(matches);
-    } catch {
-      Alert.alert('Error', 'Could not get a recommendation. Please try again.');
-    }
-  }, [aiQuery, isRecommending, recommend, showToast, requireAccount]);
-
-  // Grows the AI bar open from the left (flex 0 → 1, sibling toggle button
-  // stays fixed-width so the box fills exactly the remaining row space) and
-  // shrinks it closed again — aiVisible unmounts only once the closing
-  // animation has actually finished playing.
-  const toggleAiSearch = useCallback(() => {
-    if (!aiOpen) {
-      setAiVisible(true);
-      setAiOpen(true);
-      Animated.timing(aiAnim, { toValue: 1, duration: 260, useNativeDriver: false }).start(() => {
-        setTimeout(() => aiInputRef.current?.focus(), 30);
-      });
-    } else {
-      setAiOpen(false);
-      Animated.timing(aiAnim, { toValue: 0, duration: 220, useNativeDriver: false }).start(() => {
-        setAiVisible(false);
-        setAiQuery('');
-        setAiResults([]);
-      });
-    }
-  }, [aiOpen, aiAnim]);
 
   const handleCloseResultSheet = useCallback(() => {
     setShowResultSheet(false);
@@ -565,104 +338,31 @@ export default function WatchlistScreen() {
         </View>
       </View>
 
-      {/* Search / paste-link bar, plus a separate AI recommendation bar that
-          grows open from the sparkles toggle — kept apart so typing in either
-          one never resizes or shifts the other. */}
-      <View
-        style={styles.searchRow}
-        onLayout={(e) => setSearchRowWidth(e.nativeEvent.layout.width)}
-      >
-        {aiVisible ? (
-          <Animated.View
-            style={[
-              styles.aiContainer,
-              { width: aiAnim.interpolate({ inputRange: [0, 1], outputRange: [0, aiTargetWidth] }) },
-            ]}
-          >
-            <Ionicons name="sparkles" size={15} color="#0066FF" style={styles.searchIcon} />
-            <TextInput
-              ref={aiInputRef}
-              value={aiQuery}
-              onChangeText={setAiQuery}
-              placeholder="Ask for a recommendation…"
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              returnKeyType="go"
-              onSubmitEditing={handleAiSubmit}
-            />
-            {isRecommending && <ActivityIndicator color="#0066FF" size="small" />}
-          </Animated.View>
-        ) : (
-          <View style={styles.searchContainer}>
-            <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search a film or paste a social link…"
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              returnKeyType="go"
-              autoCapitalize="none"
-              autoCorrect={false}
-              onSubmitEditing={handleSubmit}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8} style={{ marginRight: 6 }}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            )}
-            {/* Identify films from a photo or screenshot. Sits where a lens
-                icon sits in a search bar, and only while the field is empty,
-                so it never competes with the clear/submit controls. */}
-            {searchQuery.length === 0 && (
-              <TouchableOpacity onPress={handlePickImage} disabled={isExtractingImage} hitSlop={8}>
-                {isExtractingImage ? (
-                  <ActivityIndicator color="#0066FF" size="small" />
-                ) : (
-                  <Ionicons name="camera-outline" size={20} color="#0066FF" />
-                )}
-              </TouchableOpacity>
-            )}
-            {looksLikeUrl(searchQuery.trim()) && (
-              <TouchableOpacity onPress={handleSubmit} disabled={isProcessingLink} hitSlop={8}>
-                {isProcessingLink ? (
-                  <ActivityIndicator color="#0066FF" size="small" />
-                ) : (
-                  <Ionicons name="arrow-forward-circle" size={24} color="#0066FF" />
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-        <TouchableOpacity
-          style={styles.aiToggleBtn}
-          onPress={toggleAiSearch}
-          activeOpacity={0.8}
-        >
-          <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-      {(isProcessingLink || isRecommending || isExtractingImage) && (
+      {/* The bar itself lives in FilmSearchTools, shared with Home — see the
+          note there on why it is a hook plus a presentational component
+          rather than one piece. */}
+      <FilmSearchBar tools={tools} query={searchQuery} onQueryChange={setSearchQuery} />
+      {(tools.isProcessingLink || tools.isRecommending || tools.isExtractingImage) && (
         <Text style={styles.processingHint}>
-          {isProcessingLink
+          {tools.isProcessingLink
             ? 'Extracting films via Gemini…'
-            : isExtractingImage
+            : tools.isExtractingImage
               ? 'Reading films from your image…'
               : 'Asking Gemini for a recommendation…'}
         </Text>
       )}
 
       {/* Filter bar — hidden while searching or asking the AI */}
-      {!isSearchActive && !aiOpen && (
+      {!isSearchActive && !tools.aiOpen && (
         <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
       )}
 
       {/* Context label row */}
-      {aiOpen ? (
-        aiResults.length > 0 && (
+      {tools.aiOpen ? (
+        tools.aiResults.length > 0 && (
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionLabel}>
-              TOP {aiResults.length} RECOMMENDATION{aiResults.length === 1 ? '' : 'S'}
+              TOP {tools.aiResults.length} RECOMMENDATION{tools.aiResults.length === 1 ? '' : 'S'}
             </Text>
           </View>
         )
@@ -687,15 +387,15 @@ export default function WatchlistScreen() {
       ) : null}
 
       {/* ── LIST AREA ── */}
-      {aiOpen ? (
+      {tools.aiOpen ? (
         /* AI RECOMMENDATIONS — plain tappable list, no chat, top 6 max */
         <FlatList<GeminiMovieMatch>
           key="ai-results"
-          data={aiResults}
+          data={tools.aiResults}
           keyExtractor={(item, index) => `ai-${item.tmdb_id ?? index}`}
           renderItem={renderAiResult}
           ListEmptyComponent={
-            isRecommending ? (
+            tools.isRecommending ? (
               <View style={styles.searchingState}>
                 <ActivityIndicator color="#0066FF" />
               </View>
@@ -858,60 +558,9 @@ const styles = StyleSheet.create({
   countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFFFFF' },
 
   // Search / paste-link bar, plus the separate AI recommendation bar
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: HORIZONTAL_PADDING,
-    marginTop: HORIZONTAL_PADDING,
-    marginBottom: 8,
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
   // Same shape as searchContainer but blue-tinted, so it reads as a distinct
   // "AI mode" even mid-animation. Width is driven by the animated `flex`
   // style prop passed alongside this at the call site, not by anything here.
-  aiContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: 12,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#93C5FD',
-    overflow: 'hidden',
-  },
-  searchIcon: { marginRight: 8 },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: '#111827',
-    // react-native-web never resets the browser's default focus outline on
-    // the underlying <input> — without this, focusing/typing draws a
-    // separate black ring around just the input, distinct from the
-    // intended pill border around it.
-    borderWidth: 0,
-    ...(Platform.OS === 'web' ? { outlineWidth: 0 } : null),
-  },
-  aiToggleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#0066FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   processingHint: {
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
@@ -970,13 +619,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#FF8C00',
     marginTop: 3,
-  },
-  resultSynopsis: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
-    marginTop: 4,
-    lineHeight: 16,
   },
   savedBadge: {
     width: 28,
