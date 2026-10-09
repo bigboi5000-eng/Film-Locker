@@ -104,38 +104,101 @@ function actorId(): string {
   return process.env["APIFY_INSTAGRAM_ACTOR"] ?? DEFAULT_ACTOR;
 }
 
+/**
+ * The input the actor is sent.
+ *
+ * Overridable because the actor is now something we shop around for — a
+ * faster one is worth switching to, and the thing that differs between them
+ * is what they call the field holding the URL. Getting that wrong is the
+ * quiet failure: the actor accepts the request, matches nothing, and returns
+ * an empty array that looks exactly like "no such post".
+ *
+ * APIFY_INSTAGRAM_INPUT takes the input JSON verbatim, with "{{url}}" where
+ * the post URL goes — copy it out of the run's Input tab, replace the URL
+ * with the placeholder, and no code has to change. The quoted placeholder is
+ * substituted with a JSON-encoded string so a URL never breaks the document.
+ */
+function buildInput(url: string, warn?: WarnFn): Record<string, unknown> {
+  const template = process.env["APIFY_INSTAGRAM_INPUT"];
+
+  if (template) {
+    try {
+      return JSON.parse(template.split('"{{url}}"').join(JSON.stringify(url)));
+    } catch (err) {
+      // Falling back rather than throwing: a malformed override should not
+      // take the route down, but it must be loud, because the default input
+      // may well not suit whichever actor is configured.
+      warn?.({ err }, "apifyInstagram: APIFY_INSTAGRAM_INPUT is not valid JSON — using the default input");
+    }
+  }
+
+  return {
+    directUrls: [url],
+    resultsType: "posts",
+    // One post. An actor will happily walk a whole profile, and every extra
+    // item is paid for and then discarded here.
+    resultsLimit: 1,
+    addParentData: false,
+  };
+}
+
 /** A string if it is one and has content, otherwise null. */
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
+/** The first of `keys` holding a non-empty string. */
+function pick(item: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = str(item[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
 /**
  * Pull the fields we use out of one dataset item.
  *
- * Defensive throughout: the actor's schema is not ours, it changes without
- * warning, and a missing field should cost us that one signal rather than
- * the whole route.
+ * Every field is read across the names the various Instagram actors use for
+ * it, because which actor is configured is now a tuning decision rather than
+ * a fixed fact — apify/instagram-scraper and apify/instagram-post-scraper
+ * already disagree about what they return, and a switch for the sake of
+ * speed should not be a code change.
+ *
+ * Defensive throughout: a missing field costs that one signal, never the
+ * whole route.
  */
 function normalise(item: Record<string, unknown>): ApifyInstagramPost {
-  const rawComments = Array.isArray(item["latestComments"]) ? item["latestComments"] : [];
+  const rawComments = [item["latestComments"], item["comments"], item["topComments"]].find(
+    (c): c is unknown[] => Array.isArray(c) && c.length > 0,
+  ) ?? [];
+
   const comments = rawComments
-    .map((c) => (c && typeof c === "object" ? str((c as Record<string, unknown>)["text"]) : null))
+    .map((c) => {
+      if (typeof c === "string") return str(c);
+      if (c && typeof c === "object") {
+        return pick(c as Record<string, unknown>, ["text", "comment", "body"]);
+      }
+      return null;
+    })
     .filter((t): t is string => t !== null)
     .slice(0, MAX_COMMENTS);
 
   const rawHashtags = Array.isArray(item["hashtags"]) ? item["hashtags"] : [];
 
-  const duration = item["videoDuration"];
+  const duration = [item["videoDuration"], item["duration"]].find(
+    (d): d is number => typeof d === "number" && Number.isFinite(d),
+  );
 
   return {
-    caption: str(item["caption"]),
+    caption: pick(item, ["caption", "text", "description", "title"]),
     hashtags: rawHashtags.filter((h): h is string => typeof h === "string"),
     comments,
-    imageUrl: str(item["displayUrl"]),
-    videoUrl: str(item["videoUrl"]),
-    audioUrl: str(item["audioUrl"]),
-    ownerUsername: str(item["ownerUsername"]),
-    videoDuration: typeof duration === "number" && Number.isFinite(duration) ? duration : null,
+    imageUrl: pick(item, ["displayUrl", "imageUrl", "thumbnailUrl", "coverUrl"]),
+    videoUrl: pick(item, ["videoUrl", "mediaUrl", "downloadUrl"]),
+    audioUrl: pick(item, ["audioUrl"]),
+    ownerUsername: pick(item, ["ownerUsername", "username", "author"]),
+    videoDuration: duration ?? null,
   };
 }
 
@@ -192,14 +255,7 @@ async function fetchFromApify(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      directUrls: [url],
-      resultsType: "posts",
-      // One post. The actor will happily walk a whole profile, and every
-      // extra item is paid for and then discarded here.
-      resultsLimit: 1,
-      addParentData: false,
-    }),
+    body: JSON.stringify(buildInput(url, warn)),
     // A little beyond the actor's own ceiling, so its timeout wins and
     // reports properly rather than this one aborting first.
     signal: AbortSignal.timeout((RUN_TIMEOUT_SECONDS + 15) * 1000),
@@ -224,7 +280,9 @@ async function fetchFromApify(
     return null;
   }
 
-  const post = normalise(first as Record<string, unknown>);
+  const raw = first as Record<string, unknown>;
+  const post = normalise(raw);
+
   warn?.(
     {
       url,
@@ -237,6 +295,28 @@ async function fetchFromApify(
     },
     "apifyInstagram: fetched post",
   );
+
+  // Said out loud, because losing this is invisible otherwise.
+  //
+  // Not every actor returns comment text. apify/instagram-post-scraper is
+  // quicker than apify/instagram-scraper partly because it does not, and
+  // reports only a commentsCount — so a post whose caption names no film
+  // silently loses the route that would have caught it, with the count
+  // sitting right there proving the comments exist.
+  if (post.comments.length === 0) {
+    const counted = raw["commentsCount"];
+    warn?.(
+      {
+        url,
+        commentsCount: typeof counted === "number" ? counted : null,
+        actor: actorId(),
+      },
+      typeof counted === "number" && counted > 0
+        ? "apifyInstagram: actor returned no comment text though the post has comments — the comments fallback is unavailable with this actor"
+        : "apifyInstagram: no comments on this post",
+    );
+  }
+
   return post;
 }
 
