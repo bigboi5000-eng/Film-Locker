@@ -897,6 +897,21 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
     })
     .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null);
 
+  /**
+   * The best title that was read, whether or not it survived the filter above.
+   *
+   * A match can be rejected for being under the confidence threshold or for
+   * finding nothing on TMDB, and in both cases a title was still read — a
+   * reel naming a TV miniseries scores low and matches nothing, but "Houdini"
+   * was read perfectly well. Dropping that leaves the user retyping a title
+   * the app already has, which is the one thing a search box here should
+   * never ask for.
+   *
+   * Matches arrive sorted by confidence, so the first is the strongest
+   * reading.
+   */
+  const readTitle = matches[0]?.movie_title?.trim() ?? '';
+
   const handleCorrection = useCallback((movie: TmdbMovieCard) => {
     setCorrections((prev) =>
       correctingIndex === null ? prev : { ...prev, [correctingIndex]: movie }
@@ -1042,21 +1057,30 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                 >
                   <View style={styles.emptyState}>
                     <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
-                    <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No film identified</Text>
-                    {/* The old wording here asked for "a post with a visible
-                        film title or caption", which is advice nobody can act
-                        on — you cannot edit someone else's post. A post that
-                        names no film is unreachable from its link alone,
-                        because Instagram will not serve the video to us. A
-                        screenshot goes around that entirely: it is read on
-                        our side from an image the user already has. */}
+                    <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                      {readTitle ? 'Couldn’t match that film' : 'No film identified'}
+                    </Text>
+                    {/* Two different failures, and telling them apart matters.
+                        Reading nothing means the post never named a film, and
+                        the only way round that is a screenshot — the old
+                        wording asked for "a post with a visible film title",
+                        which is advice nobody can act on, since you cannot
+                        edit someone else's post.
+
+                        Reading a title that matched nothing is the opposite
+                        problem: the app knows what the post says and simply
+                        could not resolve it, usually because it is a TV
+                        series rather than a film. Advising a screenshot
+                        there is useless — a second read gets the same title
+                        — so it says what it found and lets the user search,
+                        with the box already filled in below. */}
                     <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                      Some posts only show the film on screen. Screenshot the post,
-                      then use the camera button in the search bar to read the films
-                      out of it.
+                      {readTitle
+                        ? `This post looks like it’s about “${readTitle}”, but that didn’t match a film — it may be a TV series, or go by a different title. Search below to add it yourself.`
+                        : 'Some posts only show the film on screen. Screenshot the post, then use the camera button in the search bar to read the films out of it.'}
                     </Text>
                   </View>
-                  <ManualFilmSearch />
+                  <ManualFilmSearch initialQuery={readTitle} />
                 </ScrollView>
                 <View style={[styles.footer, { borderTopColor: colors.border }]}>
                   <TouchableOpacity
