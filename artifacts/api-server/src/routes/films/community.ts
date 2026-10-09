@@ -15,6 +15,8 @@ import {
   SetFilmCommunityRatingParams,
   SetFilmCommunityRatingBody,
   SetFilmCommunityRatingResponse,
+  DeleteFilmCommunityRatingParams,
+  DeleteFilmCommunityRatingResponse,
   GetFilmCommentsParams,
   GetFilmCommentsQueryParams,
   GetFilmCommentsResponse,
@@ -145,6 +147,57 @@ router.post("/films/:tmdbId/community-rating", requireAuth, async (req, res): Pr
       average,
       count: total,
       userRating: rating,
+    })
+  );
+});
+
+// ── DELETE /films/:tmdbId/community-rating ────────────────────────────────────
+
+router.delete("/films/:tmdbId/community-rating", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+
+  const params = DeleteFilmCommunityRatingParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const { tmdbId } = params.data;
+
+  await db
+    .delete(filmCommunityRatingsTable)
+    .where(
+      and(
+        eq(filmCommunityRatingsTable.userId, clerkUserId),
+        eq(filmCommunityRatingsTable.tmdbId, tmdbId)
+      )
+    );
+
+  // Your own rating of the film is deliberately left alone. Setting a
+  // community rating copies across to it, so you are not asked for the same
+  // stars twice — but withdrawing one is a statement about the public score,
+  // not about what you thought of the film. Clearing it here would silently
+  // discard a rating you may well have given privately long before.
+
+  const [agg] = await db
+    .select({
+      average: avg(filmCommunityRatingsTable.rating),
+      count: count(filmCommunityRatingsTable.id),
+    })
+    .from(filmCommunityRatingsTable)
+    .where(eq(filmCommunityRatingsTable.tmdbId, tmdbId));
+
+  const average = agg?.average ? parseFloat(String(agg.average)) : null;
+  const total = agg?.count ? Number(agg.count) : 0;
+
+  req.log.info({ tmdbId, average, count: total }, "community rating removed");
+
+  res.json(
+    DeleteFilmCommunityRatingResponse.parse({
+      tmdbId,
+      average,
+      count: total,
+      userRating: null,
     })
   );
 });

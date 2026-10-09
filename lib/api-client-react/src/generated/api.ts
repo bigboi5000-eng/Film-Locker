@@ -1572,6 +1572,77 @@ export const useSetFilmCommunityRating = <TError = ErrorType<unknown>,
       return useMutation(getSetFilmCommunityRatingMutationOptions(options));
     }
 
+export const getDeleteFilmCommunityRatingUrl = (tmdbId: number,) => {
+
+
+
+
+  return `/api/films/${tmdbId}/community-rating`
+}
+
+/**
+ * Tapping the star you already gave clears the rating, matching how a private rating behaves. Your own rating of the film is left alone: setting a community rating copies across to it, but withdrawing one is a statement about the public score rather than about what you thought of the film, and clearing it would silently discard a rating you may have given privately first.
+ * @summary Remove the authenticated user's community rating for a film
+ */
+export const deleteFilmCommunityRating = async (tmdbId: number, options?: RequestInit): Promise<FilmCommunityScore> => {
+
+  return customFetch<FilmCommunityScore>(getDeleteFilmCommunityRatingUrl(tmdbId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteFilmCommunityRatingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFilmCommunityRating>>, TError,{tmdbId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFilmCommunityRating>>, TError,{tmdbId: number}, TContext> => {
+
+const mutationKey = ['deleteFilmCommunityRating'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFilmCommunityRating>>, {tmdbId: number}> = (props) => {
+          const {tmdbId} = props ?? {};
+
+          return  deleteFilmCommunityRating(tmdbId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFilmCommunityRatingMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFilmCommunityRating>>>
+
+    export type DeleteFilmCommunityRatingMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove the authenticated user's community rating for a film
+ */
+export const useDeleteFilmCommunityRating = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFilmCommunityRating>>, TError,{tmdbId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFilmCommunityRating>>,
+        TError,
+        {tmdbId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteFilmCommunityRatingMutationOptions(options));
+    }
+
 export const getGetFilmCommentsUrl = (tmdbId: number,
     params?: GetFilmCommentsParams,) => {
   const normalizedParams = new URLSearchParams();

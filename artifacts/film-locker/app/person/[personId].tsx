@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   FlatList,
+  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,15 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
  * almost always being looked up as a director, so those come first and the
  * acting roles become the footnote rather than the other way round.
  */
+/** Past this many films, a heading offers to open out into a grid. */
+const GRID_THRESHOLD = 5;
+
+/**
+ * Three columns, measured once. The section has 20px of padding either side
+ * and the cards sit 10px apart, so two gaps come out of the remainder.
+ */
+const GRID_CARD_WIDTH = (Dimensions.get('window').width - 40 - 20) / 3;
+
 export default function PersonScreen() {
   const { personId } = useLocalSearchParams<{ personId: string }>();
   const router = useRouter();
@@ -30,6 +40,9 @@ export default function PersonScreen() {
   const id = Number(personId);
 
   const [selected, setSelected] = useState<TmdbMovieCard | null>(null);
+
+  /** Which filmographies the user has opened out into a grid. */
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const { data: person, isLoading, isError } = useGetPerson(id, {
     query: { queryKey: getGetPersonQueryKey(id), enabled: Number.isInteger(id) && id > 0 },
@@ -50,6 +63,13 @@ export default function PersonScreen() {
     }
     return out;
   }, [person]);
+
+  /**
+   * True when this person has only one filmography — an actor who has never
+   * directed, or a director who has never acted. With nothing below it to
+   * scroll to, a horizontal strip just hides most of their work.
+   */
+  const soleSection = sections.length === 1;
 
   if (isLoading) {
     return (
@@ -102,31 +122,77 @@ export default function PersonScreen() {
           </View>
         ) : null}
 
-        {sections.map((section) => (
-          <View key={section.key} style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              {section.title} ({section.films.length})
-            </Text>
-            <FlatList
-              data={section.films}
-              horizontal
-              keyExtractor={(m) => `${section.key}-${m.tmdbId}`}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 10, paddingVertical: 4 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.card}
-                  onPress={() => setSelected(item)}
-                  activeOpacity={0.8}
-                >
-                  <Image source={{ uri: item.posterUrl }} style={styles.poster} contentFit="cover" />
-                  <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.cardYear}>{item.releaseYear}</Text>
-                </TouchableOpacity>
+        {sections.map((section) => {
+          // One filmography means there is nothing to scroll past to reach
+          // anything else, so it gets the whole page as a grid — a director
+          // who has never acted should not have their work in a strip.
+          //
+          // With two, the grid is opt-in: tapping a heading opens that
+          // filmography out. Only offered past five films, below which a
+          // horizontal row shows most of them anyway and the control would
+          // be clutter.
+          const asGrid = soleSection || expanded[section.key] === true;
+          const canExpand = !soleSection && section.films.length > GRID_THRESHOLD;
+
+          const card = (item: TmdbMovieCard, width?: number) => (
+            <TouchableOpacity
+              key={`${section.key}-${item.tmdbId}`}
+              style={[styles.card, width ? { width } : null]}
+              onPress={() => setSelected(item)}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={{ uri: item.posterUrl }}
+                style={[styles.poster, width ? { width, height: width * 1.5 } : null]}
+                contentFit="cover"
+              />
+              <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+              <Text style={styles.cardYear}>{item.releaseYear}</Text>
+            </TouchableOpacity>
+          );
+
+          return (
+            <View key={section.key} style={styles.section}>
+              <TouchableOpacity
+                onPress={() => canExpand && setExpanded((e) => ({ ...e, [section.key]: !asGrid }))}
+                disabled={!canExpand}
+                activeOpacity={0.7}
+                style={styles.sectionHeader}
+              >
+                <Text style={styles.sectionTitle}>
+                  {section.title} ({section.films.length})
+                </Text>
+                {canExpand ? (
+                  <Ionicons
+                    name={asGrid ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color="#0066FF"
+                  />
+                ) : null}
+              </TouchableOpacity>
+
+              {asGrid ? (
+                // A wrapping View rather than a FlatList with numColumns:
+                // this page is already a ScrollView, and a vertical
+                // VirtualizedList inside one breaks its own virtualisation
+                // and warns about it. A filmography is tens of items, not
+                // thousands, so there is nothing to virtualise anyway.
+                <View style={styles.grid}>
+                  {section.films.map((item) => card(item, GRID_CARD_WIDTH))}
+                </View>
+              ) : (
+                <FlatList
+                  data={section.films}
+                  horizontal
+                  keyExtractor={(m) => `${section.key}-${m.tmdbId}`}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10, paddingVertical: 4 }}
+                  renderItem={({ item }) => card(item)}
+                />
               )}
-            />
-          </View>
-        ))}
+            </View>
+          );
+        })}
 
         {sections.length === 0 && (
           <View style={styles.section}>
@@ -166,7 +232,14 @@ const styles = StyleSheet.create({
   name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: '#111827', marginTop: 14, textAlign: 'center' },
   knownFor: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 4 },
   section: { paddingHorizontal: 20, marginTop: 26 },
-  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 10 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#111827' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   bio: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#4B5563', lineHeight: 21 },
   card: { width: 112 },
   poster: { width: 112, height: 168, borderRadius: 8, backgroundColor: '#F3F4F6' },

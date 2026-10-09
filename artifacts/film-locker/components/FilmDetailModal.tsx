@@ -30,6 +30,7 @@ import {
   useAddMovie,
   useGetFilmCommunityScore,
   useSetFilmCommunityRating,
+  useDeleteFilmCommunityRating,
   useGetFilmComments,
   usePostFilmComment,
   useDeleteFilmComment,
@@ -480,9 +481,20 @@ const commentStyles = StyleSheet.create({
 function CommunitySection({
   tmdbId,
   isLoggedIn,
+  onRatingChanged,
 }: {
   tmdbId: number;
   isLoggedIn: boolean;
+  /**
+   * Fired after a community rating is set, with the value the server also
+   * wrote to the viewer's own rating of the film.
+   *
+   * The two ratings live in different components, and the private one is
+   * displayed from optimistic state that outlives a refetch — so without
+   * telling the parent, the server's copy lands in the database and the
+   * stars above it never move. Which is exactly how this looked broken.
+   */
+  onRatingChanged?: (rating: number | null) => void;
 }) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -494,7 +506,14 @@ function CommunitySection({
 
   const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId);
   const { data: commentsData, isLoading: commentsLoading } = useGetFilmComments(tmdbId, { page });
+  // Declared here rather than beside the stars it feeds, because
+  // handleCommunityRating closes over it below: a dependency array is
+  // evaluated during render, so a later `const` would be in its temporal
+  // dead zone and throw.
+  const userRating = score?.userRating ?? null;
+
   const { mutateAsync: submitRating, isPending: ratingPending } = useSetFilmCommunityRating();
+  const { mutateAsync: deleteRating, isPending: ratingDeleting } = useDeleteFilmCommunityRating();
   const { mutateAsync: postComment, isPending: commentPending } = usePostFilmComment();
   const { mutateAsync: deleteComment } = useDeleteFilmComment();
   const { mutateAsync: submitReport, isPending: reportPending } = useSubmitReport();
@@ -527,14 +546,33 @@ function CommunitySection({
         return;
       }
       if (Platform.OS !== 'web') Haptics.selectionAsync();
+
+      // Tapping the star you already gave clears it, which is how the
+      // private rating directly above has always behaved. Two sets of stars
+      // on one screen should not need two different mental models.
+      const clearing = userRating === n;
+
       try {
+        if (clearing) {
+          await deleteRating({ tmdbId });
+          await invalidateScore();
+          // Deliberately not clearing the private rating — see the server
+          // route. Withdrawing a public rating says nothing about what you
+          // thought of the film, and may well undo one you set privately
+          // first.
+          return;
+        }
+
         await submitRating({ tmdbId, data: { rating: n } });
         await invalidateScore();
+        // The server copies this onto the viewer's own rating of the film;
+        // tell the parent so the stars for it move too.
+        onRatingChanged?.(n);
       } catch {
-        Alert.alert('Error', 'Could not save your rating.');
+        Alert.alert('Error', clearing ? 'Could not remove your rating.' : 'Could not save your rating.');
       }
     },
-    [isLoggedIn, submitRating, tmdbId, invalidateScore]
+    [isLoggedIn, submitRating, deleteRating, tmdbId, invalidateScore, userRating, onRatingChanged]
   );
 
   const handlePostComment = useCallback(async () => {
@@ -600,7 +638,6 @@ function CommunitySection({
     );
   }, [reportTarget, blockUser, resetComments, queryClient, showToast]);
 
-  const userRating = score?.userRating ?? null;
   const average = score?.average ?? null;
   const ratingCount = score?.count ?? 0;
   const comments = allComments;
@@ -638,7 +675,7 @@ function CommunitySection({
           value={userRating}
           onChange={handleCommunityRating}
         />
-        {ratingPending && (
+        {(ratingPending || ratingDeleting) && (
           <ActivityIndicator size="small" color="#0066FF" style={{ marginLeft: 8 }} />
         )}
       </View>
@@ -1458,7 +1495,19 @@ export function FilmDetailModal({
                   this is the only place actual written opinions live. ── */}
               <SimilarFilms tmdbId={tmdbId} visible={visible} onPick={onSimilarPick} />
 
-              <CommunitySection tmdbId={tmdbId} isLoggedIn={isLoggedIn} />
+              <CommunitySection
+                tmdbId={tmdbId}
+                isLoggedIn={isLoggedIn}
+                // The server copies a community rating onto this viewer's own
+                // rating of the film, so the stars for it have to move too.
+                // The optimistic value is what the private stars actually
+                // read from, and it survives a refetch — so refetching alone
+                // would leave them stale, which is how this looked broken.
+                onRatingChanged={(n) => {
+                  setOptimisticRating(n);
+                  void invalidate();
+                }}
+              />
 
               {/* Divider */}
               <View style={styles.divider} />

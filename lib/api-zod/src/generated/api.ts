@@ -710,6 +710,26 @@ export const SetFilmCommunityRatingResponse = zod.object({
 
 
 /**
+ * Tapping the star you already gave clears the rating, matching how a private rating behaves. Your own rating of the film is left alone: setting a community rating copies across to it, but withdrawing one is a statement about the public score rather than about what you thought of the film, and clearing it would silently discard a rating you may have given privately first.
+ * @summary Remove the authenticated user's community rating for a film
+ */
+export const DeleteFilmCommunityRatingParams = zod.object({
+  "tmdbId": zod.coerce.number()
+})
+
+export const deleteFilmCommunityRatingResponseUserRatingMax = 5;
+
+
+
+export const DeleteFilmCommunityRatingResponse = zod.object({
+  "tmdbId": zod.number(),
+  "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
+  "count": zod.number().describe('Total number of community ratings'),
+  "userRating": zod.number().min(1).max(deleteFilmCommunityRatingResponseUserRatingMax).nullish().describe('The authenticated user\'s own community rating (null if not rated or not logged in)')
+})
+
+
+/**
  * @summary Get paginated public comments for a film
  */
 export const GetFilmCommentsParams = zod.object({
