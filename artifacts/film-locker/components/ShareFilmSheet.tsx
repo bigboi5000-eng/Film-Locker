@@ -952,6 +952,18 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
    */
   const readTitle = matches[0]?.movie_title?.trim() ?? '';
 
+  /**
+   * Set when the title the server read is a television series rather than a
+   * film — the server checks TMDB's TV index for anything that matched no
+   * film, precisely so this case can be named.
+   *
+   * It is the difference between "we could not read that post" and "that is
+   * a programme, not a film", which look identical from an empty sheet and
+   * call for completely different things from the user.
+   */
+  const tvSeries = matches[0]?.tv_series_name?.trim() ?? '';
+  const tvSeriesYear = matches[0]?.tv_series_year?.trim() ?? '';
+
   const handleCorrection = useCallback((movie: TmdbMovieCard) => {
     setCorrections((prev) =>
       correctingIndex === null ? prev : { ...prev, [correctingIndex]: movie }
@@ -1098,29 +1110,43 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                   <View style={styles.emptyState}>
                     <Ionicons name="film-outline" size={44} color={colors.mutedForeground} />
                     <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                      {readTitle ? 'Couldn’t match that film' : 'No film identified'}
+                      {tvSeries
+                        ? 'That’s a TV series'
+                        : readTitle
+                          ? 'Couldn’t match that film'
+                          : 'No film identified'}
                     </Text>
-                    {/* Two different failures, and telling them apart matters.
-                        Reading nothing means the post never named a film, and
-                        the only way round that is a screenshot — the old
-                        wording asked for "a post with a visible film title",
-                        which is advice nobody can act on, since you cannot
-                        edit someone else's post.
+                    {/* Three different outcomes, and telling them apart is
+                        the whole point — from an empty sheet they look
+                        identical, and each calls for something different.
 
-                        Reading a title that matched nothing is the opposite
-                        problem: the app knows what the post says and simply
-                        could not resolve it, usually because it is a TV
-                        series rather than a film. Advising a screenshot
-                        there is useless — a second read gets the same title
-                        — so it says what it found and lets the user search,
-                        with the box already filled in below. */}
+                        A television series is not a failure at all: the post
+                        was read correctly and Film Locker holds films. Say
+                        so, and do not prefill the search, because a film
+                        search for a programme's name is a dead end that
+                        looks like the app is broken.
+
+                        A title that matched nothing is the app knowing what
+                        the post says and failing to resolve it. A screenshot
+                        would return the same title, so that advice is
+                        useless here; the search box is prefilled instead.
+
+                        Reading nothing means the post never named a film,
+                        and only a screenshot gets round that. The older
+                        wording asked for "a post with a visible film title",
+                        which is advice nobody can act on — you cannot edit
+                        someone else's post. */}
                     <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                      {readTitle
-                        ? `This post looks like it’s about “${readTitle}”, but that didn’t match a film — it may be a TV series, or go by a different title. Search below to add it yourself.`
-                        : 'Some posts only show the film on screen. Screenshot the post, then use the camera button in the search bar to read the films out of it.'}
+                      {tvSeries
+                        ? `“${tvSeries}”${tvSeriesYear ? ` (${tvSeriesYear})` : ''} is a TV series, not a film, so it isn’t one for your locker. Film Locker keeps films only.`
+                        : readTitle
+                          ? `This post looks like it’s about “${readTitle}”, but that didn’t match a film — it may go by a different title. Search below to add it yourself.`
+                          : 'Some posts only show the film on screen. Screenshot the post, then use the camera button in the search bar to read the films out of it.'}
                     </Text>
                   </View>
-                  <ManualFilmSearch initialQuery={readTitle} />
+                  {/* Empty for a series: searching films for its name finds
+                      nothing by definition. */}
+                  <ManualFilmSearch initialQuery={tvSeries ? '' : readTitle} />
                 </ScrollView>
                 <View style={[styles.footer, { borderTopColor: colors.border }]}>
                   <TouchableOpacity

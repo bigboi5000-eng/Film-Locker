@@ -162,7 +162,9 @@ export const AiExtractResponse = zod.object({
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
   "overview": zod.string().nullish(),
-  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
+  "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -215,7 +217,9 @@ export const ProcessSocialLinkResponse = zod.object({
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
   "overview": zod.string().nullish(),
-  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
+  "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -270,7 +274,9 @@ export const ExtractFromImageResponse = zod.object({
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
   "overview": zod.string().nullish(),
-  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
+  "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -323,7 +329,9 @@ export const RecommendMoviesResponse = zod.object({
   "poster_url": zod.string().nullish(),
   "title": zod.string().nullish(),
   "overview": zod.string().nullish(),
-  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n')
+  "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
+  "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),

@@ -350,6 +350,91 @@ export async function searchTmdbPreferringYear(
   return searchTmdb(query);
 }
 
+// ── Television, only so it can be ruled out ───────────────────────────────────
+
+/** A television series TMDB holds, matched by title. */
+export type TmdbTvMatch = {
+  id: number;
+  name: string;
+  /** Four-digit first-air year, or an empty string when TMDB has no date. */
+  firstAirYear: string;
+};
+
+interface TmdbTvSearchResponse {
+  results: Array<{
+    id: number;
+    name: string;
+    first_air_date: string | null;
+    popularity: number;
+  }>;
+}
+
+/**
+ * Look a title up as a television series.
+ *
+ * Film Locker is a film catalogue and television is deliberately out of
+ * scope, so this exists to explain a failure rather than to widen what can
+ * be saved. A clip from a miniseries is posted by the same accounts, worded
+ * the same way, and the pipeline reads its title perfectly well — it then
+ * finds no film of that name and says nothing, which is indistinguishable
+ * from having failed to read the post at all.
+ *
+ * "Houdini (2014)" is the case that prompted it: a History Channel
+ * miniseries whose caption names it outright. Gemini scores it low because
+ * the prompt tells it to exclude television, the film search finds nothing,
+ * and the user is shown an empty sheet. Knowing it is a series turns that
+ * into an answer.
+ *
+ * Returns the most popular match, or null. The year narrows when TMDB has
+ * one, and is never the reason a series goes unfound — same reasoning as
+ * searchTmdbPreferringYear.
+ */
+export async function searchTmdbTv(query: string, year?: string): Promise<TmdbTvMatch | null> {
+  const normalised = query.trim().toLowerCase();
+  if (!normalised) return null;
+
+  const airYear = parseYear(year);
+
+  return cached(
+    `tmdb:search:tv:${normalised}${airYear ? `:${airYear}` : ""}`,
+    SEARCH_CACHE_TTL_MS,
+    async () => {
+      const apiKey = getApiKey();
+
+      const run = async (withYear: boolean): Promise<TmdbTvMatch | null> => {
+        const yearParam = withYear && airYear ? `&first_air_date_year=${airYear}` : "";
+        const res = await fetch(
+          `${TMDB_BASE}/search/tv?query=${encodeURIComponent(query)}` +
+            `&api_key=${apiKey}${yearParam}&include_adult=false&language=en-US`,
+        );
+        if (!res.ok) {
+          throw new Error(`TMDB TV search failed: ${res.status} ${res.statusText}`);
+        }
+
+        const data = (await res.json()) as TmdbTvSearchResponse;
+        const best = [...data.results].sort((a, b) => b.popularity - a.popularity)[0];
+        if (!best) return null;
+
+        return {
+          id: best.id,
+          name: best.name,
+          firstAirYear: best.first_air_date?.slice(0, 4) ?? "",
+        };
+      };
+
+      if (airYear) {
+        const narrowed = await run(true);
+        if (narrowed) return narrowed;
+      }
+      return run(false);
+    },
+    // A miss is not remembered, for the same reason the film search does not
+    // remember one: a series TMDB indexes later would otherwise stay unfound
+    // for the rest of the hour.
+    { shouldCache: (match) => match !== null },
+  );
+}
+
 // ── Full details (credits + watch providers) ──────────────────────────────────
 
 /**

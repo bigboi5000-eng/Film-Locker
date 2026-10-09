@@ -11,7 +11,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
-import { searchTmdb, searchTmdbPreferringYear, fetchMovieDetails } from "./tmdb";
+import { searchTmdb, searchTmdbPreferringYear, searchTmdbTv, fetchMovieDetails } from "./tmdb";
 
 export type SavedMovie = typeof moviesTable.$inferSelect;
 
@@ -26,6 +26,15 @@ export interface EnrichedMatch {
   overview?: string | null;
   /** Carried through from the raw match — only recommend results set this. */
   synopsis?: string | null;
+  /**
+   * Set when the title matched no film but does match a television series.
+   *
+   * Film Locker holds films, so this is never something to save — it is
+   * there so the app can say "that is a TV series" instead of showing an
+   * empty result, which looks identical to having failed to read the post.
+   */
+  tv_series_name?: string | null;
+  tv_series_year?: string | null;
 }
 
 export interface PipelineResult {
@@ -38,6 +47,19 @@ export interface PipelineResult {
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
 const CONFIDENCE_THRESHOLD = 0.45;
+
+/**
+ * Below this, a title that matched no film is not looked up as television
+ * either.
+ *
+ * It sits under CONFIDENCE_THRESHOLD on purpose. A clip from a miniseries
+ * scores low precisely *because* the extractor is told to exclude
+ * television, so requiring the film threshold would rule out the exact case
+ * this is for — "Houdini" came back at 0.4. But a title Gemini half-invented
+ * from a figure of speech scores lower still, and running that against
+ * TMDB's TV index would confidently name a series nobody mentioned.
+ */
+const TV_CHECK_FLOOR = 0.3;
 
 /**
  * How many TMDB requests to have in flight at once.
@@ -118,6 +140,27 @@ export async function enrichAndSaveMatches(
     }
   });
 
+  // ── Pass 1b: for anything that found no film, ask whether it is TV ──────
+  // Only for the misses, so the ordinary path costs nothing extra, and
+  // index-aligned with `sanitised` the same way `hits` is — the entries are
+  // mapped rather than the matches because mapWithConcurrency hands the
+  // callback an item and not its position.
+  const tvHits = await mapWithConcurrency(
+    sanitised.map((match, i) => ({ match, i })),
+    TMDB_CONCURRENCY,
+    async ({ match, i }) => {
+      if (hits[i]) return null; // a film was found; nothing needs explaining
+      if (match.confidence_score < TV_CHECK_FLOOR) return null;
+      try {
+        return await searchTmdbTv(match.movie_title, match.release_year);
+      } catch (err) {
+        // A failure here costs a better error message, nothing more.
+        warn?.({ match, err }, "pipeline: TMDB TV search failed for unmatched title");
+        return null;
+      }
+    },
+  );
+
   // ── Pass 2: assemble matches in order, and pick out what to save ────────
   // Sequential and cheap (no I/O), so result ordering and de-duplication stay
   // exactly as before — highest confidence first, first occurrence of a given
@@ -130,7 +173,13 @@ export async function enrichAndSaveMatches(
     const hit = hits[i];
 
     if (!hit) {
-      enrichedMatches.push({ ...match, tmdb_id: null });
+      const tv = tvHits[i];
+      enrichedMatches.push({
+        ...match,
+        tmdb_id: null,
+        tv_series_name: tv?.name ?? null,
+        tv_series_year: tv?.firstAirYear ?? null,
+      });
       return;
     }
 

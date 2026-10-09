@@ -114,6 +114,10 @@ export interface GeminiMovieMatch {
   overview?: string | null;
   /** Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST /movies/recommend, null everywhere else. */
   synopsis?: string | null;
+  /** Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say "that is a TV series" rather than showing an empty result, which is indistinguishable from having failed to read the post at all. */
+  tv_series_name?: string | null;
+  /** First-air year of tv_series_name, empty when TMDB has no date. */
+  tv_series_year?: string | null;
 }
 
 export interface SearchMoviesResponse {
