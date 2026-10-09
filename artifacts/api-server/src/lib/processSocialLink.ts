@@ -354,10 +354,29 @@ export async function processSocialLink(
   // it is refused the next half hour goes straight to the routes that work.
   // See ytDlp.ts. TikTok is unaffected — it downloads from the server
   // without complaint.
+  // Apify changes this calculation on Instagram. It returns the caption, the
+  // comments, the cover frame and the mp4's own CDN URL — strictly more than
+  // yt-dlp could get even on a good day, and it is not refused. So where a
+  // token is configured the download routes are not a fallback at all, they
+  // are a slower way to fail: skipped outright rather than backed off.
+  //
+  // The back-off below still governs the case with no token, where a refused
+  // download is all there is and is worth retrying periodically.
   const isInstagram = detectPlatform(url) === "instagram";
-  const canDownloadMedia = !isInstagram || hasYtDlpCookies() || !instagramMediaBlocked();
+  const apifyCoversInstagram = isInstagram && hasApifyToken();
+
+  const canDownloadMedia =
+    !isInstagram ||
+    hasYtDlpCookies() ||
+    (!apifyCoversInstagram && !instagramMediaBlocked());
+
   if (!canDownloadMedia) {
-    warn?.({ url }, "processSocialLink: Instagram download refused recently — backing off, caption and preview image only");
+    warn?.(
+      { url },
+      apifyCoversInstagram
+        ? "processSocialLink: Instagram served by Apify — skipping the yt-dlp routes it supersedes"
+        : "processSocialLink: Instagram download refused recently — backing off, caption and preview image only",
+    );
   }
 
   /** Start the back-off when a failure is Instagram turning us away. */
