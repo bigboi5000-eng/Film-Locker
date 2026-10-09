@@ -9,7 +9,6 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
-  TextInput,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,11 +31,18 @@ import {
   getGetMyPlaylistsQueryKey,
   getGetMeQueryKey,
   type TmdbMovieCard,
+  type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
+import { ShareFilmSheet } from '@/components/ShareFilmSheet';
+import {
+  useFilmSearchTools,
+  FilmSearchBar,
+  AiResultRow,
+} from '@/components/FilmSearchTools';
 import { getDeviceRegion } from '@/lib/region';
 
 const CARD_W = 120;
@@ -125,6 +131,44 @@ export default function HomeScreen() {
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
   const [createPlaylistVisible, setCreatePlaylistVisible] = useState(false);
 
+  // Films identified from a link or a photo, awaiting confirmation.
+  const [resultMatches, setResultMatches] = useState<GeminiMovieMatch[]>([]);
+  const [resultListTitle, setResultListTitle] = useState<string | null>(null);
+  const [showResultSheet, setShowResultSheet] = useState(false);
+
+  /**
+   * Browsing and searching need no account — that is the point of this tab.
+   * Identifying films from a link or a photo, and asking for
+   * recommendations, all fill a locker a guest does not have, so they say
+   * why rather than failing quietly.
+   */
+  const requireAccount = useCallback(
+    (action: string) => {
+      if (isSignedIn) return true;
+      Alert.alert(
+        'Account needed',
+        `Create a free account to ${action}. Searching and browsing films works without one.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Create account', onPress: () => router.push('/(auth)/sign-up') },
+        ]
+      );
+      return false;
+    },
+    [isSignedIn, router]
+  );
+
+  /** The camera, the link pipeline and the recommendation bar — see the
+      Watchlist, which uses the same hook. */
+  const tools = useFilmSearchTools({
+    requireAccount,
+    onMatches: useCallback((matches: GeminiMovieMatch[], listTitle: string | null) => {
+      setResultMatches(matches);
+      setResultListTitle(listTitle);
+      setShowResultSheet(true);
+    }, []),
+  });
+
   const region = useMemo(() => getDeviceRegion(), []);
 
   const { data: trendingData, isLoading: trendingLoading, refetch: refetchTrending, isRefetching: trendingRefetching } = useGetTrending({ region });
@@ -138,6 +182,25 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedQuery = useDebounce(searchQuery.trim(), SEARCH_DEBOUNCE_MS);
   const isSearching = debouncedQuery.length >= 2;
+
+  /**
+   * Open a recommendation in the usual detail sheet.
+   *
+   * A match carries everything the sheet needs to render immediately; the
+   * rest arrives from its own TMDB lookup. Genres are empty rather than
+   * guessed — the sheet fills them in.
+   */
+  const openAiResult = useCallback((match: GeminiMovieMatch) => {
+    if (match.tmdb_id == null) return;
+    setSelectedMovie({
+      tmdbId: match.tmdb_id,
+      title: match.title ?? match.movie_title,
+      releaseYear: match.release_year,
+      posterUrl: match.poster_url ?? '',
+      overview: match.overview ?? '',
+      genres: [],
+    });
+  }, []);
 
   const { data: searchData, isFetching: isSearchFetching } = useSearchMovies(
     { q: debouncedQuery || '' },
@@ -170,6 +233,12 @@ export default function HomeScreen() {
   const recommendations = recommendationsData?.movies ?? [];
   const playlists = playlistsData?.playlists ?? [];
   const hasWatchlist = (lockerData?.movies.length ?? 0) > 0;
+
+  /** TMDB ids already in the locker, so a recommendation can say so. */
+  const savedTmdbIds = useMemo(
+    () => new Set((lockerData?.movies ?? []).map((m) => m.tmdbId)),
+    [lockerData]
+  );
   const isRefreshing = trendingRefetching || newRefetching || recommendationsRefetching || playlistsRefetching;
 
   const savedVersion = selectedMovie
@@ -248,32 +317,49 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Search */}
-        <View style={styles.searchWrap}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search" size={18} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search for a film…"
-              placeholderTextColor="#9CA3AF"
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={10}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+        {/* The same bar as the Watchlist, so a link, a screenshot and a
+            recommendation request all work from wherever you happen to be. */}
+        <FilmSearchBar
+          tools={tools}
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          placeholder="Search a film or paste a social link…"
+        />
 
         {/* Results replace the browse sections while a search is running, so
             the answer is not buried under rows the user has stopped looking
-            at. Clearing the box puts everything back. */}
-        {isSearching ? (
+            at. Clearing the box puts everything back. Recommendations take
+            precedence over both, since asking for one is the most deliberate
+            thing you can do on this screen. */}
+        {tools.aiOpen ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {tools.isRecommending
+                ? 'Thinking…'
+                : tools.aiResults.length > 0
+                  ? `Top ${tools.aiResults.length} recommendation${tools.aiResults.length === 1 ? '' : 's'}`
+                  : 'Ask for a recommendation'}
+            </Text>
+            {tools.isRecommending ? (
+              <ActivityIndicator color="#0066FF" style={{ marginTop: 16 }} />
+            ) : tools.aiResults.length === 0 ? (
+              <Text style={styles.searchEmpty}>
+                Describe what you are after — “a 90 minute horror film similar to Texas Chainsaw”.
+              </Text>
+            ) : (
+              // Mapped rather than a FlatList: this sits inside the page's
+              // ScrollView, and six rows is nothing to virtualise.
+              tools.aiResults.map((match, i) => (
+                <AiResultRow
+                  key={`ai-${match.tmdb_id ?? i}`}
+                  match={match}
+                  isSaved={match.tmdb_id != null && savedTmdbIds.has(match.tmdb_id)}
+                  onPress={openAiResult}
+                />
+              ))
+            )}
+          </View>
+        ) : isSearching ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               {isSearchFetching
@@ -426,6 +512,20 @@ export default function HomeScreen() {
         />
       )}
 
+      {/* Films identified from a pasted link or a photo, for confirmation —
+          the same sheet the Watchlist and the share extension use. */}
+      <ShareFilmSheet
+        visible={showResultSheet}
+        matches={resultMatches}
+        listTitle={resultListTitle}
+        onClose={() => {
+          setShowResultSheet(false);
+          setResultMatches([]);
+          setResultListTitle(null);
+        }}
+        exitAppOnReturn={false}
+      />
+
       {/* Create playlist modal */}
       <CreatePlaylistModal
         visible={createPlaylistVisible}
@@ -446,17 +546,6 @@ const styles = StyleSheet.create({
   },
   appTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
   appSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 2 },
-  searchWrap: { paddingHorizontal: 16, paddingBottom: 4 },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: 10,
-  },
-  searchInput: {
-    flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
-    padding: 0,
-  },
   searchEmpty: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
   searchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   searchCard: { width: '30%' },

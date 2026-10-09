@@ -27,11 +27,22 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 /** Past this many films, a heading offers to open out into a grid. */
 const GRID_THRESHOLD = 5;
 
+const GRID_COLUMNS = 3;
+const GRID_GAP = 10;
+
 /**
  * Three columns, measured once. The section has 20px of padding either side
- * and the cards sit 10px apart, so two gaps come out of the remainder.
+ * and the cards sit GRID_GAP apart, so two gaps come out of the remainder.
+ *
+ * Floored, then a pixel taken off. The exact division fits precisely — three
+ * cards and two gaps came to the available width to the point — and a layout
+ * that only just fits does not, because any sub-pixel rounding pushes the
+ * third card onto the next line and the grid silently becomes two wide.
  */
-const GRID_CARD_WIDTH = (Dimensions.get('window').width - 40 - 20) / 3;
+const GRID_CARD_WIDTH =
+  Math.floor(
+    (Dimensions.get('window').width - 40 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS
+  ) - 1;
 
 export default function PersonScreen() {
   const { personId } = useLocalSearchParams<{ personId: string }>();
@@ -239,7 +250,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#111827' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // GRID_GAP, not a literal: the card width is derived from it, so a change
+  // here with the constant left behind is how three columns become two.
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   bio: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#4B5563', lineHeight: 21 },
   card: { width: 112 },
   poster: { width: 112, height: 168, borderRadius: 8, backgroundColor: '#F3F4F6' },
