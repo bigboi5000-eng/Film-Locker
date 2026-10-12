@@ -31,8 +31,17 @@ import {
   type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
+import { PopcornToss } from '@/components/PopcornToss';
 import { useColors } from '@/hooks/useColors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+/** How long identification may take before the game is worth showing. */
+const GAME_AFTER_MS = 1400;
+
+/** What identification produced, once it is done either way. */
+type Outcome =
+  | { ok: true; matches: GeminiMovieMatch[]; listTitle: string | null }
+  | { ok: false; message: string };
 
 /**
  * Narrow a shared file's reported type to one the extractor accepts.
@@ -67,6 +76,24 @@ export function ShareIntentHandler() {
   const [isPending, setIsPending] = useState(false);
   /** Which kind of share is being worked on, so the overlay can say so. */
   const [pendingKind, setPendingKind] = useState<'link' | 'image'>('link');
+
+  /**
+   * The game appears only once identification has been slow enough to be
+   * worth filling. Most link shares resolve well inside this, and a game
+   * that flashes up and vanishes is worse than no game.
+   */
+  const [showGame, setShowGame] = useState(false);
+  const showGameRef = useRef(false);
+  useEffect(() => { showGameRef.current = showGame; }, [showGame]);
+  const gameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * The outcome, held back while a kernel is still in the air.
+   *
+   * Identification finishing does not interrupt a throw — the game decides
+   * when to hand over, which it does the moment the popcorn lands.
+   */
+  const [resolved, setResolved] = useState<Outcome | null>(null);
   const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
   const [listTitle, setListTitle] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
@@ -74,6 +101,44 @@ export function ShareIntentHandler() {
   // Track the last handled URL so we don't re-process on AppState resume.
   const handledRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+
+  const clearGameTimer = useCallback(() => {
+    if (gameTimerRef.current !== null) {
+      clearTimeout(gameTimerRef.current);
+      gameTimerRef.current = null;
+    }
+  }, []);
+
+  /** Act on the outcome and tear the overlay down. */
+  const apply = useCallback((outcome: Outcome) => {
+    if (!mountedRef.current) return;
+    setShowGame(false);
+    setResolved(null);
+    setIsPending(false);
+
+    if (outcome.ok) {
+      setMatches(outcome.matches);
+      setListTitle(outcome.listTitle);
+      setShowSheet(true);
+    } else {
+      Alert.alert('Could not identify film', outcome.message, [{ text: 'OK' }]);
+      handledRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Identification is done. Hand over now, unless the game is up — in which
+   * case it holds the outcome until the kernel lands.
+   */
+  const settle = useCallback(
+    (outcome: Outcome) => {
+      clearGameTimer();
+      if (!mountedRef.current) return;
+      if (showGameRef.current) setResolved(outcome);
+      else apply(outcome);
+    },
+    [apply, clearGameTimer]
+  );
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -105,22 +170,16 @@ export function ShareIntentHandler() {
     setPendingKind(image ? 'image' : 'link');
     setIsPending(true);
 
-    const finish = (matches: GeminiMovieMatch[], title: string | null) => {
-      if (!mountedRef.current) return;
-      setMatches(matches);
-      setListTitle(title);
-      setShowSheet(true);
-    };
+    // Reveal the game only if this is taking long enough to be worth it.
+    clearGameTimer();
+    gameTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setShowGame(true);
+    }, GAME_AFTER_MS);
 
-    const fail = (message: string) => {
-      if (!mountedRef.current) return;
-      Alert.alert('Could not identify film', message, [{ text: 'OK' }]);
-      handledRef.current = null;
-    };
+    const finish = (m: GeminiMovieMatch[], title: string | null) =>
+      settle({ ok: true, matches: m, listTitle: title });
 
-    const done = () => {
-      if (mountedRef.current) setIsPending(false);
-    };
+    const fail = (message: string) => settle({ ok: false, message });
 
     if (image) {
       // The extension hands over a path, not the bytes, so this reads the
@@ -132,14 +191,12 @@ export function ShareIntentHandler() {
       // than a failed upload.
       const MAX_SHARED_IMAGE_BYTES = 10 * 1024 * 1024;
       if (typeof image.size === 'number' && image.size > MAX_SHARED_IMAGE_BYTES) {
-        setIsPending(false);
         fail('That image is too large to read. Try a screenshot rather than a full-resolution photo.');
         return;
       }
 
       const mimeType = supportedMimeType(image.mimeType);
       if (!mimeType) {
-        setIsPending(false);
         fail('Film Locker can read JPEG, PNG, WebP and HEIC images. That file is a different format.');
         return;
       }
@@ -151,16 +208,14 @@ export function ShareIntentHandler() {
         });
       })()
         .then((data) => finish(data.matches ?? [], data.listTitle ?? null))
-        .catch(() => fail("Film Locker couldn't read films from that image. Try sharing again."))
-        .finally(done);
+        .catch(() => fail("Film Locker couldn't read films from that image. Try sharing again."));
       return;
     }
 
     // Call in dry-run mode: identify films without saving to DB.
     processLinkRef.current({ data: { url: url!, dryRun: true } })
       .then((data) => finish(data.matches ?? [], data.listTitle ?? null))
-      .catch(() => fail("Film Locker couldn't read this link. Try sharing again."))
-      .finally(done);
+      .catch(() => fail("Film Locker couldn't read this link. Try sharing again."));
   }, [hasShareIntent, shareIntent]);
 
   // Receiving the intent failed at the native level — show an error so the
@@ -171,6 +226,9 @@ export function ShareIntentHandler() {
   }, [error]);
 
   const handleClose = useCallback(() => {
+    clearGameTimer();
+    setShowGame(false);
+    setResolved(null);
     setShowSheet(false);
     setMatches([]);
     setListTitle(null);
@@ -194,18 +252,38 @@ export function ShareIntentHandler() {
               {
                 backgroundColor: colors.card,
                 marginTop: insets.top + 16,
+                // The game needs more room than a spinner does.
+                ...(showGame ? { width: 332, paddingHorizontal: 16 } : null),
               },
             ]}
           >
-            <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
-            <Text style={[styles.processingTitle, { color: colors.foreground }]}>
-              Identifying Film…
-            </Text>
-            <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
-              {pendingKind === 'image'
-                ? 'Gemini is reading the shared image'
-                : 'Gemini is reading the shared link'}
-            </Text>
+            {showGame ? (
+              <>
+                <Text style={[styles.processingTitle, { color: colors.foreground }]}>
+                  Identifying Film…
+                </Text>
+                {/* resolved !== null means the answer is already waiting; the
+                    game hands over as soon as the kernel comes down. */}
+                <PopcornToss
+                  ready={resolved !== null}
+                  onDone={() => {
+                    if (resolved) apply(resolved);
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
+                <Text style={[styles.processingTitle, { color: colors.foreground }]}>
+                  Identifying Film…
+                </Text>
+                <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
+                  {pendingKind === 'image'
+                    ? 'Gemini is reading the shared image'
+                    : 'Gemini is reading the shared link'}
+                </Text>
+              </>
+            )}
           </View>
         </View>
       </Modal>
