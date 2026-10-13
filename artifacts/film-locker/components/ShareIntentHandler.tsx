@@ -38,6 +38,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 /** How long identification may take before the game is worth showing. */
 const GAME_AFTER_MS = 1400;
 
+/** The longest the game may sit on a finished result before it is overruled. */
+const RESULT_HOLD_LIMIT_MS = 8000;
+
+/**
+ * The longest identification is given before the overlay gives up on it.
+ *
+ * Nothing between here and the server imposes one: there is no timeout on the
+ * fetch, React Query does not add one to a mutation, and the platforms differ
+ * on whether a stalled socket is ever abandoned. A request that never comes
+ * back therefore leaves this modal up for good, which is exactly what "the
+ * game never closes" looks like from the outside. Generous, because the
+ * pipeline legitimately takes several seconds, but finite.
+ */
+const IDENTIFY_DEADLINE_MS = 45_000;
+
 /** What identification produced, once it is done either way. */
 type Outcome =
   | { ok: true; matches: GeminiMovieMatch[]; listTitle: string | null }
@@ -102,10 +117,23 @@ export function ShareIntentHandler() {
   const handledRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
 
-  const clearGameTimer = useCallback(() => {
+  const deadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Which share is being worked on. A share that has been given up on must
+   * not be able to reopen the overlay if its request finally answers, so the
+   * identifier is bumped and late outcomes are dropped.
+   */
+  const runIdRef = useRef(0);
+
+  const clearTimers = useCallback(() => {
     if (gameTimerRef.current !== null) {
       clearTimeout(gameTimerRef.current);
       gameTimerRef.current = null;
+    }
+    if (deadlineRef.current !== null) {
+      clearTimeout(deadlineRef.current);
+      deadlineRef.current = null;
     }
   }, []);
 
@@ -132,13 +160,43 @@ export function ShareIntentHandler() {
    */
   const settle = useCallback(
     (outcome: Outcome) => {
-      clearGameTimer();
+      clearTimers();
       if (!mountedRef.current) return;
       if (showGameRef.current) setResolved(outcome);
       else apply(outcome);
     },
-    [apply, clearGameTimer]
+    [apply, clearTimers]
   );
+
+  /**
+   * The game's hand-back, as one unchanging function.
+   *
+   * It reads the outcome from a ref rather than closing over it, because the
+   * game starts a throw holding whichever callback existed at the time. An
+   * inline closure here would be a different function on every render, so a
+   * throw begun before the result arrived would hand back through a version
+   * that still saw `resolved` as null and the overlay would never close.
+   */
+  const resolvedRef = useRef<Outcome | null>(null);
+  useEffect(() => { resolvedRef.current = resolved; }, [resolved]);
+
+  const handleGameDone = useCallback(() => {
+    const outcome = resolvedRef.current;
+    if (outcome) apply(outcome);
+  }, [apply]);
+
+  /**
+   * Last resort. The game is meant to hand over as soon as the kernel
+   * settles, and a flight is bounded, but nothing about identification
+   * finishing should be able to leave someone stuck behind a modal — so the
+   * outcome is applied regardless once it has waited this long.
+   */
+  useEffect(() => {
+    if (!resolved) return;
+    const timer = setTimeout(() => apply(resolved), RESULT_HOLD_LIMIT_MS);
+    return () => clearTimeout(timer);
+  }, [resolved, apply]);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -170,16 +228,31 @@ export function ShareIntentHandler() {
     setPendingKind(image ? 'image' : 'link');
     setIsPending(true);
 
+    const run = (runIdRef.current += 1);
+
     // Reveal the game only if this is taking long enough to be worth it.
-    clearGameTimer();
+    clearTimers();
     gameTimerRef.current = setTimeout(() => {
       if (mountedRef.current) setShowGame(true);
     }, GAME_AFTER_MS);
 
-    const finish = (m: GeminiMovieMatch[], title: string | null) =>
-      settle({ ok: true, matches: m, listTitle: title });
+    /** Outcomes from a share that has already been given up on are dropped. */
+    const report = (outcome: Outcome) => {
+      if (runIdRef.current !== run) return;
+      settle(outcome);
+    };
 
-    const fail = (message: string) => settle({ ok: false, message });
+    const finish = (m: GeminiMovieMatch[], title: string | null) =>
+      report({ ok: true, matches: m, listTitle: title });
+
+    const fail = (message: string) => report({ ok: false, message });
+
+    deadlineRef.current = setTimeout(() => {
+      fail('That is taking longer than it should. Check your connection and share it again.');
+      // The request is still out there and cannot be called off from here, so
+      // this run is retired instead: whatever it eventually returns is stale.
+      runIdRef.current += 1;
+    }, IDENTIFY_DEADLINE_MS);
 
     if (image) {
       // The extension hands over a path, not the bytes, so this reads the
@@ -226,7 +299,7 @@ export function ShareIntentHandler() {
   }, [error]);
 
   const handleClose = useCallback(() => {
-    clearGameTimer();
+    clearTimers();
     setShowGame(false);
     setResolved(null);
     setShowSheet(false);
@@ -234,7 +307,7 @@ export function ShareIntentHandler() {
     setListTitle(null);
     handledRef.current = null;
     resetShareIntent();
-  }, [resetShareIntent]);
+  }, [resetShareIntent, clearTimers]);
 
   // There is no share sheet on the web build — the paste-a-link flow on the
   // Watchlist tab covers it there — so render nothing rather than mounting
@@ -264,12 +337,7 @@ export function ShareIntentHandler() {
                 </Text>
                 {/* resolved !== null means the answer is already waiting; the
                     game hands over as soon as the kernel comes down. */}
-                <PopcornToss
-                  ready={resolved !== null}
-                  onDone={() => {
-                    if (resolved) apply(resolved);
-                  }}
-                />
+                <PopcornToss ready={resolved !== null} onDone={handleGameDone} />
               </>
             ) : (
               <>
