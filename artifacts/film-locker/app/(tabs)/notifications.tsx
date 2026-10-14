@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { SignedOutGate } from '@/components/SignedOutGate';
 import { useAuth } from '@clerk/expo';
 import {
@@ -11,14 +11,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  useGetNotifications,
+  useGetConversations,
   useGetFollows,
   useAcceptFollowRequest,
   useDeclineFollowRequest,
   useUnfollowUser,
+  useFollowUser,
   getGetFollowsQueryKey,
   getGetNotificationUsersQueryKey,
-  type FilmNotification,
+  type ConversationSummary,
   type PublicUserProfile,
 } from '@workspace/api-client-react';
 
@@ -34,67 +35,59 @@ function formatRelative(date: Date): string {
   return date.toLocaleDateString();
 }
 
-interface ConversationGroup {
-  fromUserId: string;
-  fromUsername: string | null;
-  fromDisplayInitials: string | null;
-  fromAvatarUrl: string | null;
-  latest: FilmNotification;
-  allPosters: string[];
-  unreadCount: number;
-  latestAt: Date;
-}
-
-function groupNotifications(notifications: FilmNotification[]): ConversationGroup[] {
-  const map = new Map<string, ConversationGroup>();
-  for (const n of notifications) {
-    const existing = map.get(n.fromUserId);
-    if (existing) {
-      existing.unreadCount += n.isRead ? 0 : 1;
-      existing.allPosters.push(n.posterUrl);
-      if (new Date(n.createdAt) > existing.latestAt) {
-        existing.latest = n;
-        existing.latestAt = new Date(n.createdAt);
-      }
-    } else {
-      map.set(n.fromUserId, {
-        fromUserId: n.fromUserId,
-        fromUsername: n.fromUsername ?? null,
-        fromDisplayInitials: n.fromDisplayInitials ?? null,
-        fromAvatarUrl: n.fromAvatarUrl ?? null,
-        latest: n,
-        allPosters: [n.posterUrl],
-        unreadCount: n.isRead ? 0 : 1,
-        latestAt: new Date(n.createdAt),
-      });
-    }
+/**
+ * What the row says happened last.
+ *
+ * A conversation is recommendations and reactions in both directions, so the
+ * latest thing in it is often not a film at all — it may be a Film Pal's
+ * "Loved it!" about something you sent them. Rendering only the film title
+ * (which is null on a message) is how the inbox used to show a blank line
+ * for the half of all activity that is a reaction.
+ */
+function describeLast(item: ConversationSummary['lastItem'], mine: boolean): string {
+  const prefix = mine ? 'You: ' : '';
+  if (item.type === 'message') {
+    const body = item.content ?? '';
+    return item.replyToFilmTitle
+      ? `${prefix}${body} · ${item.replyToFilmTitle}`
+      : `${prefix}${body}`;
   }
-  return [...map.values()].sort((a, b) => b.latestAt.getTime() - a.latestAt.getTime());
+  return `${prefix}🎬 ${item.filmTitle ?? 'a film'}`;
 }
 
-function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress: () => void }) {
+function ConversationRow({
+  conversation,
+  myClerkId,
+  onPress,
+}: {
+  conversation: ConversationSummary;
+  myClerkId: string | null | undefined;
+  onPress: () => void;
+}) {
   const router = useRouter();
-  const initials = (group.fromDisplayInitials || group.fromUsername || '?').slice(0, 5).toUpperCase();
-  const previews = group.allPosters.slice(0, 3);
+  const { user, lastItem, unreadCount, posters } = conversation;
+  const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
+  const previews = posters.slice(0, 3);
+  const mine = lastItem.fromUserId === myClerkId;
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.75}>
       {/* Avatar — tapping this opens the profile instead of the thread */}
       <TouchableOpacity
         style={styles.avatarWrap}
-        onPress={() => router.push(`/user/${group.fromUserId}`)}
+        onPress={() => router.push(`/user/${user.clerkId}`)}
         activeOpacity={0.7}
       >
-        {group.fromAvatarUrl ? (
-          <Image source={{ uri: group.fromAvatarUrl }} style={styles.avatar} contentFit="cover" />
+        {user.avatarUrl ? (
+          <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
             <Text style={styles.avatarText} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
           </View>
         )}
-        {group.unreadCount > 0 && (
+        {unreadCount > 0 && (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadBadgeText}>{group.unreadCount > 9 ? '9+' : group.unreadCount}</Text>
+            <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -102,20 +95,19 @@ function ConversationRow({ group, onPress }: { group: ConversationGroup; onPress
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.contentHeader}>
-          <Text style={[styles.username, group.unreadCount > 0 && styles.usernameUnread]} numberOfLines={1}>
-            {group.fromUsername ?? 'Unknown'}
+          <Text style={[styles.username, unreadCount > 0 && styles.usernameUnread]} numberOfLines={1}>
+            {user.username ?? 'Unknown'}
           </Text>
-          <Text style={styles.time}>{formatRelative(group.latestAt)}</Text>
+          <Text style={styles.time}>{formatRelative(new Date(lastItem.createdAt))}</Text>
         </View>
         <Text style={styles.preview} numberOfLines={1}>
-          🎬 {group.latest.filmTitle}
-          {group.allPosters.length > 1 ? ` +${group.allPosters.length - 1} more` : ''}
+          {describeLast(lastItem, mine)}
         </Text>
       </View>
 
       {/* Poster stack preview */}
       <View style={styles.posterStack}>
-        {previews.slice(0, 3).map((uri, i) => (
+        {previews.map((uri, i) => (
           <Image
             key={i}
             source={{ uri }}
@@ -155,6 +147,7 @@ function FilmPalsView() {
   const { mutateAsync: acceptRequest } = useAcceptFollowRequest();
   const { mutateAsync: declineRequest } = useDeclineFollowRequest();
   const { mutateAsync: unfollowUser } = useUnfollowUser();
+  const { mutateAsync: followUser } = useFollowUser();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const invalidate = useCallback(async () => {
@@ -165,20 +158,59 @@ function FilmPalsView() {
   const incomingRequests = data?.incomingRequests ?? [];
   const outgoingRequests = data?.outgoingRequests ?? [];
   const following = data?.following ?? [];
-  const followerIds = new Set((data?.followers ?? []).map((u) => u.clerkId));
+  const followers = data?.followers ?? [];
+  const followerIds = new Set(followers.map((u) => u.clerkId));
+  const followingIds = new Set(following.map((u) => u.clerkId));
   const filmPals = following.filter((u) => followerIds.has(u.clerkId));
+
+  /**
+   * People following me that I have not followed back.
+   *
+   * These had nowhere to appear. This screen showed requests, requests I had
+   * sent, and Film Pals — and Film Pals is mutual-only, so a one-way
+   * follower was invisible here and findable only by scrolling the Find
+   * People screen. That matters more than a missing list: a mutual follow is
+   * what the server requires before two people can message each other, so
+   * the only route to a conversation was both people independently going
+   * looking for each other.
+   */
+  const notFollowedBack = followers.filter((u) => !followingIds.has(u.clerkId));
+
+  const handleFollowBack = useCallback(async (user: PublicUserProfile) => {
+    setBusyId(user.clerkId);
+    try {
+      await followUser({ data: { followeeId: user.clerkId } });
+      await invalidate();
+    } catch {
+      Alert.alert('Error', 'Could not follow this person.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [followUser, invalidate]);
 
   const handleAccept = useCallback(async (user: PublicUserProfile) => {
     setBusyId(user.clerkId);
     try {
       await acceptRequest({ userId: user.clerkId });
       await invalidate();
+      // Accepting only grants them access to me. The server requires an
+      // accepted follow in BOTH directions before either of us can message
+      // the other, so without this the accept appears to do the job and the
+      // conversation stays locked with nothing on screen explaining why.
+      Alert.alert(
+        `${user.username ?? 'They'} can now see your films`,
+        'Follow them back to become Film Pals — that is what lets the two of you send films and react to each other.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Follow back', onPress: () => { void handleFollowBack(user); } },
+        ]
+      );
     } catch {
       Alert.alert('Error', 'Could not accept this request.');
     } finally {
       setBusyId(null);
     }
-  }, [acceptRequest, invalidate]);
+  }, [acceptRequest, invalidate, handleFollowBack]);
 
   const handleDecline = useCallback(async (user: PublicUserProfile) => {
     setBusyId(user.clerkId);
@@ -212,7 +244,11 @@ function FilmPalsView() {
     );
   }
 
-  const isEmpty = incomingRequests.length === 0 && outgoingRequests.length === 0 && filmPals.length === 0;
+  const isEmpty =
+    incomingRequests.length === 0 &&
+    outgoingRequests.length === 0 &&
+    notFollowedBack.length === 0 &&
+    filmPals.length === 0;
 
   return (
     <FlatList
@@ -265,6 +301,32 @@ function FilmPalsView() {
             </View>
           )}
 
+          {notFollowedBack.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Following you ({notFollowedBack.length})</Text>
+              <Text style={styles.sectionHint}>
+                Follow back to become Film Pals and open a conversation.
+              </Text>
+              {notFollowedBack.map((u) => (
+                <View key={u.clerkId} style={styles.palRow}>
+                  <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
+                  <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
+                  {busyId === u.clerkId ? (
+                    <ActivityIndicator size="small" color="#0066FF" />
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.acceptBtn}
+                      onPress={() => handleFollowBack(u)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.acceptBtnText}>Follow back</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               Film Pals{filmPals.length > 0 ? ` (${filmPals.length})` : ''}
@@ -298,20 +360,23 @@ function FilmPalsView() {
 function NotificationsScreenInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId: myClerkId } = useAuth();
   const [activeTab, setActiveTab] = useState<'inbox' | 'filmPals'>('inbox');
-  const { data, isLoading, refetch, isRefetching } = useGetNotifications();
+  const { data, isLoading, refetch, isRefetching } = useGetConversations();
   const { data: followsData } = useGetFollows();
   const incomingRequestCount = followsData?.incomingRequests?.length ?? 0;
 
-  const notifications = data?.notifications ?? [];
+  const conversations = data?.conversations ?? [];
   const unreadCount = data?.unreadCount ?? 0;
-  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
 
   const handleOpenThread = useCallback(
-    (group: ConversationGroup) => {
+    (conversation: ConversationSummary) => {
       router.push({
         pathname: '/inbox/[userId]',
-        params: { userId: group.fromUserId, username: group.fromUsername ?? '' },
+        params: {
+          userId: conversation.user.clerkId,
+          username: conversation.user.username ?? '',
+        },
       });
     },
     [router]
@@ -369,17 +434,21 @@ function NotificationsScreenInner() {
         </View>
       ) : (
         <FlatList
-          data={groups}
-          keyExtractor={(g) => g.fromUserId}
+          data={conversations}
+          keyExtractor={(c) => c.user.clerkId}
           renderItem={({ item }) => (
-            <ConversationRow group={item} onPress={() => handleOpenThread(item)} />
+            <ConversationRow
+              conversation={item}
+              myClerkId={myClerkId}
+              onPress={() => handleOpenThread(item)}
+            />
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="mail-open-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No recommendations yet</Text>
+              <Text style={styles.emptyTitle}>No conversations yet</Text>
               <Text style={styles.emptySub}>
-                Follow people and they can recommend films directly to you.
+                Recommend a film to a Film Pal, or wait for one to land here.
               </Text>
               <TouchableOpacity
                 style={styles.findBtn}
@@ -391,7 +460,9 @@ function NotificationsScreenInner() {
               </TouchableOpacity>
             </View>
           }
-          contentContainerStyle={groups.length === 0 ? { flex: 1 } : { paddingBottom: insets.bottom + 16 }}
+          contentContainerStyle={
+            conversations.length === 0 ? { flex: 1 } : { paddingBottom: insets.bottom + 16 }
+          }
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0066FF" />
           }
@@ -443,6 +514,14 @@ const styles = StyleSheet.create({
   tabBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#FFF' },
 
   section: { paddingHorizontal: 16, paddingTop: 20 },
+  sectionHint: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#9CA3AF',
+    marginTop: -2,
+    marginBottom: 10,
+    lineHeight: 17,
+  },
   sectionTitle: {
     fontSize: 13, fontFamily: 'Inter_600SemiBold',
     color: '#9CA3AF', letterSpacing: 0.5, textTransform: 'uppercase',

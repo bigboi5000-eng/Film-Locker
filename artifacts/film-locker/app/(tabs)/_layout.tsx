@@ -5,7 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/expo';
 import { useUser } from '@clerk/expo';
-import { setAuthTokenGetter, useGetNotifications, getGetNotificationsQueryKey, useSyncUser } from '@workspace/api-client-react';
+import {
+  setAuthTokenGetter,
+  useGetConversations,
+  getGetConversationsQueryKey,
+  useGetFollows,
+  getGetFollowsQueryKey,
+  useSyncUser,
+} from '@workspace/api-client-react';
 
 const BLUE = '#0066FF';
 const INACTIVE = '#9CA3AF';
@@ -80,11 +87,29 @@ export default function TabLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Fetch unread notification count for the badge
-  const { data: notifData } = useGetNotifications({
-    query: { queryKey: getGetNotificationsQueryKey(), enabled: Boolean(isSignedIn), refetchInterval: 30_000 },
+  // What the Inbox badge counts.
+  //
+  // Unread recommendations plus follow requests waiting on an answer. The
+  // badge used to be unread recommendations alone, so a request to connect
+  // arrived with no indication anywhere on the tab bar — the only way to
+  // discover one was to open the tab and switch to Film Pals, which nobody
+  // does without a reason to.
+  const { data: conversationData } = useGetConversations({
+    query: {
+      queryKey: getGetConversationsQueryKey(),
+      enabled: Boolean(isSignedIn),
+      refetchInterval: 30_000,
+    },
   });
-  const unreadCount = notifData?.unreadCount ?? 0;
+  const { data: followsData } = useGetFollows({
+    query: {
+      queryKey: getGetFollowsQueryKey(),
+      enabled: Boolean(isSignedIn),
+      refetchInterval: 60_000,
+    },
+  });
+  const unreadCount =
+    (conversationData?.unreadCount ?? 0) + (followsData?.incomingRequests?.length ?? 0);
 
   if (!isLoaded) return null;
 

@@ -444,6 +444,24 @@ export interface ConversationFeedItem {
   replyToFilmTitle?: string | null;
 }
 
+/**
+ * One person the caller is in conversation with, plus enough of the latest activity to draw a row without opening the thread.
+ */
+export interface ConversationSummary {
+  user: NotificationUser;
+  lastItem: ConversationFeedItem;
+  /** Recommendations this person has sent the caller that are still unread. Reactions and messages cannot count towards this yet — conversation_messages has no read state — so a conversation whose only new activity is a reaction shows as read. */
+  unreadCount: number;
+  /** Poster URLs from the most recent films in this conversation, either direction, for the preview strip on the row. */
+  posters: string[];
+}
+
+export interface ConversationsResponse {
+  conversations: ConversationSummary[];
+  /** Total unread recommendations across every conversation */
+  unreadCount: number;
+}
+
 export interface NotificationThreadResponse {
   sender?: NotificationUser | null;
   feed: ConversationFeedItem[];

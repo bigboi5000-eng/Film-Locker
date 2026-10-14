@@ -156,13 +156,18 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
     const who = sender?.username ?? "Someone";
     const pending = (row?.status ?? status) === "pending";
 
+    // A request goes to the list that has Accept and Decline on it. A
+    // follow that needed no approval goes to the follower's profile
+    // instead, which is where the Follow button is: following back is what
+    // makes the two of you Film Pals, and it is the only thing that unlocks
+    // the conversation between you.
     void sendPush({
       token: recipient?.expoPushToken,
       title: pending ? "🎬 New Film Pal request" : "🎬 New follower",
       body: pending
         ? `${who} has asked to connect with you`
-        : `${who} started following you`,
-      screen: "/(tabs)/notifications",
+        : `${who} started following you — follow back to become Film Pals`,
+      screen: pending ? "/(tabs)/notifications" : `/user/${clerkUserId}`,
     });
   }
 
@@ -193,6 +198,31 @@ router.patch("/follows/:userId/accept", requireAuth, async (req, res): Promise<v
     res.status(404).json({ error: "No pending request from this user." });
     return;
   }
+
+  // Tell them. Requesting to follow a private account sent a push; being
+  // accepted sent nothing at all, so the person who asked found out only by
+  // going back to look. It also matters more than the request did: this is
+  // the moment their side of the relationship starts working.
+  //
+  // Gated on `updated`, so only the accept that actually flipped a pending
+  // row notifies — a repeat tap finds nothing pending and 404s above.
+  const [[accepter], [requester]] = await Promise.all([
+    db
+      .select({ username: usersTable.username })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, clerkUserId)),
+    db
+      .select({ expoPushToken: usersTable.expoPushToken })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, followerId)),
+  ]);
+
+  void sendPush({
+    token: requester?.expoPushToken,
+    title: "🎬 Film Pal request accepted",
+    body: `${accepter?.username ?? "Someone"} accepted your request`,
+    screen: `/user/${clerkUserId}`,
+  });
 
   res.json({ followerId: updated.followerId, followeeId: updated.followeeId, status: updated.status });
 });

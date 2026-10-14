@@ -17,7 +17,7 @@ import {
   useSendConversationMessage,
   useAddMovie,
   getGetNotificationThreadQueryKey,
-  getGetNotificationsQueryKey,
+  getGetConversationsQueryKey,
   getListMoviesQueryKey,
   type ConversationFeedItem,
   type ConversationMessageContent,
@@ -489,7 +489,7 @@ export default function InboxThreadScreen() {
   useEffect(() => {
     if (!data || readInvalidatedRef.current) return;
     readInvalidatedRef.current = true;
-    void queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getGetConversationsQueryKey() });
   }, [data, queryClient]);
 
   const { mutateAsync: sendMessage } = useSendConversationMessage();
@@ -523,7 +523,7 @@ export default function InboxThreadScreen() {
           data: { content, replyToNotificationId: replyTarget?.id ?? null },
         });
         await queryClient.invalidateQueries({ queryKey: getGetNotificationThreadQueryKey(userId) });
-        await queryClient.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+        await queryClient.invalidateQueries({ queryKey: getGetConversationsQueryKey() });
         setComposerOpen(false);
         setReplyTarget(null);
       } catch {

@@ -27,6 +27,7 @@ import type {
   BlockUserBody,
   BlockUserResponse,
   ConversationFeedItem,
+  ConversationsResponse,
   CreatePlaylistBody,
   ExtractFromImageBody,
   FilmComment,
@@ -2238,6 +2239,88 @@ export const useMarkNotificationRead = <TError = ErrorType<void>,
       > => {
       return useMutation(getMarkNotificationReadMutationOptions(options));
     }
+
+export const getGetConversationsUrl = () => {
+
+
+
+
+  return `/api/notifications/conversations`
+}
+
+/**
+ * The inbox list. Built from both halves of a conversation — recommendations sent in either direction and reactions/messages in either direction — so a thread appears here as soon as anything has passed between the two people.
+ *
+ * This is deliberately wider than GET /notifications, which returns only the recommendations the caller has received. Grouping that endpoint's rows (which is what the app used to do) hides every conversation the caller started and every reaction sent back to them: a Film Pal replying to a recommendation produced a push notification and then nothing the recipient could find.
+ * @summary One row per person the caller has a conversation with, newest first
+
+ */
+export const getConversations = async ( options?: RequestInit): Promise<ConversationsResponse> => {
+
+  return customFetch<ConversationsResponse>(getGetConversationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConversationsQueryKey = () => {
+    return [
+    `/api/notifications/conversations`
+    ] as const;
+    }
+
+
+export const getGetConversationsQueryOptions = <TData = Awaited<ReturnType<typeof getConversations>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConversationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConversations>>> = ({ signal }) => getConversations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getConversations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof getConversations>>>
+export type GetConversationsQueryError = ErrorType<void>
+
+
+/**
+ * @summary One row per person the caller has a conversation with, newest first
+
+ */
+
+export function useGetConversations<TData = Awaited<ReturnType<typeof getConversations>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetConversationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetNotificationThreadUrl = (userId: string,) => {
 

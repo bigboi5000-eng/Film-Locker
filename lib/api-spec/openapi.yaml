@@ -630,6 +630,35 @@ paths:
         "404":
           description: Notification not found
 
+  /notifications/conversations:
+    get:
+      operationId: getConversations
+      tags: [notifications]
+      summary: >
+        One row per person the caller has a conversation with, newest first
+      description: >
+        The inbox list. Built from both halves of a conversation —
+        recommendations sent in either direction and reactions/messages in
+        either direction — so a thread appears here as soon as anything has
+        passed between the two people.
+
+
+        This is deliberately wider than GET /notifications, which returns
+        only the recommendations the caller has received. Grouping that
+        endpoint's rows (which is what the app used to do) hides every
+        conversation the caller started and every reaction sent back to
+        them: a Film Pal replying to a recommendation produced a push
+        notification and then nothing the recipient could find.
+      responses:
+        "200":
+          description: Conversation summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationsResponse"
+        "401":
+          description: Unauthorized
+
   /notifications/thread/{userId}:
     get:
       operationId: getNotificationThread
@@ -2193,6 +2222,50 @@ components:
         - fromUserId
         - toUserId
         - createdAt
+
+    ConversationSummary:
+      type: object
+      description: >
+        One person the caller is in conversation with, plus enough of the
+        latest activity to draw a row without opening the thread.
+      properties:
+        user:
+          $ref: "#/components/schemas/NotificationUser"
+        lastItem:
+          $ref: "#/components/schemas/ConversationFeedItem"
+        unreadCount:
+          type: integer
+          description: >
+            Recommendations this person has sent the caller that are still
+            unread. Reactions and messages cannot count towards this yet —
+            conversation_messages has no read state — so a conversation
+            whose only new activity is a reaction shows as read.
+        posters:
+          type: array
+          description: >
+            Poster URLs from the most recent films in this conversation,
+            either direction, for the preview strip on the row.
+          items:
+            type: string
+      required:
+        - user
+        - lastItem
+        - unreadCount
+        - posters
+
+    ConversationsResponse:
+      type: object
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+        unreadCount:
+          type: integer
+          description: Total unread recommendations across every conversation
+      required:
+        - conversations
+        - unreadCount
 
     NotificationThreadResponse:
       type: object

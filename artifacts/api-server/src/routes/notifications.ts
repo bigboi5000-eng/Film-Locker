@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, or, desc } from "drizzle-orm";
+import { and, eq, or, desc, inArray } from "drizzle-orm";
 import { db, filmNotificationsTable, conversationMessagesTable, usersTable, followsTable } from "@workspace/db";
 import {
   SendNotificationBody,
@@ -8,11 +8,12 @@ import {
   MarkNotificationReadParams,
   MarkNotificationReadResponse,
   GetNotificationUsersResponse,
+  GetConversationsResponse,
   SendConversationMessageBody,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { sendPush } from "../lib/push";
-import { isBlockedEitherWay } from "../lib/blocks";
+import { isBlockedEitherWay, getMutualBlockSet } from "../lib/blocks";
 
 
 const router: IRouter = Router();
@@ -40,6 +41,178 @@ router.get("/notifications/users", requireAuth, async (req, res): Promise<void> 
     .orderBy(usersTable.username);
 
   res.json(GetNotificationUsersResponse.parse({ users }));
+});
+
+// ── GET /notifications/conversations ─────────────────────────────────────────
+// The inbox list. Registered before /notifications/:id/read for the same
+// reason /notifications/users is: Express would otherwise match
+// "conversations" as an :id.
+
+router.get("/notifications/conversations", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+
+  /**
+   * Both halves of every conversation, in both directions.
+   *
+   * GET /notifications answers a narrower question — recommendations sent TO
+   * me — and the app used to group those rows into this list. That hid a
+   * conversation until the other person had recommended something, so a
+   * reaction to a film you recommended arrived as a push notification and
+   * then appeared nowhere: the thread it belonged to was not in the list at
+   * all. Messages are a first-class half of a conversation here.
+   */
+  const [blocked, recRows, msgRows] = await Promise.all([
+    // History survives a block — blocking clears the follow between two
+    // people but leaves everything already sent in place — so the list has
+    // to drop them itself or a blocked account keeps a row in the inbox.
+    getMutualBlockSet(clerkUserId),
+
+    db
+      .select({
+        id: filmNotificationsTable.id,
+        fromUserId: filmNotificationsTable.fromUserId,
+        toUserId: filmNotificationsTable.toUserId,
+        tmdbId: filmNotificationsTable.tmdbId,
+        filmTitle: filmNotificationsTable.filmTitle,
+        posterUrl: filmNotificationsTable.posterUrl,
+        isRead: filmNotificationsTable.isRead,
+        createdAt: filmNotificationsTable.createdAt,
+      })
+      .from(filmNotificationsTable)
+      .where(
+        or(
+          eq(filmNotificationsTable.toUserId, clerkUserId),
+          eq(filmNotificationsTable.fromUserId, clerkUserId)
+        )
+      )
+      .orderBy(desc(filmNotificationsTable.createdAt)),
+
+    db
+      .select({
+        id: conversationMessagesTable.id,
+        fromUserId: conversationMessagesTable.fromUserId,
+        toUserId: conversationMessagesTable.toUserId,
+        content: conversationMessagesTable.content,
+        replyToNotificationId: conversationMessagesTable.replyToNotificationId,
+        createdAt: conversationMessagesTable.createdAt,
+        replyToFilmTitle: filmNotificationsTable.filmTitle,
+      })
+      .from(conversationMessagesTable)
+      .leftJoin(
+        filmNotificationsTable,
+        eq(conversationMessagesTable.replyToNotificationId, filmNotificationsTable.id)
+      )
+      .where(
+        or(
+          eq(conversationMessagesTable.toUserId, clerkUserId),
+          eq(conversationMessagesTable.fromUserId, clerkUserId)
+        )
+      )
+      .orderBy(desc(conversationMessagesTable.createdAt)),
+  ]);
+
+  /** The person on the other end, whichever way round the row is. */
+  const counterpart = (row: { fromUserId: string; toUserId: string }): string =>
+    row.fromUserId === clerkUserId ? row.toUserId : row.fromUserId;
+
+  type Item = {
+    type: "recommendation" | "message";
+    id: number;
+    fromUserId: string;
+    toUserId: string;
+    createdAt: Date;
+    tmdbId: number | null;
+    filmTitle: string | null;
+    posterUrl: string | null;
+    isRead: boolean | null;
+    content: string | null;
+    replyToNotificationId: number | null;
+    replyToFilmTitle: string | null;
+  };
+
+  const grouped = new Map<string, { items: Item[]; unreadCount: number; posters: string[] }>();
+
+  const bucket = (otherUserId: string) => {
+    let entry = grouped.get(otherUserId);
+    if (!entry) {
+      entry = { items: [], unreadCount: 0, posters: [] };
+      grouped.set(otherUserId, entry);
+    }
+    return entry;
+  };
+
+  for (const r of recRows) {
+    const entry = bucket(counterpart(r));
+    entry.items.push({
+      type: "recommendation",
+      id: r.id,
+      fromUserId: r.fromUserId,
+      toUserId: r.toUserId,
+      createdAt: r.createdAt,
+      tmdbId: r.tmdbId,
+      filmTitle: r.filmTitle,
+      posterUrl: r.posterUrl,
+      isRead: r.isRead,
+      content: null,
+      replyToNotificationId: null,
+      replyToFilmTitle: null,
+    });
+    // Only what they sent me can be unread; my own sends are not news to me.
+    if (r.toUserId === clerkUserId && !r.isRead) entry.unreadCount += 1;
+    entry.posters.push(r.posterUrl);
+  }
+
+  for (const m of msgRows) {
+    bucket(counterpart(m)).items.push({
+      type: "message",
+      id: m.id,
+      fromUserId: m.fromUserId,
+      toUserId: m.toUserId,
+      createdAt: m.createdAt,
+      tmdbId: null,
+      filmTitle: null,
+      posterUrl: null,
+      isRead: null,
+      content: m.content,
+      replyToNotificationId: m.replyToNotificationId,
+      replyToFilmTitle: m.replyToFilmTitle ?? null,
+    });
+  }
+
+  // A conversation with someone whose account has since gone is not a
+  // conversation any more, so the join decides who makes the list.
+  const otherIds = [...grouped.keys()].filter((id) => !blocked.has(id));
+  const people = otherIds.length
+    ? await db
+        .select({
+          clerkId: usersTable.clerkId,
+          username: usersTable.username,
+          displayInitials: usersTable.displayInitials,
+          avatarUrl: usersTable.avatarUrl,
+        })
+        .from(usersTable)
+        .where(inArray(usersTable.clerkId, otherIds))
+    : [];
+
+  const conversations = people
+    .map((person) => {
+      const entry = grouped.get(person.clerkId)!;
+      const items = entry.items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return {
+        user: person,
+        lastItem: items[0],
+        unreadCount: entry.unreadCount,
+        posters: entry.posters.slice(0, 4),
+      };
+    })
+    .sort((a, b) => b.lastItem.createdAt.getTime() - a.lastItem.createdAt.getTime());
+
+  res.json(
+    GetConversationsResponse.parse({
+      conversations,
+      unreadCount: conversations.reduce((sum, c) => sum + c.unreadCount, 0),
+    })
+  );
 });
 
 // ── GET /notifications ────────────────────────────────────────────────────────
@@ -159,11 +332,15 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   ]);
 
   // Fire push notification — best-effort, never block the response
+  // Deep-linked to the conversation rather than the inbox list: the tap
+  // handler in the app's root layout pushes whatever route this names, and
+  // landing on the list only to pick out the row that was just announced is
+  // a tap and a search for no reason.
   void sendPush({
     token: recipientWithToken?.expoPushToken,
     title: "🎬 New film recommendation",
     body: `${sender?.username ?? "Someone"} recommended "${filmTitle}" to you`,
-    screen: "/(tabs)/notifications",
+    screen: `/inbox/${clerkUserId}`,
   });
 
   res.status(201).json(
@@ -428,7 +605,7 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
       token: recipient.expoPushToken,
       title: `🎬 ${sender?.username ?? "Someone"}`,
       body: replyToFilmTitle ? `${content} (re: "${replyToFilmTitle}")` : content,
-      screen: "/(tabs)/notifications",
+      screen: `/inbox/${clerkUserId}`,
     });
   }
 

@@ -900,6 +900,42 @@ export const MarkNotificationReadResponse = zod.object({
 
 
 /**
+ * The inbox list. Built from both halves of a conversation — recommendations sent in either direction and reactions/messages in either direction — so a thread appears here as soon as anything has passed between the two people.
+ *
+ * This is deliberately wider than GET /notifications, which returns only the recommendations the caller has received. Grouping that endpoint's rows (which is what the app used to do) hides every conversation the caller started and every reaction sent back to them: a Film Pal replying to a recommendation produced a push notification and then nothing the recipient could find.
+ * @summary One row per person the caller has a conversation with, newest first
+
+ */
+export const GetConversationsResponse = zod.object({
+  "conversations": zod.array(zod.object({
+  "user": zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+}),
+  "lastItem": zod.object({
+  "type": zod.enum(['recommendation', 'message']),
+  "id": zod.number(),
+  "fromUserId": zod.string(),
+  "toUserId": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "tmdbId": zod.number().nullish(),
+  "filmTitle": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "isRead": zod.boolean().nullish(),
+  "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
+  "replyToNotificationId": zod.number().nullish(),
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
+}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n'),
+  "unreadCount": zod.number().describe('Recommendations this person has sent the caller that are still unread. Reactions and messages cannot count towards this yet — conversation_messages has no read state — so a conversation whose only new activity is a reaction shows as read.\n'),
+  "posters": zod.array(zod.string()).describe('Poster URLs from the most recent films in this conversation, either direction, for the preview strip on the row.\n')
+}).describe('One person the caller is in conversation with, plus enough of the latest activity to draw a row without opening the thread.\n')),
+  "unreadCount": zod.number().describe('Total unread recommendations across every conversation')
+})
+
+
+/**
  * @summary Merged chronological chat feed with a specific user — recommendations sent either way plus reactions/messages, newest last
 
  */
