@@ -52,3 +52,10 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# npm/yarn lockfiles — this is a pnpm workspace, and the root preinstall
+# script deletes these and refuses any other package manager. A stray
+# package-lock.json also risks EAS Build picking npm for the native build,
+# which that same preinstall then rejects.
+package-lock.json
+yarn.lock
