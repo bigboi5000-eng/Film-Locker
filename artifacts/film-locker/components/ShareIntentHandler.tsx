@@ -20,7 +20,7 @@
  * on the modern Expo Modules API, which supports both architectures.
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, Modal, ActivityIndicator, StyleSheet, Platform, Alert } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useRouter } from 'expo-router';
 import { File } from 'expo-file-system';
@@ -31,9 +31,7 @@ import {
   type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
-import { FilmFactTicker } from '@/components/FilmFactTicker';
-import { useColors } from '@/hooks/useColors';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { IdentifyingOverlay } from '@/components/IdentifyingOverlay';
 
 /**
  * The longest identification is given before the overlay gives up on it.
@@ -67,8 +65,6 @@ function supportedMimeType(reported: string | undefined): ExtractFromImageBodyMi
 }
 
 export function ShareIntentHandler() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { mutateAsync: processLink } = useProcessSocialLink();
   const { mutateAsync: extractFromImage } = useExtractFromImage();
@@ -253,33 +249,14 @@ export function ShareIntentHandler() {
 
   return (
     <>
-      {/* Processing overlay — shown while Gemini identifies the film */}
-      <Modal transparent visible={isPending} animationType="fade" statusBarTranslucent>
-        <View style={styles.overlayBackdrop}>
-          <View
-            style={[
-              styles.processingCard,
-              { backgroundColor: colors.card, marginTop: insets.top + 16 },
-            ]}
-          >
-            <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
-            <Text style={[styles.processingTitle, { color: colors.foreground }]}>
-              Identifying Film…
-            </Text>
-            <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
-              {pendingKind === 'image'
-                ? 'Gemini is reading the shared image'
-                : 'Gemini is reading the shared link'}
-            </Text>
-
-            {/* The wait is usually a few seconds and occasionally much
-                longer, so it gets something worth reading rather than a
-                spinner on its own. Nothing here delays the result. */}
-            <View style={styles.factDivider} />
-            <FilmFactTicker />
-          </View>
-        </View>
-      </Modal>
+      <IdentifyingOverlay
+        visible={isPending}
+        subtitle={
+          pendingKind === 'image'
+            ? 'Gemini is reading the shared image'
+            : 'Gemini is reading the shared link'
+        }
+      />
 
       {/* Film confirmation sheet */}
       <ShareFilmSheet
@@ -291,46 +268,3 @@ export function ShareIntentHandler() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  overlayBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  processingCard: {
-    borderRadius: 16,
-    paddingHorizontal: 22,
-    paddingVertical: 26,
-    alignItems: 'center',
-    width: 300,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  spinner: {
-    marginBottom: 16,
-  },
-  processingTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter_700Bold',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  processingSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  factDivider: {
-    height: 1,
-    alignSelf: 'stretch',
-    marginTop: 18,
-    marginBottom: 16,
-    backgroundColor: 'rgba(0,0,0,0.07)',
-  },
-});

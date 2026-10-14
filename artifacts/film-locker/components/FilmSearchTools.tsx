@@ -47,9 +47,45 @@ import {
   type Movie,
 } from '@workspace/api-client-react';
 import { useToast } from '@/components/ToastProvider';
+import { IdentifyingOverlay } from '@/components/IdentifyingOverlay';
 import { pickImageFromLibrary, takeFilmPhoto, type PickResult } from '@/lib/pickFilmImage';
 
 const HORIZONTAL_PADDING = 16;
+
+/**
+ * The longest identification is given before it is abandoned.
+ *
+ * Needed because the wait is now a modal over the whole screen rather than a
+ * spinner in the corner of the search bar. Nothing below here imposes a
+ * timeout — not the fetch wrapper, not React Query on a mutation — and the
+ * platforms disagree about whether a stalled socket is ever dropped, so
+ * without this a request that never answers would leave someone staring at
+ * film facts with no way back. Generous, because the pipeline legitimately
+ * takes several seconds.
+ */
+const IDENTIFY_DEADLINE_MS = 45_000;
+
+/** Marks the rejection the deadline causes, so it can be worded differently. */
+const TIMED_OUT = Symbol('identify-timed-out');
+
+function withDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    work,
+    new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(TIMED_OUT), IDENTIFY_DEADLINE_MS);
+    }),
+  ]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+function identifyErrorMessage(err: unknown, what: 'link' | 'image'): string {
+  if (err === TIMED_OUT) {
+    return 'That is taking longer than it should. Check your connection and try again.';
+  }
+  return what === 'link'
+    ? 'Could not process the link. Please try again.'
+    : 'Could not read films from that image. Please try again.';
+}
 
 // ── Input classification ─────────────────────────────────────────────────────
 // One bar handles three inputs: a pasted URL, a plain title (live TMDB
@@ -175,7 +211,7 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
       if (!trimmed || !looksLikeUrl(trimmed) || isProcessingLink) return false;
       if (!requireAccount('identify films from a link')) return false;
       try {
-        const result = await processLink({ data: { url: trimmed, dryRun: true } });
+        const result = await withDeadline(processLink({ data: { url: trimmed, dryRun: true } }));
         const matches = result.matches ?? [];
         if (matches.length > 0 && Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -184,8 +220,8 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
         // offers a manual search, so the flow is not a dead end.
         onMatches(matches, result.listTitle ?? null);
         return true;
-      } catch {
-        Alert.alert('Error', 'Could not process the link. Please try again.');
+      } catch (err) {
+        Alert.alert('Error', identifyErrorMessage(err, 'link'));
         return false;
       }
     },
@@ -231,13 +267,15 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
       }
 
       try {
-        const response = await extractFromImage({
-          data: {
-            imageBase64: result.image.base64,
-            mimeType: result.image.mimeType,
-            dryRun: true,
-          },
-        });
+        const response = await withDeadline(
+          extractFromImage({
+            data: {
+              imageBase64: result.image.base64,
+              mimeType: result.image.mimeType,
+              dryRun: true,
+            },
+          })
+        );
 
         const matches = response.matches ?? [];
         if (matches.length > 0 && Platform.OS !== 'web') {
@@ -246,8 +284,8 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
         // Zero matches still opens the sheet — its "No film identified" state
         // offers a manual search, the same as the link flow.
         onMatches(matches, response.listTitle ?? null);
-      } catch {
-        Alert.alert('Error', 'Could not read films from that image. Please try again.');
+      } catch (err) {
+        Alert.alert('Error', identifyErrorMessage(err, 'image'));
       }
     },
     [extractFromImage, showToast, onMatches]
@@ -452,6 +490,30 @@ export function FilmSearchBar({
       <TouchableOpacity style={styles.aiToggleBtn} onPress={toggleAi} activeOpacity={0.8}>
         <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color="#FFFFFF" />
       </TouchableOpacity>
+
+      {/*
+        Identification covers the screen while it runs, here as it does for a
+        share, and for the same reason: it takes seconds, not milliseconds,
+        and a spinner the size of a search-bar icon neither says what is
+        happening nor gives anyone anything to do while it does. The film
+        facts fill it.
+
+        Recommendations are left on the small inline spinner. They are a
+        different request with its own results area, and they are not
+        identifying a film — the facts belong to the wait they were written
+        for.
+
+        A Modal, so it renders above the screen regardless of the fact that
+        it is declared inside a search row.
+      */}
+      <IdentifyingOverlay
+        visible={isExtractingImage || isProcessingLink}
+        subtitle={
+          isExtractingImage
+            ? 'Gemini is reading your photo'
+            : 'Gemini is reading the link you pasted'
+        }
+      />
     </View>
   );
 }
