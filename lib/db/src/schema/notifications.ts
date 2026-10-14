@@ -33,6 +33,12 @@ export const conversationMessagesTable = pgTable("conversation_messages", {
   fromUserId: text("from_user_id").notNull(),
   toUserId: text("to_user_id").notNull(),
   content: text("content").notNull(),
+  // Mirrors film_notifications.is_read. Without it a reaction could never
+  // be unread, so the inbox badge counted recommendations only: a Film Pal
+  // replying to a film you sent them lit nothing up anywhere in the app.
+  // Existing rows default to read — treating every message ever sent as new
+  // would greet people with a badge in the dozens on first launch.
+  isRead: boolean("is_read").notNull().default(false),
   replyToNotificationId: integer("reply_to_notification_id").references(
     () => filmNotificationsTable.id,
     { onDelete: "set null" }

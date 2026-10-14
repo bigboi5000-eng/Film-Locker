@@ -928,10 +928,10 @@ export const GetConversationsResponse = zod.object({
   "replyToNotificationId": zod.number().nullish(),
   "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
 }).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n'),
-  "unreadCount": zod.number().describe('Recommendations this person has sent the caller that are still unread. Reactions and messages cannot count towards this yet — conversation_messages has no read state — so a conversation whose only new activity is a reaction shows as read.\n'),
+  "unreadCount": zod.number().describe('Anything this person has sent the caller that is still unread — recommendations and reactions alike. Opening the thread reads all of it.\n'),
   "posters": zod.array(zod.string()).describe('Poster URLs from the most recent films in this conversation, either direction, for the preview strip on the row.\n')
 }).describe('One person the caller is in conversation with, plus enough of the latest activity to draw a row without opening the thread.\n')),
-  "unreadCount": zod.number().describe('Total unread recommendations across every conversation')
+  "unreadCount": zod.number().describe('Total unread items across every conversation')
 })
 
 
@@ -1124,7 +1124,9 @@ export const GetUserProfileResponse = zod.object({
   "stats": zod.object({
   "watchedCount": zod.number(),
   "reviewCount": zod.number(),
-  "publicPlaylistCount": zod.number()
+  "publicPlaylistCount": zod.number(),
+  "followerCount": zod.number(),
+  "followingCount": zod.number()
 }),
   "publicPlaylists": zod.array(zod.object({
   "id": zod.number(),
@@ -1139,7 +1141,34 @@ export const GetUserProfileResponse = zod.object({
   "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
-})).nullable().describe('Null when the account is private and the caller isn\'t an accepted follower (and isn\'t the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them.\n')
+})).nullable().describe('Null when the account is private and the caller isn\'t an accepted follower (and isn\'t the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them.\n'),
+  "recentRatings": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "releaseYear": zod.string().nullish(),
+  "rating": zod.number().nullish(),
+  "comment": zod.string().nullish(),
+  "at": zod.coerce.date()
+}).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has rated in the community, newest first, with `rating` set. Null under the same privacy rule as publicPlaylists.\n'),
+  "recentComments": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "releaseYear": zod.string().nullish(),
+  "rating": zod.number().nullish(),
+  "comment": zod.string().nullish(),
+  "at": zod.coerce.date()
+}).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has written about, newest first, with `comment` set. Null under the same privacy rule as publicPlaylists.\n'),
+  "recentWatched": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "title": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "releaseYear": zod.string().nullish(),
+  "rating": zod.number().nullish(),
+  "comment": zod.string().nullish(),
+  "at": zod.coerce.date()
+}).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has watched, newest first, with `rating` set to their own private 1-5 score where they gave one.\n\nGated more tightly than the rest: watched films need a MUTUAL accepted follow, matching GET \/users\/{id}\/watched, so this is null for a public account the caller does not follow back even though the ratings above are visible. Do not build a profile\'s headline imagery from this — for most profiles it is empty.\n')
 })
 
 
@@ -1180,6 +1209,52 @@ export const GetUserWatchedResponse = zod.object({
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
 }))
+})
+
+
+/**
+ * Visible for a public account, for the account itself, and to an accepted follower of a private account. Otherwise 403 — the count on the profile is public, the list is not.
+ * @summary The people following this user
+ */
+export const GetUserFollowersParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const getUserFollowersResponseUsersItemDisplayInitialsMax = 5;
+
+
+
+export const GetUserFollowersResponse = zod.object({
+  "users": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getUserFollowersResponseUsersItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.'))
+})
+
+
+/**
+ * Same visibility rules as /users/{id}/followers.
+ * @summary The people this user follows
+ */
+export const GetUserFollowingParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const getUserFollowingResponseUsersItemDisplayInitialsMax = 5;
+
+
+
+export const GetUserFollowingResponse = zod.object({
+  "users": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().max(getUserFollowingResponseUsersItemDisplayInitialsMax).nullish(),
+  "isPrivate": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}).describe('Another user\'s public profile — never includes their email address.'))
 })
 
 

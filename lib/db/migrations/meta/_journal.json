@@ -78,6 +78,13 @@
       "when": 1789326444136,
       "tag": "0010_silly_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791979072914,
+      "tag": "0011_happy_toro",
+      "breakpoints": true
     }
   ]
 }

@@ -82,6 +82,7 @@ import type {
   UpdateMeBody,
   UpdatePlaylistBody,
   UpdatePushTokenBody,
+  UserListResponse,
   UserProfile,
   UserProfileResponse
 } from './api.schemas';
@@ -2991,6 +2992,162 @@ export function useGetUserWatched<TData = Awaited<ReturnType<typeof getUserWatch
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetUserWatchedQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetUserFollowersUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/followers`
+}
+
+/**
+ * Visible for a public account, for the account itself, and to an accepted follower of a private account. Otherwise 403 — the count on the profile is public, the list is not.
+ * @summary The people following this user
+ */
+export const getUserFollowers = async (id: string, options?: RequestInit): Promise<UserListResponse> => {
+
+  return customFetch<UserListResponse>(getGetUserFollowersUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserFollowersQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/followers`
+    ] as const;
+    }
+
+
+export const getGetUserFollowersQueryOptions = <TData = Awaited<ReturnType<typeof getUserFollowers>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserFollowers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserFollowersQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserFollowers>>> = ({ signal }) => getUserFollowers(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserFollowers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserFollowersQueryResult = NonNullable<Awaited<ReturnType<typeof getUserFollowers>>>
+export type GetUserFollowersQueryError = ErrorType<void>
+
+
+/**
+ * @summary The people following this user
+ */
+
+export function useGetUserFollowers<TData = Awaited<ReturnType<typeof getUserFollowers>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserFollowers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserFollowersQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetUserFollowingUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/following`
+}
+
+/**
+ * Same visibility rules as /users/{id}/followers.
+ * @summary The people this user follows
+ */
+export const getUserFollowing = async (id: string, options?: RequestInit): Promise<UserListResponse> => {
+
+  return customFetch<UserListResponse>(getGetUserFollowingUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserFollowingQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/following`
+    ] as const;
+    }
+
+
+export const getGetUserFollowingQueryOptions = <TData = Awaited<ReturnType<typeof getUserFollowing>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserFollowing>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserFollowingQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserFollowing>>> = ({ signal }) => getUserFollowing(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserFollowing>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserFollowingQueryResult = NonNullable<Awaited<ReturnType<typeof getUserFollowing>>>
+export type GetUserFollowingQueryError = ErrorType<void>
+
+
+/**
+ * @summary The people this user follows
+ */
+
+export function useGetUserFollowing<TData = Awaited<ReturnType<typeof getUserFollowing>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserFollowing>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserFollowingQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

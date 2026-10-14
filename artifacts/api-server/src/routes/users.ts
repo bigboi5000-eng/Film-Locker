@@ -20,6 +20,7 @@ import {
 import { UpdatePushTokenBody, ListMoviesResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
+import { resolveFilmCards, type FilmCard } from "../lib/filmCards";
 import { deleteUserData } from "../lib/deleteUserData";
 import { generateUsername } from "../lib/generateUsername";
 import { z } from "zod";
@@ -331,17 +332,26 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
 
   const canViewDetails = isSelf || !target.isPrivate || followStatus === "accepted";
 
-  const [[watchedRow], [reviewRow], [playlistCountRow]] = await Promise.all([
-    db
-      .select({ value: count() })
-      .from(moviesTable)
-      .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true))),
-    db.select({ value: count() }).from(filmCommentsTable).where(eq(filmCommentsTable.userId, targetId)),
-    db
-      .select({ value: count() })
-      .from(playlistsTable)
-      .where(and(eq(playlistsTable.userId, targetId), eq(playlistsTable.isPublic, true))),
-  ]);
+  const [[watchedRow], [reviewRow], [playlistCountRow], [followerRow], [followingRow]] =
+    await Promise.all([
+      db
+        .select({ value: count() })
+        .from(moviesTable)
+        .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true))),
+      db.select({ value: count() }).from(filmCommentsTable).where(eq(filmCommentsTable.userId, targetId)),
+      db
+        .select({ value: count() })
+        .from(playlistsTable)
+        .where(and(eq(playlistsTable.userId, targetId), eq(playlistsTable.isPublic, true))),
+      db
+        .select({ value: count() })
+        .from(followsTable)
+        .where(and(eq(followsTable.followeeId, targetId), eq(followsTable.status, "accepted"))),
+      db
+        .select({ value: count() })
+        .from(followsTable)
+        .where(and(eq(followsTable.followerId, targetId), eq(followsTable.status, "accepted"))),
+    ]);
 
   let publicPlaylists = null;
   if (canViewDetails) {
@@ -369,6 +379,129 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
     publicPlaylists = rows.map((r) => ({ ...r, coverPosters: (r.coverPosters ?? []).slice(0, 4) }));
   }
 
+  /**
+   * What the profile actually shows.
+   *
+   * Three sections, three different privacy bars, which is the whole reason
+   * they are fetched separately rather than as one activity list:
+   *
+   *  - ratings and comments ride on canViewDetails, the same one-way bar
+   *    the playlists use;
+   *  - watched films need a mutual follow, matching GET /users/:id/watched.
+   *    That gate is why a profile's headline imagery cannot come from here:
+   *    for anybody you have just discovered this is null, and a hero built
+   *    on it would be blank exactly when a profile most needs to look
+   *    worth following.
+   */
+  const RECENT_RATINGS = 12;
+  const RECENT_COMMENTS = 3;
+  const RECENT_WATCHED = 12;
+
+  const canViewWatched = isSelf || (followStatus === "accepted" && followsYou);
+
+  const [ratingRows, commentRows, watchedRows] = await Promise.all([
+    canViewDetails
+      ? db
+          .select({
+            tmdbId: filmCommunityRatingsTable.tmdbId,
+            rating: filmCommunityRatingsTable.rating,
+            at: filmCommunityRatingsTable.createdAt,
+          })
+          .from(filmCommunityRatingsTable)
+          .where(eq(filmCommunityRatingsTable.userId, targetId))
+          .orderBy(desc(filmCommunityRatingsTable.createdAt))
+          .limit(RECENT_RATINGS)
+      : Promise.resolve(null),
+
+    canViewDetails
+      ? db
+          .select({
+            tmdbId: filmCommentsTable.tmdbId,
+            body: filmCommentsTable.body,
+            at: filmCommentsTable.createdAt,
+          })
+          .from(filmCommentsTable)
+          .where(eq(filmCommentsTable.userId, targetId))
+          .orderBy(desc(filmCommentsTable.createdAt))
+          .limit(RECENT_COMMENTS)
+      : Promise.resolve(null),
+
+    canViewWatched
+      ? db
+          .select({
+            tmdbId: moviesTable.tmdbId,
+            title: moviesTable.title,
+            posterUrl: moviesTable.posterUrl,
+            releaseYear: moviesTable.releaseYear,
+            rating: moviesTable.rating,
+            watchedAt: moviesTable.watchedAt,
+            addedAt: moviesTable.addedAt,
+          })
+          .from(moviesTable)
+          .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true)))
+          // Coalesced, not "watched_at DESC, added_at DESC". Postgres sorts
+          // NULLs first on a descending order, and watched_at is null on
+          // rows marked watched before that column existed — so the plain
+          // version puts the oldest entries in the library at the top of a
+          // section headed "Recently watched".
+          .orderBy(desc(sql`coalesce(${moviesTable.watchedAt}, ${moviesTable.addedAt})`))
+          .limit(RECENT_WATCHED)
+      : Promise.resolve(null),
+  ]);
+
+  // Ratings and comments keep a TMDB id and nothing else, so one resolve
+  // covers both — and the two sections overlap heavily in practice, since
+  // people tend to write about the films they rate.
+  const needsResolving = [
+    ...(ratingRows ?? []).map((r) => r.tmdbId),
+    ...(commentRows ?? []).map((c) => c.tmdbId),
+  ];
+  const cards: Map<number, FilmCard> = needsResolving.length
+    ? await resolveFilmCards(needsResolving)
+    : new Map();
+
+  const card = (tmdbId: number) => cards.get(tmdbId);
+
+  const recentRatings =
+    ratingRows === null
+      ? null
+      : ratingRows.map((r) => ({
+          tmdbId: r.tmdbId,
+          title: card(r.tmdbId)?.title ?? null,
+          posterUrl: card(r.tmdbId)?.posterUrl ?? null,
+          releaseYear: card(r.tmdbId)?.releaseYear ?? null,
+          rating: r.rating,
+          comment: null,
+          at: r.at,
+        }));
+
+  const recentComments =
+    commentRows === null
+      ? null
+      : commentRows.map((c) => ({
+          tmdbId: c.tmdbId,
+          title: card(c.tmdbId)?.title ?? null,
+          posterUrl: card(c.tmdbId)?.posterUrl ?? null,
+          releaseYear: card(c.tmdbId)?.releaseYear ?? null,
+          rating: null,
+          comment: c.body,
+          at: c.at,
+        }));
+
+  const recentWatched =
+    watchedRows === null
+      ? null
+      : watchedRows.map((m) => ({
+          tmdbId: m.tmdbId,
+          title: m.title,
+          posterUrl: m.posterUrl || null,
+          releaseYear: m.releaseYear || null,
+          rating: m.rating,
+          comment: null,
+          // watchedAt is nullable on rows marked watched before it existed.
+          at: m.watchedAt ?? m.addedAt,
+        }));
+
   res.json({
     user: target,
     followStatus,
@@ -377,8 +510,13 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
       watchedCount: watchedRow.value,
       reviewCount: reviewRow.value,
       publicPlaylistCount: playlistCountRow.value,
+      followerCount: followerRow.value,
+      followingCount: followingRow.value,
     },
     publicPlaylists,
+    recentRatings,
+    recentComments,
+    recentWatched,
   });
 });
 
@@ -387,6 +525,101 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
 // directions — i.e. "Film Pals") rather than the one-way accepted-follower
 // gate used for playlists: individual watched films are more personal than
 // a curated public playlist, so this uses the stricter bar.
+
+// ── GET /users/:id/followers and /users/:id/following ────────────────────────
+// Who follows this person, and who they follow.
+//
+// The counts on the profile are public; these lists are not. A private
+// account's lists are visible only to the account itself and to accepted
+// followers — the same one-way bar the playlists use, rather than the
+// mutual one guarding watched films, because who somebody follows is far
+// less personal than what they have been watching.
+
+/** Both lists need the same four checks, so they share them. */
+async function resolveListAccess(
+  callerId: string,
+  targetId: string
+): Promise<{ ok: true } | { ok: false; status: 403 | 404; error: string }> {
+  if (!targetId) {
+    return { ok: false, status: 404, error: "User not found." };
+  }
+
+  const [target] = await db
+    .select({ clerkId: usersTable.clerkId, isPrivate: usersTable.isPrivate })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, targetId));
+
+  // A block reads as "not found" here as it does everywhere else, so the
+  // response never reveals that one exists.
+  if (!target || (await isBlockedEitherWay(callerId, targetId))) {
+    return { ok: false, status: 404, error: "User not found." };
+  }
+
+  if (callerId === targetId || !target.isPrivate) return { ok: true };
+
+  const [edge] = await db
+    .select({ id: followsTable.id })
+    .from(followsTable)
+    .where(
+      and(
+        eq(followsTable.followerId, callerId),
+        eq(followsTable.followeeId, targetId),
+        eq(followsTable.status, "accepted")
+      )
+    );
+
+  return edge
+    ? { ok: true }
+    : { ok: false, status: 403, error: "This account is private." };
+}
+
+const FOLLOW_LIST_COLUMNS = {
+  clerkId: usersTable.clerkId,
+  username: usersTable.username,
+  displayInitials: usersTable.displayInitials,
+  isPrivate: usersTable.isPrivate,
+  avatarUrl: usersTable.avatarUrl,
+};
+
+router.get("/users/:id/followers", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const targetId = String(req.params.id ?? "").trim();
+
+  const access = await resolveListAccess(clerkUserId, targetId);
+  if (!access.ok) {
+    res.status(access.status).json({ error: access.error });
+    return;
+  }
+
+  const users = await db
+    .select(FOLLOW_LIST_COLUMNS)
+    .from(followsTable)
+    .innerJoin(usersTable, eq(followsTable.followerId, usersTable.clerkId))
+    .where(and(eq(followsTable.followeeId, targetId), eq(followsTable.status, "accepted")))
+    .orderBy(desc(followsTable.createdAt));
+
+  res.json({ users });
+});
+
+router.get("/users/:id/following", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const targetId = String(req.params.id ?? "").trim();
+
+  const access = await resolveListAccess(clerkUserId, targetId);
+  if (!access.ok) {
+    res.status(access.status).json({ error: access.error });
+    return;
+  }
+
+  const users = await db
+    .select(FOLLOW_LIST_COLUMNS)
+    .from(followsTable)
+    .innerJoin(usersTable, eq(followsTable.followeeId, usersTable.clerkId))
+    .where(and(eq(followsTable.followerId, targetId), eq(followsTable.status, "accepted")))
+    .orderBy(desc(followsTable.createdAt));
+
+  res.json({ users });
+});
 
 router.get("/users/:id/watched", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;

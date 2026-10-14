@@ -878,6 +878,62 @@ paths:
         "404":
           description: Not found
 
+  /users/{id}/followers:
+    get:
+      operationId: getUserFollowers
+      tags: [users]
+      summary: The people following this user
+      description: >
+        Visible for a public account, for the account itself, and to an
+        accepted follower of a private account. Otherwise 403 — the count on
+        the profile is public, the list is not.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Followers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: This account is private
+        "404":
+          description: Not found
+
+  /users/{id}/following:
+    get:
+      operationId: getUserFollowing
+      tags: [users]
+      summary: The people this user follows
+      description: >
+        Same visibility rules as /users/{id}/followers.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Followed users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: This account is private
+        "404":
+          description: Not found
+
   /follows:
     get:
       operationId: getFollows
@@ -2236,10 +2292,9 @@ components:
         unreadCount:
           type: integer
           description: >
-            Recommendations this person has sent the caller that are still
-            unread. Reactions and messages cannot count towards this yet —
-            conversation_messages has no read state — so a conversation
-            whose only new activity is a reaction shows as read.
+            Anything this person has sent the caller that is still unread —
+            recommendations and reactions alike. Opening the thread reads
+            all of it.
         posters:
           type: array
           description: >
@@ -2262,7 +2317,7 @@ components:
             $ref: "#/components/schemas/ConversationSummary"
         unreadCount:
           type: integer
-          description: Total unread recommendations across every conversation
+          description: Total unread items across every conversation
       required:
         - conversations
         - unreadCount
@@ -2331,6 +2386,56 @@ components:
         - clerkId
         - isPrivate
 
+    ProfileFilmCard:
+      type: object
+      description: >
+        One film on someone's profile, with whatever the section it appears
+        in is about. One shape for all three sections rather than three
+        near-identical ones: `rating` carries the community rating under
+        recentRatings and the person's own score under recentWatched,
+        `comment` carries the body under recentComments, and `at` is when
+        that thing happened.
+
+
+        Title and poster are nullable because neither film_community_ratings
+        nor film_comments stores them — both keep a TMDB id alone — so they
+        are resolved separately and a film that cannot be resolved still
+        appears rather than silently shortening the list.
+      properties:
+        tmdbId:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        posterUrl:
+          type: string
+          nullable: true
+        releaseYear:
+          type: string
+          nullable: true
+        rating:
+          type: integer
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        at:
+          type: string
+          format: date-time
+      required:
+        - tmdbId
+        - at
+
+    UserListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicUserProfile"
+      required:
+        - users
+
     UserProfileResponse:
       type: object
       properties:
@@ -2359,10 +2464,16 @@ components:
               type: integer
             publicPlaylistCount:
               type: integer
+            followerCount:
+              type: integer
+            followingCount:
+              type: integer
           required:
             - watchedCount
             - reviewCount
             - publicPlaylistCount
+            - followerCount
+            - followingCount
         publicPlaylists:
           type: array
           nullable: true
@@ -2373,6 +2484,40 @@ components:
             accepted follower (and isn't the account itself) — use
             stats.publicPlaylistCount as the headline figure in that case
             instead of listing them.
+
+        recentRatings:
+          type: array
+          nullable: true
+          description: >
+            Films this person has rated in the community, newest first, with
+            `rating` set. Null under the same privacy rule as
+            publicPlaylists.
+          items:
+            $ref: "#/components/schemas/ProfileFilmCard"
+        recentComments:
+          type: array
+          nullable: true
+          description: >
+            Films this person has written about, newest first, with
+            `comment` set. Null under the same privacy rule as
+            publicPlaylists.
+          items:
+            $ref: "#/components/schemas/ProfileFilmCard"
+        recentWatched:
+          type: array
+          nullable: true
+          description: >
+            Films this person has watched, newest first, with `rating` set
+            to their own private 1-5 score where they gave one.
+
+
+            Gated more tightly than the rest: watched films need a MUTUAL
+            accepted follow, matching GET /users/{id}/watched, so this is
+            null for a public account the caller does not follow back even
+            though the ratings above are visible. Do not build a profile's
+            headline imagery from this — for most profiles it is empty.
+          items:
+            $ref: "#/components/schemas/ProfileFilmCard"
       required:
         - user
         - followStatus

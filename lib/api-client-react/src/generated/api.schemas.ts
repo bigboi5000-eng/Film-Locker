@@ -450,7 +450,7 @@ export interface ConversationFeedItem {
 export interface ConversationSummary {
   user: NotificationUser;
   lastItem: ConversationFeedItem;
-  /** Recommendations this person has sent the caller that are still unread. Reactions and messages cannot count towards this yet — conversation_messages has no read state — so a conversation whose only new activity is a reaction shows as read. */
+  /** Anything this person has sent the caller that is still unread — recommendations and reactions alike. Opening the thread reads all of it. */
   unreadCount: number;
   /** Poster URLs from the most recent films in this conversation, either direction, for the preview strip on the row. */
   posters: string[];
@@ -458,7 +458,7 @@ export interface ConversationSummary {
 
 export interface ConversationsResponse {
   conversations: ConversationSummary[];
-  /** Total unread recommendations across every conversation */
+  /** Total unread items across every conversation */
   unreadCount: number;
 }
 
@@ -494,6 +494,25 @@ export interface PublicUserProfile {
 }
 
 /**
+ * One film on someone's profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person's own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.
+ *
+ * Title and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.
+ */
+export interface ProfileFilmCard {
+  tmdbId: number;
+  title?: string | null;
+  posterUrl?: string | null;
+  releaseYear?: string | null;
+  rating?: number | null;
+  comment?: string | null;
+  at: string;
+}
+
+export interface UserListResponse {
+  users: PublicUserProfile[];
+}
+
+/**
  * The caller's relationship to this profile — "self" when viewing your own profile, otherwise the same pending/accepted states as the rest of the follow system, or "none" if not followed at all.
  */
 export type UserProfileResponseFollowStatus = typeof UserProfileResponseFollowStatus[keyof typeof UserProfileResponseFollowStatus];
@@ -510,6 +529,8 @@ export type UserProfileResponseStats = {
   watchedCount: number;
   reviewCount: number;
   publicPlaylistCount: number;
+  followerCount: number;
+  followingCount: number;
 };
 
 export interface Playlist {
@@ -538,6 +559,16 @@ export interface UserProfileResponse {
   stats: UserProfileResponseStats;
   /** Null when the account is private and the caller isn't an accepted follower (and isn't the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them. */
   publicPlaylists: Playlist[] | null;
+  /** Films this person has rated in the community, newest first, with `rating` set. Null under the same privacy rule as publicPlaylists. */
+  recentRatings?: ProfileFilmCard[] | null;
+  /** Films this person has written about, newest first, with `comment` set. Null under the same privacy rule as publicPlaylists. */
+  recentComments?: ProfileFilmCard[] | null;
+  /**
+     * Films this person has watched, newest first, with `rating` set to their own private 1-5 score where they gave one.
+     *
+     * Gated more tightly than the rest: watched films need a MUTUAL accepted follow, matching GET /users/{id}/watched, so this is null for a public account the caller does not follow back even though the ratings above are visible. Do not build a profile's headline imagery from this — for most profiles it is empty.
+     */
+  recentWatched?: ProfileFilmCard[] | null;
 }
 
 export interface SyncUserBody {

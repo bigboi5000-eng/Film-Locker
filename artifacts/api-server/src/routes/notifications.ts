@@ -93,6 +93,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
         fromUserId: conversationMessagesTable.fromUserId,
         toUserId: conversationMessagesTable.toUserId,
         content: conversationMessagesTable.content,
+        isRead: conversationMessagesTable.isRead,
         replyToNotificationId: conversationMessagesTable.replyToNotificationId,
         createdAt: conversationMessagesTable.createdAt,
         replyToFilmTitle: filmNotificationsTable.filmTitle,
@@ -159,11 +160,13 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
     });
     // Only what they sent me can be unread; my own sends are not news to me.
     if (r.toUserId === clerkUserId && !r.isRead) entry.unreadCount += 1;
+    // (the same rule applies to messages, below)
     entry.posters.push(r.posterUrl);
   }
 
   for (const m of msgRows) {
-    bucket(counterpart(m)).items.push({
+    const entry = bucket(counterpart(m));
+    entry.items.push({
       type: "message",
       id: m.id,
       fromUserId: m.fromUserId,
@@ -172,11 +175,12 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
       tmdbId: null,
       filmTitle: null,
       posterUrl: null,
-      isRead: null,
+      isRead: m.isRead,
       content: m.content,
       replyToNotificationId: m.replyToNotificationId,
       replyToFilmTitle: m.replyToFilmTitle ?? null,
     });
+    if (m.toUserId === clerkUserId && !m.isRead) entry.unreadCount += 1;
   }
 
   // A conversation with someone whose account has since gone is not a
@@ -486,6 +490,7 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
         fromUserId: conversationMessagesTable.fromUserId,
         toUserId: conversationMessagesTable.toUserId,
         content: conversationMessagesTable.content,
+        isRead: conversationMessagesTable.isRead,
         replyToNotificationId: conversationMessagesTable.replyToNotificationId,
         createdAt: conversationMessagesTable.createdAt,
         replyToFilmTitle: filmNotificationsTable.filmTitle,
@@ -525,14 +530,17 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       tmdbId: null,
       filmTitle: null,
       posterUrl: null,
-      isRead: null,
+      isRead: m.isRead,
       content: m.content,
       replyToNotificationId: m.replyToNotificationId,
       replyToFilmTitle: m.replyToFilmTitle ?? null,
     })),
   ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-  // Mark recommendations this user sent me as read, in the background
+  // Opening the thread reads everything in it that came from them —
+  // recommendations and reactions alike. In the background: the feed has
+  // already been assembled, and a failure here costs a badge that clears on
+  // the next open rather than the screen the caller asked for.
   void db
     .update(filmNotificationsTable)
     .set({ isRead: true })
@@ -541,6 +549,17 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
         eq(filmNotificationsTable.fromUserId, otherUserId),
         eq(filmNotificationsTable.toUserId, clerkUserId),
         eq(filmNotificationsTable.isRead, false)
+      )
+    );
+
+  void db
+    .update(conversationMessagesTable)
+    .set({ isRead: true })
+    .where(
+      and(
+        eq(conversationMessagesTable.fromUserId, otherUserId),
+        eq(conversationMessagesTable.toUserId, clerkUserId),
+        eq(conversationMessagesTable.isRead, false)
       )
     );
 
@@ -618,7 +637,7 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
     tmdbId: null,
     filmTitle: null,
     posterUrl: null,
-    isRead: null,
+    isRead: inserted.isRead,
     content: inserted.content,
     replyToNotificationId: inserted.replyToNotificationId,
     replyToFilmTitle,
