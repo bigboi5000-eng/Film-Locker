@@ -31,15 +31,9 @@ import {
   type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
-import { PopcornToss } from '@/components/PopcornToss';
+import { FilmFactTicker } from '@/components/FilmFactTicker';
 import { useColors } from '@/hooks/useColors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-/** How long identification may take before the game is worth showing. */
-const GAME_AFTER_MS = 1400;
-
-/** The longest the game may sit on a finished result before it is overruled. */
-const RESULT_HOLD_LIMIT_MS = 8000;
 
 /**
  * The longest identification is given before the overlay gives up on it.
@@ -47,8 +41,7 @@ const RESULT_HOLD_LIMIT_MS = 8000;
  * Nothing between here and the server imposes one: there is no timeout on the
  * fetch, React Query does not add one to a mutation, and the platforms differ
  * on whether a stalled socket is ever abandoned. A request that never comes
- * back therefore leaves this modal up for good, which is exactly what "the
- * game never closes" looks like from the outside. Generous, because the
+ * back therefore leaves this modal up for good. Generous, because the
  * pipeline legitimately takes several seconds, but finite.
  */
 const IDENTIFY_DEADLINE_MS = 45_000;
@@ -92,23 +85,6 @@ export function ShareIntentHandler() {
   /** Which kind of share is being worked on, so the overlay can say so. */
   const [pendingKind, setPendingKind] = useState<'link' | 'image'>('link');
 
-  /**
-   * The game appears only once identification has been slow enough to be
-   * worth filling. Most link shares resolve well inside this, and a game
-   * that flashes up and vanishes is worse than no game.
-   */
-  const [showGame, setShowGame] = useState(false);
-  const showGameRef = useRef(false);
-  useEffect(() => { showGameRef.current = showGame; }, [showGame]);
-  const gameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  /**
-   * The outcome, held back while a kernel is still in the air.
-   *
-   * Identification finishing does not interrupt a throw — the game decides
-   * when to hand over, which it does the moment the popcorn lands.
-   */
-  const [resolved, setResolved] = useState<Outcome | null>(null);
   const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
   const [listTitle, setListTitle] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
@@ -127,10 +103,6 @@ export function ShareIntentHandler() {
   const runIdRef = useRef(0);
 
   const clearTimers = useCallback(() => {
-    if (gameTimerRef.current !== null) {
-      clearTimeout(gameTimerRef.current);
-      gameTimerRef.current = null;
-    }
     if (deadlineRef.current !== null) {
       clearTimeout(deadlineRef.current);
       deadlineRef.current = null;
@@ -140,8 +112,6 @@ export function ShareIntentHandler() {
   /** Act on the outcome and tear the overlay down. */
   const apply = useCallback((outcome: Outcome) => {
     if (!mountedRef.current) return;
-    setShowGame(false);
-    setResolved(null);
     setIsPending(false);
 
     if (outcome.ok) {
@@ -155,47 +125,21 @@ export function ShareIntentHandler() {
   }, []);
 
   /**
-   * Identification is done. Hand over now, unless the game is up — in which
-   * case it holds the outcome until the kernel lands.
+   * Identification is done, so act on it at once.
+   *
+   * This used to be a negotiation with the popcorn game, which held the
+   * outcome back until a throw finished. Nothing is held back now: a fact on
+   * screen can be cut off mid-sentence without costing the reader anything,
+   * which is the main reason it is a better way to fill the wait than a game
+   * was.
    */
   const settle = useCallback(
     (outcome: Outcome) => {
       clearTimers();
-      if (!mountedRef.current) return;
-      if (showGameRef.current) setResolved(outcome);
-      else apply(outcome);
+      apply(outcome);
     },
     [apply, clearTimers]
   );
-
-  /**
-   * The game's hand-back, as one unchanging function.
-   *
-   * It reads the outcome from a ref rather than closing over it, because the
-   * game starts a throw holding whichever callback existed at the time. An
-   * inline closure here would be a different function on every render, so a
-   * throw begun before the result arrived would hand back through a version
-   * that still saw `resolved` as null and the overlay would never close.
-   */
-  const resolvedRef = useRef<Outcome | null>(null);
-  useEffect(() => { resolvedRef.current = resolved; }, [resolved]);
-
-  const handleGameDone = useCallback(() => {
-    const outcome = resolvedRef.current;
-    if (outcome) apply(outcome);
-  }, [apply]);
-
-  /**
-   * Last resort. The game is meant to hand over as soon as the kernel
-   * settles, and a flight is bounded, but nothing about identification
-   * finishing should be able to leave someone stuck behind a modal — so the
-   * outcome is applied regardless once it has waited this long.
-   */
-  useEffect(() => {
-    if (!resolved) return;
-    const timer = setTimeout(() => apply(resolved), RESULT_HOLD_LIMIT_MS);
-    return () => clearTimeout(timer);
-  }, [resolved, apply]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -229,12 +173,7 @@ export function ShareIntentHandler() {
     setIsPending(true);
 
     const run = (runIdRef.current += 1);
-
-    // Reveal the game only if this is taking long enough to be worth it.
     clearTimers();
-    gameTimerRef.current = setTimeout(() => {
-      if (mountedRef.current) setShowGame(true);
-    }, GAME_AFTER_MS);
 
     /** Outcomes from a share that has already been given up on are dropped. */
     const report = (outcome: Outcome) => {
@@ -300,8 +239,6 @@ export function ShareIntentHandler() {
 
   const handleClose = useCallback(() => {
     clearTimers();
-    setShowGame(false);
-    setResolved(null);
     setShowSheet(false);
     setMatches([]);
     setListTitle(null);
@@ -322,36 +259,24 @@ export function ShareIntentHandler() {
           <View
             style={[
               styles.processingCard,
-              {
-                backgroundColor: colors.card,
-                marginTop: insets.top + 16,
-                // The game needs more room than a spinner does.
-                ...(showGame ? { width: 332, paddingHorizontal: 16 } : null),
-              },
+              { backgroundColor: colors.card, marginTop: insets.top + 16 },
             ]}
           >
-            {showGame ? (
-              <>
-                <Text style={[styles.processingTitle, { color: colors.foreground }]}>
-                  Identifying Film…
-                </Text>
-                {/* resolved !== null means the answer is already waiting; the
-                    game hands over as soon as the kernel comes down. */}
-                <PopcornToss ready={resolved !== null} onDone={handleGameDone} />
-              </>
-            ) : (
-              <>
-                <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
-                <Text style={[styles.processingTitle, { color: colors.foreground }]}>
-                  Identifying Film…
-                </Text>
-                <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
-                  {pendingKind === 'image'
-                    ? 'Gemini is reading the shared image'
-                    : 'Gemini is reading the shared link'}
-                </Text>
-              </>
-            )}
+            <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
+            <Text style={[styles.processingTitle, { color: colors.foreground }]}>
+              Identifying Film…
+            </Text>
+            <Text style={[styles.processingSubtitle, { color: colors.mutedForeground }]}>
+              {pendingKind === 'image'
+                ? 'Gemini is reading the shared image'
+                : 'Gemini is reading the shared link'}
+            </Text>
+
+            {/* The wait is usually a few seconds and occasionally much
+                longer, so it gets something worth reading rather than a
+                spinner on its own. Nothing here delays the result. */}
+            <View style={styles.factDivider} />
+            <FilmFactTicker />
           </View>
         </View>
       </Modal>
@@ -376,10 +301,10 @@ const styles = StyleSheet.create({
   },
   processingCard: {
     borderRadius: 16,
-    paddingHorizontal: 28,
-    paddingVertical: 28,
+    paddingHorizontal: 22,
+    paddingVertical: 26,
     alignItems: 'center',
-    width: 260,
+    width: 300,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
@@ -400,5 +325,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  factDivider: {
+    height: 1,
+    alignSelf: 'stretch',
+    marginTop: 18,
+    marginBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.07)',
   },
 });
