@@ -19,6 +19,8 @@ import {
 } from '@expo-google-fonts/inter';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { useIsDark } from '@/hooks/useColors';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react';
@@ -156,6 +158,18 @@ function RootLayoutNav() {
   );
 }
 
+/**
+ * The status bar, which has to be inside the provider to read the theme.
+ *
+ * Not "auto": that follows the device, which is wrong the moment somebody
+ * picks Light on a phone set to dark — the icons would go white on a white
+ * header. This follows the theme actually in force.
+ */
+function ThemedChrome() {
+  const isDark = useIsDark();
+  return <StatusBar style={isDark ? 'light' : 'dark'} />;
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -177,23 +191,22 @@ export default function RootLayout() {
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
         <ClerkLoaded>
           <SafeAreaProvider>
-            {/* App is light-themed only (see hooks/useColors.ts) — force
-                dark status bar icons rather than "auto", which would go
-                white-on-white whenever the device itself is in dark mode. */}
-            <StatusBar style="dark" />
-            <ErrorBoundary>
-              <QueryClientProvider client={queryClient}>
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <ToastProvider>
-                    <KeyboardProvider>
-                      <PushNotificationManager />
-                      <RootLayoutNav />
-                      <ShareIntentHandler />
-                    </KeyboardProvider>
-                  </ToastProvider>
-                </GestureHandlerRootView>
-              </QueryClientProvider>
-            </ErrorBoundary>
+            <ThemeProvider>
+              <ThemedChrome />
+              <ErrorBoundary>
+                <QueryClientProvider client={queryClient}>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <ToastProvider>
+                      <KeyboardProvider>
+                        <PushNotificationManager />
+                        <RootLayoutNav />
+                        <ShareIntentHandler />
+                      </KeyboardProvider>
+                    </ToastProvider>
+                  </GestureHandlerRootView>
+                </QueryClientProvider>
+              </ErrorBoundary>
+            </ThemeProvider>
           </SafeAreaProvider>
         </ClerkLoaded>
       </ClerkProvider>

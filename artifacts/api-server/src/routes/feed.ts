@@ -10,14 +10,14 @@
  *
  * Two privacy bars, both inherited rather than invented here:
  *
- *  - ratings and reviews go to anyone with an accepted follow, which is the
- *    bar those already use elsewhere;
+ *  - ratings, reviews and public playlists go to anyone with an accepted
+ *    follow, which is the bar those already use elsewhere;
  *  - watched films need a MUTUAL accepted follow, matching
  *    GET /users/:id/watched, so following somebody one way shows what they
  *    say about films but not what they have been seeing.
  */
 import { Router, type IRouter } from "express";
-import { and, eq, desc, inArray, sql } from "drizzle-orm";
+import { and, eq, desc, inArray, sql, count } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -25,6 +25,8 @@ import {
   followsTable,
   filmCommentsTable,
   filmCommunityRatingsTable,
+  playlistsTable,
+  playlistItemsTable,
 } from "@workspace/db";
 import { GetFeedResponse, MarkFeedSeenBody } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
@@ -94,7 +96,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [watchedRows, ratingRows, commentRows, actorRows] = await Promise.all([
+  const [watchedRows, ratingRows, commentRows, playlistRows, actorRows] = await Promise.all([
     mutual.length
       ? db
           .select({
@@ -143,6 +145,28 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       .orderBy(desc(filmCommentsTable.createdAt))
       .limit(limit),
 
+    // Public playlists only, and only ones with something in them: an empty
+    // playlist somebody made and has not filled is not news, and it would
+    // arrive as a card with four blank covers.
+    db
+      .select({
+        id: playlistsTable.id,
+        userId: playlistsTable.userId,
+        name: playlistsTable.name,
+        at: playlistsTable.createdAt,
+        itemCount: count(playlistItemsTable.id),
+        posters: sql<string[]>`
+          array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
+          FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
+        `.as("posters"),
+      })
+      .from(playlistsTable)
+      .innerJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
+      .where(and(inArray(playlistsTable.userId, following), eq(playlistsTable.isPublic, true)))
+      .groupBy(playlistsTable.id)
+      .orderBy(desc(playlistsTable.createdAt))
+      .limit(limit),
+
     db
       .select({
         clerkId: usersTable.clerkId,
@@ -167,16 +191,20 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
 
   interface Item {
     id: string;
-    type: "watched" | "rated" | "commented";
+    type: "watched" | "rated" | "commented" | "playlist";
     at: Date;
     isNew: boolean;
     user: Actor;
-    tmdbId: number;
+    tmdbId: number | null;
     title: string | null;
     posterUrl: string | null;
     releaseYear: string | null;
     rating: number | null;
     comment: string | null;
+    playlistId: number | null;
+    playlistName: string | null;
+    playlistItemCount: number | null;
+    playlistPosters: string[] | null;
   }
 
   const items: Item[] = [];
@@ -204,6 +232,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       releaseYear: w.releaseYear || null,
       rating: w.rating,
       comment: null,
+      playlistId: null,
+      playlistName: null,
+      playlistItemCount: null,
+      playlistPosters: null,
     });
   }
 
@@ -219,6 +251,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       releaseYear: cards.get(r.tmdbId)?.releaseYear ?? null,
       rating: r.rating,
       comment: null,
+      playlistId: null,
+      playlistName: null,
+      playlistItemCount: null,
+      playlistPosters: null,
     });
   }
 
@@ -234,6 +270,29 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       releaseYear: cards.get(c.tmdbId)?.releaseYear ?? null,
       rating: null,
       comment: c.body,
+      playlistId: null,
+      playlistName: null,
+      playlistItemCount: null,
+      playlistPosters: null,
+    });
+  }
+
+  for (const pl of playlistRows) {
+    add({
+      id: `playlist-${pl.id}`,
+      type: "playlist",
+      at: pl.at,
+      userId: pl.userId,
+      tmdbId: null,
+      title: null,
+      posterUrl: null,
+      releaseYear: null,
+      rating: null,
+      comment: null,
+      playlistId: pl.id,
+      playlistName: pl.name,
+      playlistItemCount: Number(pl.itemCount),
+      playlistPosters: (pl.posters ?? []).slice(0, 4),
     });
   }
 
@@ -263,6 +322,9 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
    */
   const seenPairs = new Set<string>();
   const deduped = items.filter((item) => {
+    // Playlists are not about one film and have no pair to collapse — two
+    // of them from the same person would otherwise fold into one.
+    if (item.tmdbId == null) return true;
     const key = `${item.user.clerkId}:${item.tmdbId}`;
     if (seenPairs.has(key)) return false;
     seenPairs.add(key);

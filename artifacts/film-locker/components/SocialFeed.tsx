@@ -31,6 +31,9 @@ import {
   type FeedItem,
 } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 function relative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -53,6 +56,7 @@ function stars(rating: number | null | undefined): string | null {
 function verbFor(item: FeedItem): string {
   if (item.type === 'watched') return 'watched';
   if (item.type === 'rated') return 'rated';
+  if (item.type === 'playlist') return 'made a playlist';
   return 'reviewed';
 }
 
@@ -65,16 +69,26 @@ function FeedCard({
   onOpenFilm: () => void;
   onOpenUser: () => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const initials = (item.user.displayInitials || item.user.username || '?').slice(0, 5).toUpperCase();
   const score = stars(item.rating);
 
   return (
     <TouchableOpacity style={styles.card} onPress={onOpenFilm} activeOpacity={0.8}>
-      {item.posterUrl ? (
+      {item.type === 'playlist' ? (
+        // Four covers in a grid, because a playlist is not one film and a
+        // single poster would misrepresent it as one.
+        <View style={styles.collage}>
+          {(item.playlistPosters ?? []).slice(0, 4).map((uri, i) => (
+            <Image key={i} source={{ uri }} style={styles.collageTile} contentFit="cover" />
+          ))}
+        </View>
+      ) : item.posterUrl ? (
         <Image source={{ uri: item.posterUrl }} style={styles.poster} contentFit="cover" />
       ) : (
         <View style={[styles.poster, styles.posterFallback]}>
-          <Ionicons name="film-outline" size={20} color="#9CA3AF" />
+          <Ionicons name="film-outline" size={20} color={colors.textFaint} />
         </View>
       )}
 
@@ -105,9 +119,19 @@ function FeedCard({
         </View>
 
         <Text style={styles.filmTitle} numberOfLines={2}>
-          {item.title ?? 'Unknown film'}
-          {item.releaseYear ? <Text style={styles.filmYear}>{`  ${item.releaseYear}`}</Text> : null}
+          {item.type === 'playlist'
+            ? item.playlistName ?? 'Untitled playlist'
+            : item.title ?? 'Unknown film'}
+          {item.type !== 'playlist' && item.releaseYear ? (
+            <Text style={styles.filmYear}>{`  ${item.releaseYear}`}</Text>
+          ) : null}
         </Text>
+
+        {item.type === 'playlist' ? (
+          <Text style={styles.comment}>
+            {item.playlistItemCount === 1 ? '1 film' : `${item.playlistItemCount ?? 0} films`}
+          </Text>
+        ) : null}
 
         {item.comment ? (
           <Text style={styles.comment} numberOfLines={3}>
@@ -125,8 +149,24 @@ function FeedCard({
 }
 
 export function SocialFeedView() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
+  /** Only ever a film item — a playlist card navigates instead. */
   const [selected, setSelected] = useState<FeedItem | null>(null);
+
+  const open = useCallback(
+    (item: FeedItem) => {
+      if (item.type === 'playlist') {
+        if (item.playlistId != null) {
+          router.push({ pathname: '/playlist/[id]', params: { id: String(item.playlistId) } });
+        }
+        return;
+      }
+      if (item.tmdbId != null) setSelected(item);
+    },
+    [router]
+  );
 
   const { data, isLoading, refetch, isRefetching } = useGetFeed(undefined, {
     query: { queryKey: getGetFeedQueryKey(), refetchOnMount: 'always' },
@@ -181,18 +221,18 @@ export function SocialFeedView() {
         ) : null}
         <FeedCard
           item={item}
-          onOpenFilm={() => setSelected(item)}
+          onOpenFilm={() => open(item)}
           onOpenUser={() => router.push(`/user/${item.user.clerkId}`)}
         />
       </>
     ),
-    [newCount, router]
+    [newCount, router, open]
   );
 
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0066FF" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -212,21 +252,21 @@ export function SocialFeedView() {
         }
         contentContainerStyle={items.length === 0 ? { flex: 1 } : { paddingBottom: 24 }}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0066FF" />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons name="film-outline" size={52} color="#D1D5DB" />
+            <Ionicons name="film-outline" size={52} color={colors.iconFaint} />
             <Text style={styles.emptyTitle}>Nothing here yet</Text>
             <Text style={styles.emptyText}>
-              Follow people and this fills with what they watch, rate and review. Films they have
-              watched need you both to follow each other.
+              Follow people and this fills with what they watch, rate, review and put in public
+              playlists. Films they have watched need you both to follow each other.
             </Text>
           </View>
         }
       />
 
-      {selected && (
+      {selected?.tmdbId != null && (
         <FilmDetailModal
           visible
           onClose={() => setSelected(null)}
@@ -241,13 +281,14 @@ export function SocialFeedView() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   sectionLabel: {
     fontSize: 12,
     fontFamily: 'Inter_700Bold',
-    color: '#9CA3AF',
+    color: c.textFaint,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     paddingHorizontal: 16,
@@ -262,46 +303,56 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 10,
     borderRadius: 14,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: c.surfaceSubtle,
   },
-  poster: { width: 62, height: 93, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  poster: { width: 62, height: 93, borderRadius: 8, backgroundColor: c.surfaceAlt },
   posterFallback: { alignItems: 'center', justifyContent: 'center' },
+  collage: {
+    width: 62,
+    height: 93,
+    borderRadius: 8,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: c.surfaceAlt,
+  },
+  collageTile: { width: 31, height: 46.5 },
   cardBody: { flex: 1, justifyContent: 'center' },
 
   actorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   actorAvatar: { width: 22, height: 22, borderRadius: 11 },
-  actorAvatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  actorInitials: { fontSize: 9, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  actorText: { flex: 1, fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280' },
-  actorName: { fontFamily: 'Inter_700Bold', color: '#111827' },
+  actorAvatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  actorInitials: { fontSize: 9, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  actorText: { flex: 1, fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted },
+  actorName: { fontFamily: 'Inter_700Bold', color: c.text },
 
   newPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
   },
-  newPillText: { fontSize: 9, fontFamily: 'Inter_700Bold', color: '#FFFFFF', letterSpacing: 0.5 },
+  newPillText: { fontSize: 9, fontFamily: 'Inter_700Bold', color: c.background, letterSpacing: 0.5 },
 
-  filmTitle: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#111827', marginTop: 5 },
-  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  filmTitle: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.text, marginTop: 5 },
+  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
   comment: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#4B5563',
+    color: c.textBody,
     marginTop: 3,
     lineHeight: 17,
   },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
-  score: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#FF8C00' },
-  time: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  score: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.star },
+  time: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 10 },
-  emptyTitle: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#111827' },
+  emptyTitle: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.text },
   emptyText: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     textAlign: 'center',
     lineHeight: 19,
   },

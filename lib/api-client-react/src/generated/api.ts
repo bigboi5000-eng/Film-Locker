@@ -2496,7 +2496,7 @@ export const getGetFeedUrl = (params?: GetFeedParams,) => {
 /**
  * Activity from accounts the caller follows, newest first — except that anything the caller has not seen yet comes first, newest first within each group. "Seen" means older than the caller's last look at the feed, which the client advances through POST /feed/seen.
  *
- * Three sources, two privacy bars. Ratings and reviews come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
+ * Four sources, two privacy bars. Ratings, reviews and public playlists come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
  *
  * One page, no cursor: ordering unseen-first and paging by cursor pull in opposite directions, and a feed of the people you actually follow is not long enough to need both.
  * @summary What the people you follow have been watching, rating and reviewing

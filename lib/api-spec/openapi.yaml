@@ -731,12 +731,12 @@ paths:
         feed, which the client advances through POST /feed/seen.
 
 
-        Three sources, two privacy bars. Ratings and reviews come from
-        everybody the caller has an accepted follow on, since being an
-        accepted follower is the bar those already use. Watched films need a
-        mutual follow, matching GET /users/{id}/watched, so a one-way follow
-        shows what somebody says about films but not what they have seen.
-        Blocked accounts are excluded in both directions.
+        Four sources, two privacy bars. Ratings, reviews and public
+        playlists come from everybody the caller has an accepted follow on,
+        since being an accepted follower is the bar those already use.
+        Watched films need a mutual follow, matching GET /users/{id}/watched,
+        so a one-way follow shows what somebody says about films but not what
+        they have seen. Blocked accounts are excluded in both directions.
 
 
         One page, no cursor: ordering unseen-first and paging by cursor pull
@@ -2354,7 +2354,7 @@ components:
           description: Stable within a response — the kind and the source row's id.
         type:
           type: string
-          enum: [watched, rated, commented]
+          enum: [watched, rated, commented, playlist]
         at:
           type: string
           format: date-time
@@ -2365,6 +2365,8 @@ components:
           $ref: "#/components/schemas/NotificationUser"
         tmdbId:
           type: integer
+          nullable: true
+          description: The film, on everything but a "playlist" item.
         title:
           type: string
           nullable: true
@@ -2384,13 +2386,28 @@ components:
           type: string
           nullable: true
           description: The review body, under "commented".
+        playlistId:
+          type: integer
+          nullable: true
+          description: Set under "playlist" — the public playlist they made.
+        playlistName:
+          type: string
+          nullable: true
+        playlistItemCount:
+          type: integer
+          nullable: true
+        playlistPosters:
+          type: array
+          nullable: true
+          description: Up to four covers from the playlist, newest first.
+          items:
+            type: string
       required:
         - id
         - type
         - at
         - isNew
         - user
-        - tmdbId
 
     FeedResponse:
       type: object

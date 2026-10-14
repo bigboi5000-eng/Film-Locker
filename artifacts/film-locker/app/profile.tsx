@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
+import { useThemeControl, type ThemeChoice } from '@/components/ThemeProvider';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetMe,
@@ -56,6 +57,55 @@ function Row({
         <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
       )}
     </TouchableOpacity>
+  );
+}
+
+/**
+ * Light, Dark or Automatic.
+ *
+ * Three segments rather than a switch, because a switch cannot express
+ * "follow the phone" — and that is the default, so it needs saying rather
+ * than being the unlabelled off position of something else.
+ */
+function ThemePicker() {
+  const { theme, systemScheme, setTheme } = useThemeControl();
+
+  const options: Array<{ value: ThemeChoice; label: string; icon: string }> = [
+    { value: 'light', label: 'Light', icon: 'sunny-outline' },
+    { value: 'dark', label: 'Dark', icon: 'moon-outline' },
+    { value: 'automatic', label: 'Automatic', icon: 'phone-portrait-outline' },
+  ];
+
+  return (
+    <View>
+      <View style={styles.themeRow}>
+        {options.map((option) => {
+          const active = theme === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[styles.themeOption, active && styles.themeOptionActive]}
+              onPress={() => setTheme(option.value)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={option.icon as any}
+                size={17}
+                color={active ? '#0066FF' : '#9CA3AF'}
+              />
+              <Text style={[styles.themeOptionText, active && styles.themeOptionTextActive]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {theme === 'automatic' ? (
+        <Text style={styles.themeHint}>
+          Following your phone, which is set to {systemScheme}.
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -374,6 +424,12 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* Appearance */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Appearance</Text>
+          <ThemePicker />
+        </View>
+
         {/* Legal */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Legal</Text>
@@ -510,6 +566,28 @@ const styles = StyleSheet.create({
   },
   rowIconDanger: { backgroundColor: '#FEF2F2' },
   rowContent: { flex: 1 },
+  themeRow: { flexDirection: 'row', gap: 8, paddingTop: 4 },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  themeOptionActive: { borderColor: '#0066FF', backgroundColor: '#EFF6FF' },
+  themeOptionText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
+  themeOptionTextActive: { color: '#0066FF' },
+  themeHint: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#9CA3AF',
+    marginTop: 10,
+    lineHeight: 17,
+  },
+
   rowLabel: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
   rowLabelDanger: { color: '#EF4444' },
   rowValue: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },

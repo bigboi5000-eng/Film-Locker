@@ -999,7 +999,7 @@ export const SendConversationMessageResponse = zod.object({
 /**
  * Activity from accounts the caller follows, newest first — except that anything the caller has not seen yet comes first, newest first within each group. "Seen" means older than the caller's last look at the feed, which the client advances through POST /feed/seen.
  *
- * Three sources, two privacy bars. Ratings and reviews come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
+ * Four sources, two privacy bars. Ratings, reviews and public playlists come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
  *
  * One page, no cursor: ordering unseen-first and paging by cursor pull in opposite directions, and a feed of the people you actually follow is not long enough to need both.
  * @summary What the people you follow have been watching, rating and reviewing
@@ -1016,7 +1016,7 @@ export const GetFeedQueryParams = zod.object({
 export const GetFeedResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string().describe('Stable within a response — the kind and the source row\'s id.'),
-  "type": zod.enum(['watched', 'rated', 'commented']),
+  "type": zod.enum(['watched', 'rated', 'commented', 'playlist']),
   "at": zod.coerce.date(),
   "isNew": zod.boolean().describe('Newer than the caller\'s last look at the feed.'),
   "user": zod.object({
@@ -1025,12 +1025,16 @@ export const GetFeedResponse = zod.object({
   "displayInitials": zod.string().nullish(),
   "avatarUrl": zod.string().nullish()
 }),
-  "tmdbId": zod.number(),
+  "tmdbId": zod.number().nullish().describe('The film, on everything but a \"playlist\" item.'),
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
   "rating": zod.number().nullish().describe('Their community rating under \"rated\", and their own 1-5 score under \"watched\" where they gave one.\n'),
-  "comment": zod.string().nullish().describe('The review body, under \"commented\".')
+  "comment": zod.string().nullish().describe('The review body, under \"commented\".'),
+  "playlistId": zod.number().nullish().describe('Set under \"playlist\" — the public playlist they made.'),
+  "playlistName": zod.string().nullish(),
+  "playlistItemCount": zod.number().nullish(),
+  "playlistPosters": zod.array(zod.string()).nullish().describe('Up to four covers from the playlist, newest first.')
 }).describe('One thing somebody the caller follows did to a film.')),
   "newCount": zod.number().describe('How many of the items returned the caller has not seen.')
 })

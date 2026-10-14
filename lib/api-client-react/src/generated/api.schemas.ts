@@ -451,6 +451,7 @@ export const FeedItemType = {
   watched: 'watched',
   rated: 'rated',
   commented: 'commented',
+  playlist: 'playlist',
 } as const;
 
 /**
@@ -464,7 +465,8 @@ export interface FeedItem {
   /** Newer than the caller's last look at the feed. */
   isNew: boolean;
   user: NotificationUser;
-  tmdbId: number;
+  /** The film, on everything but a "playlist" item. */
+  tmdbId?: number | null;
   title?: string | null;
   posterUrl?: string | null;
   releaseYear?: string | null;
@@ -472,6 +474,12 @@ export interface FeedItem {
   rating?: number | null;
   /** The review body, under "commented". */
   comment?: string | null;
+  /** Set under "playlist" — the public playlist they made. */
+  playlistId?: number | null;
+  playlistName?: string | null;
+  playlistItemCount?: number | null;
+  /** Up to four covers from the playlist, newest first. */
+  playlistPosters?: string[] | null;
 }
 
 export interface FeedResponse {
