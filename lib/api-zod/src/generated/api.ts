@@ -997,6 +997,57 @@ export const SendConversationMessageResponse = zod.object({
 
 
 /**
+ * Activity from accounts the caller follows, newest first — except that anything the caller has not seen yet comes first, newest first within each group. "Seen" means older than the caller's last look at the feed, which the client advances through POST /feed/seen.
+ *
+ * Three sources, two privacy bars. Ratings and reviews come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
+ *
+ * One page, no cursor: ordering unseen-first and paging by cursor pull in opposite directions, and a feed of the people you actually follow is not long enough to need both.
+ * @summary What the people you follow have been watching, rating and reviewing
+ */
+export const getFeedQueryLimitDefault = 40;
+export const getFeedQueryLimitMax = 100;
+
+
+
+export const GetFeedQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(getFeedQueryLimitMax).default(getFeedQueryLimitDefault)
+})
+
+export const GetFeedResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string().describe('Stable within a response — the kind and the source row\'s id.'),
+  "type": zod.enum(['watched', 'rated', 'commented']),
+  "at": zod.coerce.date(),
+  "isNew": zod.boolean().describe('Newer than the caller\'s last look at the feed.'),
+  "user": zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish()
+}),
+  "tmdbId": zod.number(),
+  "title": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "releaseYear": zod.string().nullish(),
+  "rating": zod.number().nullish().describe('Their community rating under \"rated\", and their own 1-5 score under \"watched\" where they gave one.\n'),
+  "comment": zod.string().nullish().describe('The review body, under \"commented\".')
+}).describe('One thing somebody the caller follows did to a film.')),
+  "newCount": zod.number().describe('How many of the items returned the caller has not seen.')
+})
+
+
+/**
+ * Takes the timestamp of the newest item actually shown, rather than simply stamping the present: an item that arrived while the feed was open on screen has not been seen, and stamping now() would quietly bury it. The stored watermark only ever moves forwards.
+ * @summary Record how far down the feed the caller has now seen
+ */
+export const MarkFeedSeenBody = zod.object({
+  "at": zod.coerce.date().describe('The newest item the caller has actually been shown.')
+})
+
+export const MarkFeedSeenResponse = zod.void()
+
+
+/**
  * @summary JIT-provision the authenticated user's row in the users table
  */
 export const SyncUserBody = zod.object({

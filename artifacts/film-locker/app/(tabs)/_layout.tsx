@@ -17,8 +17,8 @@ import {
 const BLUE = '#0066FF';
 const INACTIVE = '#9CA3AF';
 
-/** Bell icon with an optional unread count badge */
-function NotificationTabIcon({
+/** People icon with an optional unread count badge */
+function CommunityTabIcon({
   color,
   focused,
   unreadCount,
@@ -29,7 +29,7 @@ function NotificationTabIcon({
 }) {
   return (
     <View style={{ width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name={focused ? 'notifications' : 'notifications-outline'} size={22} color={color} />
+      <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
       {unreadCount > 0 && (
         <View
           style={{
@@ -180,12 +180,21 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/*
+        Named Community, routed as "notifications".
+
+        The label changed when the tab became three things — a feed, the
+        messages and the people — but the route did not, because push
+        notifications already in flight carry "/(tabs)/notifications" as
+        their destination and anything already installed deep-links to it.
+        Renaming the file would break both for no gain.
+      */}
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Inbox',
+          title: 'Community',
           tabBarIcon: ({ color, focused }) => (
-            <NotificationTabIcon color={color} focused={focused} unreadCount={unreadCount} />
+            <CommunityTabIcon color={color} focused={focused} unreadCount={unreadCount} />
           ),
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}

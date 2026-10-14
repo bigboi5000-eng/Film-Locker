@@ -167,7 +167,7 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
       body: pending
         ? `${who} has asked to connect with you`
         : `${who} started following you — follow back to become Film Pals`,
-      screen: pending ? "/(tabs)/notifications" : `/user/${clerkUserId}`,
+      screen: pending ? "/(tabs)/notifications?tab=friends" : `/user/${clerkUserId}`,
     });
   }
 

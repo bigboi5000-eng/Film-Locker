@@ -30,6 +30,7 @@ import type {
   ConversationsResponse,
   CreatePlaylistBody,
   ExtractFromImageBody,
+  FeedResponse,
   FilmComment,
   FilmCommentsResponse,
   FilmCommunityScore,
@@ -39,6 +40,7 @@ import type {
   FollowResponse,
   FollowsResponse,
   GetBlocksResponse,
+  GetFeedParams,
   GetFilmCommentsParams,
   GetMovieDetailsParams,
   GetNewReleasesParams,
@@ -47,6 +49,7 @@ import type {
   GetTrendingParams,
   HealthStatus,
   ListMoviesResponse,
+  MarkFeedSeenBody,
   Movie,
   NewReleasesResponse,
   NotificationThreadResponse,
@@ -2473,6 +2476,166 @@ export const useSendConversationMessage = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getSendConversationMessageMutationOptions(options));
+    }
+
+export const getGetFeedUrl = (params?: GetFeedParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/feed?${stringifiedParams}` : `/api/feed`
+}
+
+/**
+ * Activity from accounts the caller follows, newest first — except that anything the caller has not seen yet comes first, newest first within each group. "Seen" means older than the caller's last look at the feed, which the client advances through POST /feed/seen.
+ *
+ * Three sources, two privacy bars. Ratings and reviews come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
+ *
+ * One page, no cursor: ordering unseen-first and paging by cursor pull in opposite directions, and a feed of the people you actually follow is not long enough to need both.
+ * @summary What the people you follow have been watching, rating and reviewing
+ */
+export const getFeed = async (params?: GetFeedParams, options?: RequestInit): Promise<FeedResponse> => {
+
+  return customFetch<FeedResponse>(getGetFeedUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFeedQueryKey = (params?: GetFeedParams,) => {
+    return [
+    `/api/feed`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFeedQueryOptions = <TData = Awaited<ReturnType<typeof getFeed>>, TError = ErrorType<void>>(params?: GetFeedParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeed>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFeedQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeed>>> = ({ signal }) => getFeed(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeed>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFeedQueryResult = NonNullable<Awaited<ReturnType<typeof getFeed>>>
+export type GetFeedQueryError = ErrorType<void>
+
+
+/**
+ * @summary What the people you follow have been watching, rating and reviewing
+ */
+
+export function useGetFeed<TData = Awaited<ReturnType<typeof getFeed>>, TError = ErrorType<void>>(
+ params?: GetFeedParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeed>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFeedQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMarkFeedSeenUrl = () => {
+
+
+
+
+  return `/api/feed/seen`
+}
+
+/**
+ * Takes the timestamp of the newest item actually shown, rather than simply stamping the present: an item that arrived while the feed was open on screen has not been seen, and stamping now() would quietly bury it. The stored watermark only ever moves forwards.
+ * @summary Record how far down the feed the caller has now seen
+ */
+export const markFeedSeen = async (markFeedSeenBody: MarkFeedSeenBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getMarkFeedSeenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(markFeedSeenBody)
+  }
+);}
+
+
+
+
+export const getMarkFeedSeenMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markFeedSeen>>, TError,{data: BodyType<MarkFeedSeenBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markFeedSeen>>, TError,{data: BodyType<MarkFeedSeenBody>}, TContext> => {
+
+const mutationKey = ['markFeedSeen'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markFeedSeen>>, {data: BodyType<MarkFeedSeenBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  markFeedSeen(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkFeedSeenMutationResult = NonNullable<Awaited<ReturnType<typeof markFeedSeen>>>
+    export type MarkFeedSeenMutationBody = BodyType<MarkFeedSeenBody>
+    export type MarkFeedSeenMutationError = ErrorType<void>
+
+    /**
+ * @summary Record how far down the feed the caller has now seen
+ */
+export const useMarkFeedSeen = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markFeedSeen>>, TError,{data: BodyType<MarkFeedSeenBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markFeedSeen>>,
+        TError,
+        {data: BodyType<MarkFeedSeenBody>},
+        TContext
+      > => {
+      return useMutation(getMarkFeedSeenMutationOptions(options));
     }
 
 export const getSyncUserUrl = () => {

@@ -1,0 +1,12 @@
+-- Where the social feed starts being "new" for each person.
+--
+-- DEFAULT now() does the work for both directions at once: every existing
+-- account gets the moment this migration ran, so nobody's first look at the
+-- feed arrives with fifty items marked new, and every account created from
+-- here on gets its signup time, so activity from before somebody joined
+-- reads as already seen rather than as news.
+--
+-- Re-runnable, which this repo's migrator requires (see
+-- lib/db/src/migrate.ts): a replay finds the column already present and
+-- skips the statement.
+ALTER TABLE "users" ADD COLUMN "feed_last_seen_at" timestamp with time zone DEFAULT now() NOT NULL;

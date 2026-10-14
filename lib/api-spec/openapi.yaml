@@ -719,6 +719,72 @@ paths:
         "404":
           description: User or replied-to notification not found
 
+  /feed:
+    get:
+      operationId: getFeed
+      tags: [feed]
+      summary: What the people you follow have been watching, rating and reviewing
+      description: >
+        Activity from accounts the caller follows, newest first — except that
+        anything the caller has not seen yet comes first, newest first within
+        each group. "Seen" means older than the caller's last look at the
+        feed, which the client advances through POST /feed/seen.
+
+
+        Three sources, two privacy bars. Ratings and reviews come from
+        everybody the caller has an accepted follow on, since being an
+        accepted follower is the bar those already use. Watched films need a
+        mutual follow, matching GET /users/{id}/watched, so a one-way follow
+        shows what somebody says about films but not what they have seen.
+        Blocked accounts are excluded in both directions.
+
+
+        One page, no cursor: ordering unseen-first and paging by cursor pull
+        in opposite directions, and a feed of the people you actually follow
+        is not long enough to need both.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 40
+      responses:
+        "200":
+          description: Feed items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+        "401":
+          description: Unauthorized
+
+  /feed/seen:
+    post:
+      operationId: markFeedSeen
+      tags: [feed]
+      summary: Record how far down the feed the caller has now seen
+      description: >
+        Takes the timestamp of the newest item actually shown, rather than
+        simply stamping the present: an item that arrived while the feed was
+        open on screen has not been seen, and stamping now() would quietly
+        bury it. The stored watermark only ever moves forwards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkFeedSeenBody"
+      responses:
+        "204":
+          description: Watermark updated
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
   /users/sync:
     post:
       operationId: syncUser
@@ -2278,6 +2344,77 @@ components:
         - fromUserId
         - toUserId
         - createdAt
+
+    FeedItem:
+      type: object
+      description: One thing somebody the caller follows did to a film.
+      properties:
+        id:
+          type: string
+          description: Stable within a response — the kind and the source row's id.
+        type:
+          type: string
+          enum: [watched, rated, commented]
+        at:
+          type: string
+          format: date-time
+        isNew:
+          type: boolean
+          description: Newer than the caller's last look at the feed.
+        user:
+          $ref: "#/components/schemas/NotificationUser"
+        tmdbId:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        posterUrl:
+          type: string
+          nullable: true
+        releaseYear:
+          type: string
+          nullable: true
+        rating:
+          type: integer
+          nullable: true
+          description: >
+            Their community rating under "rated", and their own 1-5 score
+            under "watched" where they gave one.
+        comment:
+          type: string
+          nullable: true
+          description: The review body, under "commented".
+      required:
+        - id
+        - type
+        - at
+        - isNew
+        - user
+        - tmdbId
+
+    FeedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedItem"
+        newCount:
+          type: integer
+          description: How many of the items returned the caller has not seen.
+      required:
+        - items
+        - newCount
+
+    MarkFeedSeenBody:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+          description: The newest item the caller has actually been shown.
+      required:
+        - at
 
     ConversationSummary:
       type: object

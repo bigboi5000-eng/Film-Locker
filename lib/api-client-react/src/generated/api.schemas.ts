@@ -444,6 +444,47 @@ export interface ConversationFeedItem {
   replyToFilmTitle?: string | null;
 }
 
+export type FeedItemType = typeof FeedItemType[keyof typeof FeedItemType];
+
+
+export const FeedItemType = {
+  watched: 'watched',
+  rated: 'rated',
+  commented: 'commented',
+} as const;
+
+/**
+ * One thing somebody the caller follows did to a film.
+ */
+export interface FeedItem {
+  /** Stable within a response — the kind and the source row's id. */
+  id: string;
+  type: FeedItemType;
+  at: string;
+  /** Newer than the caller's last look at the feed. */
+  isNew: boolean;
+  user: NotificationUser;
+  tmdbId: number;
+  title?: string | null;
+  posterUrl?: string | null;
+  releaseYear?: string | null;
+  /** Their community rating under "rated", and their own 1-5 score under "watched" where they gave one. */
+  rating?: number | null;
+  /** The review body, under "commented". */
+  comment?: string | null;
+}
+
+export interface FeedResponse {
+  items: FeedItem[];
+  /** How many of the items returned the caller has not seen. */
+  newCount: number;
+}
+
+export interface MarkFeedSeenBody {
+  /** The newest item the caller has actually been shown. */
+  at: string;
+}
+
 /**
  * One person the caller is in conversation with, plus enough of the latest activity to draw a row without opening the thread.
  */
@@ -773,6 +814,14 @@ export type GetFilmCommentsParams = {
  * @minimum 1
  */
 page?: number;
+};
+
+export type GetFeedParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
 };
 
 export type SearchUsersParams = {

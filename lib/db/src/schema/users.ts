@@ -10,6 +10,13 @@ export const usersTable = pgTable("users", {
   isPrivate: boolean("is_private").notNull().default(false), // private users require accepted follow requests to be followed/messaged; their comments are followers-only
   avatarUrl: text("avatar_url"),
   expoPushToken: text("expo_push_token"), // nullable — set when user grants push permission
+  // When this user last looked at the social feed. The feed puts anything
+  // newer than this first, so it answers "what has happened since I last
+  // looked" rather than making people hunt through what they have already
+  // read. Defaults to now() on insert, so a new account's feed treats
+  // activity from before they joined as already seen rather than greeting
+  // them with fifty things marked new.
+  feedLastSeenAt: timestamp("feed_last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   // The .unique() on the column above is case-sensitive, so "JakeT" and
