@@ -20,7 +20,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import { useIsDark } from '@/hooks/useColors';
+import { useColors, useIsDark } from '@/hooks/useColors';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react';
@@ -127,8 +127,14 @@ function PushNotificationManager() {
 }
 
 function RootLayoutNav() {
+  const colors = useColors();
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    // contentStyle, not just the screens' own backgrounds: the card behind a
+    // push transition is the navigator's, and it is white by default — which
+    // shows as a flash of white at the edge of every slide on a dark theme.
+    <Stack
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}
+    >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       {/* Fades in over the sign-up screen, and cannot be swiped away — the

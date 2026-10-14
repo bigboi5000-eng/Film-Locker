@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/expo';
 import { useUser } from '@clerk/expo';
+import { useColors } from '@/hooks/useColors';
 import {
   setAuthTokenGetter,
   useGetConversations,
@@ -14,8 +15,9 @@ import {
   useSyncUser,
 } from '@workspace/api-client-react';
 
-const BLUE = '#0066FF';
-const INACTIVE = '#9CA3AF';
+// The badge red is the same in both themes: it has to shout, and a muted
+// one would stop doing its job on a dark tab bar.
+const BADGE_RED = '#EF4444';
 
 /** People icon with an optional unread count badge */
 function CommunityTabIcon({
@@ -27,6 +29,7 @@ function CommunityTabIcon({
   focused: boolean;
   unreadCount: number;
 }) {
+  const colors = useColors();
   return (
     <View style={{ width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
       <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
@@ -39,12 +42,12 @@ function CommunityTabIcon({
             minWidth: 16,
             height: 16,
             borderRadius: 8,
-            backgroundColor: '#EF4444',
+            backgroundColor: BADGE_RED,
             alignItems: 'center',
             justifyContent: 'center',
             paddingHorizontal: 3,
             borderWidth: 1.5,
-            borderColor: '#FFFFFF',
+            borderColor: colors.background,
           }}
         >
         </View>
@@ -58,6 +61,7 @@ export default function TabLayout() {
   const { user } = useUser();
   const { mutateAsync: syncUser } = useSyncUser();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
 
   // Wire Clerk bearer token into the generated API client for every request
   useEffect(() => {
@@ -130,11 +134,11 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: BLUE,
-        tabBarInactiveTintColor: INACTIVE,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textFaint,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E5E7EB',
+          backgroundColor: colors.background,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           // Extra bottom space for the home-indicator/gesture-nav safe
           // area, so the icons/labels sit above it instead of the

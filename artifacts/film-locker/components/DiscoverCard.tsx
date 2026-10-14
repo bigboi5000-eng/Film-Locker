@@ -2,6 +2,8 @@ import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import type { TmdbMovieCard } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 interface DiscoverCardProps {
   movie: TmdbMovieCard;
@@ -11,6 +13,7 @@ interface DiscoverCardProps {
 }
 
 export function DiscoverCard({ movie, onPress, width, height }: DiscoverCardProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity
       style={[styles.card, { width, height }]}
@@ -36,11 +39,11 @@ export function DiscoverCard({ movie, onPress, width, height }: DiscoverCardProp
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   card: {
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -59,13 +62,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   title: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 15,
   },
   year: {
-    color: '#FF8C00',
+    color: c.star,
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
     marginTop: 2,

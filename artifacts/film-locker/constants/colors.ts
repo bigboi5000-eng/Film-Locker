@@ -79,6 +79,15 @@ const light = {
   success: '#16A34A',
   successStrong: '#059669',
   destructiveStrong: '#DC2626',
+  /** The tinted backgrounds those two sit on. */
+  successSoft: '#ECFDF5',
+  destructiveSoft: '#FEF2F2',
+  /** The grey a message bubble from the other person sits on. */
+  bubbleOther: '#F1F3F6',
+  /** A deep orange for small emphatic labels on a light surface. */
+  emphasis: '#C2410C',
+  /** The dark band a profile's poster collage sits in, in both themes. */
+  heroBackdrop: '#1F2937',
 };
 
 const dark: typeof light = {
@@ -127,6 +136,11 @@ const dark: typeof light = {
   success: '#4ADE80',
   successStrong: '#34D399',
   destructiveStrong: '#F87171',
+  successSoft: '#10281C',
+  destructiveSoft: '#2A1416',
+  bubbleOther: '#1C2027',
+  emphasis: '#FB923C',
+  heroBackdrop: '#1F2937',
 };
 
 export type Palette = typeof light & { radius: number };

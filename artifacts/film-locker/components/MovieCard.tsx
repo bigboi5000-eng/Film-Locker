@@ -10,6 +10,9 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_GAP = 10;
@@ -40,6 +43,7 @@ export function MovieCard({
   isWatched,
   rating,
 }: MovieCardProps) {
+  const styles = useThemedStyles(makeStyles);
   const handlePress = useCallback(() => onPress?.(id), [id, onPress]);
   const handleLongPress = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -86,20 +90,22 @@ export function MovieCard({
 }
 
 export function MovieCardSkeleton() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.card, styles.skeleton]}>
-      <ActivityIndicator color="#D1D5DB" size="small" />
+      <ActivityIndicator color={colors.iconFaint} size="small" />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     // Light shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -118,19 +124,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.68)',
   },
   title: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 16,
   },
   year: {
-    color: '#FF8C00',
+    color: c.star,
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
     marginTop: 2,
   },
   stars: {
-    color: '#FF8C00',
+    color: c.star,
     fontSize: 11,
     marginTop: 2,
   },
@@ -141,10 +147,10 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  watchedBadgeText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Inter_700Bold' },
+  watchedBadgeText: { color: c.background, fontSize: 12, fontFamily: 'Inter_700Bold' },
   skeleton: { alignItems: 'center', justifyContent: 'center' },
 });

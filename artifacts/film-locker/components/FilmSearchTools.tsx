@@ -49,6 +49,9 @@ import {
 import { useToast } from '@/components/ToastProvider';
 import { IdentifyingOverlay } from '@/components/IdentifyingOverlay';
 import { pickImageFromLibrary, takeFilmPhoto, type PickResult } from '@/lib/pickFilmImage';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 const HORIZONTAL_PADDING = 16;
 
@@ -126,6 +129,8 @@ export interface AiResultRowProps {
 
 /** Same shape as a search result, plus the one-sentence hook Gemini writes. */
 export function AiResultRow({ match, isSaved, savedMovie, onPress }: AiResultRowProps) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity
       style={styles.resultRow}
@@ -152,7 +157,7 @@ export function AiResultRow({ match, isSaved, savedMovie, onPress }: AiResultRow
       </View>
       {isSaved && (
         <View style={styles.savedBadge}>
-          <Ionicons name="bookmark" size={14} color="#FFFFFF" />
+          <Ionicons name="bookmark" size={14} color={colors.background} />
         </View>
       )}
     </TouchableOpacity>
@@ -398,6 +403,8 @@ export function FilmSearchBar({
   onQueryChange,
   placeholder = 'Search a film or paste a social link…',
 }: FilmSearchBarProps) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const {
     aiVisible,
     aiOpen,
@@ -432,27 +439,27 @@ export function FilmSearchBar({
             { width: aiAnim.interpolate({ inputRange: [0, 1], outputRange: [0, aiTargetWidth] }) },
           ]}
         >
-          <Ionicons name="sparkles" size={15} color="#0066FF" style={styles.searchIcon} />
+          <Ionicons name="sparkles" size={15} color={colors.primary} style={styles.searchIcon} />
           <TextInput
             ref={aiInputRef}
             value={aiQuery}
             onChangeText={setAiQuery}
             placeholder="Ask for a recommendation…"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             style={styles.searchInput}
             returnKeyType="go"
             onSubmitEditing={submitAi}
           />
-          {isRecommending && <ActivityIndicator color="#0066FF" size="small" />}
+          {isRecommending && <ActivityIndicator color={colors.primary} size="small" />}
         </Animated.View>
       ) : (
         <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={16} color="#9CA3AF" style={styles.searchIcon} />
+          <Ionicons name="search-outline" size={16} color={colors.textFaint} style={styles.searchIcon} />
           <TextInput
             value={query}
             onChangeText={onQueryChange}
             placeholder={placeholder}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             style={styles.searchInput}
             returnKeyType="go"
             autoCapitalize="none"
@@ -461,7 +468,7 @@ export function FilmSearchBar({
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => onQueryChange('')} hitSlop={8} style={{ marginRight: 6 }}>
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              <Ionicons name="close-circle" size={18} color={colors.textFaint} />
             </TouchableOpacity>
           )}
           {/* Identify films from a photo. Sits where a lens icon sits in a
@@ -470,25 +477,25 @@ export function FilmSearchBar({
           {query.length === 0 && (
             <TouchableOpacity onPress={pickImage} disabled={isExtractingImage} hitSlop={8}>
               {isExtractingImage ? (
-                <ActivityIndicator color="#0066FF" size="small" />
+                <ActivityIndicator color={colors.primary} size="small" />
               ) : (
-                <Ionicons name="camera-outline" size={20} color="#0066FF" />
+                <Ionicons name="camera-outline" size={20} color={colors.primary} />
               )}
             </TouchableOpacity>
           )}
           {looksLikeUrl(query.trim()) && (
             <TouchableOpacity onPress={sendLink} disabled={isProcessingLink} hitSlop={8}>
               {isProcessingLink ? (
-                <ActivityIndicator color="#0066FF" size="small" />
+                <ActivityIndicator color={colors.primary} size="small" />
               ) : (
-                <Ionicons name="arrow-forward-circle" size={24} color="#0066FF" />
+                <Ionicons name="arrow-forward-circle" size={24} color={colors.primary} />
               )}
             </TouchableOpacity>
           )}
         </View>
       )}
       <TouchableOpacity style={styles.aiToggleBtn} onPress={toggleAi} activeOpacity={0.8}>
-        <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color="#FFFFFF" />
+        <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color={colors.background} />
       </TouchableOpacity>
 
       {/*
@@ -518,7 +525,7 @@ export function FilmSearchBar({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -533,20 +540,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 44,
     paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: c.surfaceSubtle,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
   },
   aiContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 44,
     paddingHorizontal: 12,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.primarySoft,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#93C5FD',
+    borderColor: c.primaryMid,
     overflow: 'hidden',
   },
   searchIcon: { marginRight: 8 },
@@ -554,7 +561,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#111827',
+    color: c.text,
     // react-native-web never resets the browser's default focus outline on
     // the underlying <input> — without this, typing draws a separate black
     // ring around the input, distinct from the pill border around it.
@@ -565,7 +572,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -575,32 +582,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: c.surfaceAlt,
   },
   resultPoster: {
     width: 42,
     height: 63,
     borderRadius: 6,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     marginRight: 12,
   },
   resultInfo: { flex: 1 },
   resultTitle: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#111827',
+    color: c.text,
     lineHeight: 19,
   },
   resultYear: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#FF8C00',
+    color: c.star,
     marginTop: 3,
   },
   resultSynopsis: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     marginTop: 4,
     lineHeight: 16,
   },
@@ -608,7 +615,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 10,

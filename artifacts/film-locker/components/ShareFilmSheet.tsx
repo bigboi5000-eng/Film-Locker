@@ -44,6 +44,8 @@ import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 interface ShareFilmSheetProps {
   visible: boolean;
@@ -77,6 +79,7 @@ function FilmCard({
   onNotAMatch?: () => void;
   onOpenFilm?: (match: GeminiMovieMatch) => void;
 }) {
+  const cardStyles = useThemedStyles(makeCardStyles);
   const colors = useColors();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -160,7 +163,7 @@ function FilmCard({
         {/* Add button */}
         {added ? (
           <View style={cardStyles.addedRow}>
-            <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
             <Text style={cardStyles.addedText}>Added to Watchlist</Text>
           </View>
         ) : (
@@ -172,10 +175,10 @@ function FilmCard({
               activeOpacity={0.8}
             >
               {isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={colors.background} size="small" />
               ) : (
                 <>
-                  <Ionicons name="bookmark-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Ionicons name="bookmark-outline" size={16} color={colors.background} style={{ marginRight: 6 }} />
                   <Text style={cardStyles.addBtnText}>Add to Watchlist</Text>
                 </>
               )}
@@ -197,7 +200,7 @@ function FilmCard({
   );
 }
 
-const cardStyles = StyleSheet.create({
+const makeCardStyles = (c: Palette) => StyleSheet.create({
   card: {
     flexDirection: 'row',
     borderRadius: 14,
@@ -241,7 +244,7 @@ const cardStyles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   addBtnText: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -260,7 +263,7 @@ const cardStyles = StyleSheet.create({
   addedText: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#16A34A',
+    color: c.success,
   },
 });
 
@@ -279,6 +282,7 @@ function FilmSelectRow({
   onNotAMatch?: () => void;
   onOpenFilm?: (match: GeminiMovieMatch) => void;
 }) {
+  const selectStyles = useThemedStyles(makeSelectStyles);
   const colors = useColors();
   const displayTitle = match.title ?? match.movie_title;
 
@@ -333,7 +337,7 @@ function FilmSelectRow({
   );
 }
 
-const selectStyles = StyleSheet.create({
+const makeSelectStyles = (c: Palette) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -402,6 +406,8 @@ function BulkAddPanel({
   initialName?: string | null;
   onDone: () => void;
 }) {
+  const colors = useColors();
+  const ppStyles = useThemedStyles(makePpStyles);
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const { data } = useGetMyPlaylists({
@@ -527,12 +533,12 @@ function BulkAddPanel({
       <View style={ppStyles.doneWrap}>
         {done ? (
           <>
-            <Ionicons name="checkmark-circle" size={44} color="#16A34A" />
+            <Ionicons name="checkmark-circle" size={44} color={colors.success} />
             <Text style={ppStyles.doneText}>Films added to watchlist!</Text>
           </>
         ) : (
           <>
-            <ActivityIndicator size="large" color="#0066FF" />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={ppStyles.doneText}>Adding {candidates.length} film{candidates.length !== 1 ? 's' : ''} to watchlist…</Text>
           </>
         )}
@@ -543,7 +549,7 @@ function BulkAddPanel({
   if (done) {
     return (
       <View style={ppStyles.doneWrap}>
-        <Ionicons name="checkmark-circle" size={44} color="#16A34A" />
+        <Ionicons name="checkmark-circle" size={44} color={colors.success} />
         <Text style={ppStyles.doneText}>
           {alsoAddToWatchlist ? 'Films added to playlist and watchlist!' : 'Films added to playlist!'}
         </Text>
@@ -569,16 +575,16 @@ function BulkAddPanel({
               activeOpacity={0.75}
             >
               <View style={ppStyles.plIcon}>
-                <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
+                <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color={colors.textMuted} />
               </View>
               <View style={ppStyles.plInfo}>
                 <Text style={ppStyles.plName}>{pl.name}</Text>
                 <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
               </View>
               {addingTo === pl.id ? (
-                <ActivityIndicator size="small" color="#0066FF" />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
+                <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
               )}
             </TouchableOpacity>
           ))}
@@ -594,7 +600,7 @@ function BulkAddPanel({
           value={newName}
           onChangeText={setNewName}
           placeholder="New playlist name…"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           maxLength={100}
           returnKeyType="done"
           onSubmitEditing={handleCreateAndAdd}
@@ -605,40 +611,40 @@ function BulkAddPanel({
           disabled={!newName.trim() || creating || addingTo !== null}
           activeOpacity={0.8}
         >
-          {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={ppStyles.newCreateText}>Create</Text>}
+          {creating ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
-const ppStyles = StyleSheet.create({
+const makePpStyles = (c: Palette) => StyleSheet.create({
   root: { padding: 16 },
-  heading: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 4 },
-  sub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginBottom: 16 },
+  heading: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 4 },
+  sub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint, marginBottom: 16 },
   plRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.surfaceAlt,
   },
-  plIcon: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  plIcon: { width: 36, height: 36, borderRadius: 8, backgroundColor: c.surfaceSubtle, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   plInfo: { flex: 1 },
-  plName: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
-  plCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  plName: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
+  plCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
   sectionLabel: {
-    fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF',
+    fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.textFaint,
     letterSpacing: 0.8, marginTop: 16, marginBottom: 4,
   },
   newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   newInput: {
     flex: 1, height: 40, paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB',
-    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    backgroundColor: c.surfaceSubtle, borderRadius: 8, borderWidth: 1, borderColor: c.border,
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text,
     ...webInputReset,
   },
-  newCreate: { backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
-  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  newCreate: { backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
   doneWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
-  doneText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  doneText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text },
 });
 
 // ── Crash fallback ────────────────────────────────────────────────────────────
@@ -649,9 +655,11 @@ const ppStyles = StyleSheet.create({
 // of a blank overlay.
 
 function SheetCrashFallback({ error, onClose }: { error: Error; onClose: () => void }) {
+  const colors = useColors();
+  const crashStyles = useThemedStyles(makeCrashStyles);
   return (
     <View style={crashStyles.wrap}>
-      <Ionicons name="warning-outline" size={40} color="#DC2626" />
+      <Ionicons name="warning-outline" size={40} color={colors.destructiveStrong} />
       <Text style={crashStyles.title}>Couldn't show these results</Text>
       <Text style={crashStyles.message} selectable>
         {error.message || 'Unknown error'}
@@ -663,12 +671,12 @@ function SheetCrashFallback({ error, onClose }: { error: Error; onClose: () => v
   );
 }
 
-const crashStyles = StyleSheet.create({
+const makeCrashStyles = (c: Palette) => StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 10 },
-  title: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#111827', textAlign: 'center' },
-  message: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center' },
-  closeBtn: { marginTop: 8, backgroundColor: '#EF4444', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
-  closeBtnText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  title: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.text, textAlign: 'center' },
+  message: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted, textAlign: 'center' },
+  closeBtn: { marginTop: 8, backgroundColor: c.destructive, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
+  closeBtnText: { color: c.background, fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
 
 // ── Manual search ───────────────────────────────────────────────────────────
@@ -686,6 +694,7 @@ function ManualFilmSearch({
   initialQuery?: string;
   onPicked?: (movie: TmdbMovieCard) => void;
 }) {
+  const manualSearchStyles = useThemedStyles(makeManualSearchStyles);
   const colors = useColors();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -741,25 +750,25 @@ function ManualFilmSearch({
         {onPicked ? 'SEARCH FOR THE RIGHT FILM' : 'SEARCH FOR IT YOURSELF'}
       </Text>
       <View style={[manualSearchStyles.searchRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <Ionicons name="search-outline" size={16} color={colors.textFaint} style={{ marginRight: 8 }} />
         <TextInput
           style={[manualSearchStyles.searchInput, { color: colors.foreground }, webInputReset]}
           value={query}
           onChangeText={setQuery}
           placeholder="Type the film's title…"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           autoCapitalize="none"
           returnKeyType="search"
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            <Ionicons name="close-circle" size={18} color={colors.textFaint} />
           </TouchableOpacity>
         )}
       </View>
 
       {isFetching ? (
-        <ActivityIndicator color="#0066FF" style={{ marginTop: 14 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 14 }} />
       ) : debouncedQuery.length >= 2 && results.length === 0 ? (
         <Text style={[manualSearchStyles.emptyText, { color: colors.mutedForeground }]}>
           No films found for "{debouncedQuery}"
@@ -773,7 +782,7 @@ function ManualFilmSearch({
                 <Image source={{ uri: movie.posterUrl }} style={manualSearchStyles.filmPoster} contentFit="cover" />
               ) : (
                 <View style={[manualSearchStyles.filmPoster, manualSearchStyles.filmPosterFallback]}>
-                  <Ionicons name="film-outline" size={16} color="#D1D5DB" />
+                  <Ionicons name="film-outline" size={16} color={colors.iconFaint} />
                 </View>
               )}
               <View style={{ flex: 1 }}>
@@ -785,15 +794,15 @@ function ManualFilmSearch({
                 ) : null}
               </View>
               {added ? (
-                <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+                <Ionicons name="checkmark-circle" size={22} color={colors.success} />
               ) : addingId === movie.tmdbId ? (
-                <ActivityIndicator color="#0066FF" size="small" />
+                <ActivityIndicator color={colors.primary} size="small" />
               ) : (
                 <TouchableOpacity onPress={() => handleAdd(movie)} hitSlop={8}>
                   <Ionicons
                     name={onPicked ? 'checkmark-circle-outline' : 'add-circle-outline'}
                     size={26}
-                    color="#0066FF"
+                    color={colors.primary}
                   />
                 </TouchableOpacity>
               )}
@@ -829,6 +838,7 @@ function CorrectMatchSheet({
   onPick: (movie: TmdbMovieCard) => void;
   onClose: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
 
   return (
@@ -866,7 +876,7 @@ function CorrectMatchSheet({
   );
 }
 
-const manualSearchStyles = StyleSheet.create({
+const makeManualSearchStyles = (c: Palette) => StyleSheet.create({
   wrap: { marginTop: 8, width: '100%' },
   divider: { height: StyleSheet.hairlineWidth, marginBottom: 20 },
   label: { fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.8, marginBottom: 10 },
@@ -882,7 +892,7 @@ const manualSearchStyles = StyleSheet.create({
     paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, marginTop: 4,
   },
   filmPoster: { width: 36, height: 52, borderRadius: 6 },
-  filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  filmPosterFallback: { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   filmTitle: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
 });
@@ -890,6 +900,7 @@ const manualSearchStyles = StyleSheet.create({
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
 export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const [addedCount, setAddedCount] = useState(0);
   const [multiMode, setMultiMode] = useState<BulkAddMode | null>(null);
@@ -1208,7 +1219,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       disabled={selectedCandidates.length === 0}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="bookmark-outline" size={18} color="#0066FF" style={{ marginRight: 8 }} />
+                      <Ionicons name="bookmark-outline" size={18} color={colors.primary} style={{ marginRight: 8 }} />
                       <Text style={styles.multiBtnText}>Add to Watchlist ({selectedCandidates.length})</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1217,8 +1228,8 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       disabled={selectedCandidates.length === 0}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="list-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
-                      <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add to Playlist</Text>
+                      <Ionicons name="list-outline" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+                      <Text style={[styles.multiBtnText, { color: colors.textMuted }]}>Add to Playlist</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.multiBtn, styles.multiBtnSecondary, selectedCandidates.length === 0 && styles.multiBtnDisabled]}
@@ -1226,8 +1237,8 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       disabled={selectedCandidates.length === 0}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="albums-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
-                      <Text style={[styles.multiBtnText, { color: '#6B7280' }]}>Add to Both</Text>
+                      <Ionicons name="albums-outline" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+                      <Text style={[styles.multiBtnText, { color: colors.textMuted }]}>Add to Both</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1264,11 +1275,11 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                 <View style={[styles.footer, { borderTopColor: colors.border }]}>
                   {allAdded ? (
                     <TouchableOpacity
-                      style={[styles.returnBtn, { backgroundColor: '#16A34A' }]}
+                      style={[styles.returnBtn, { backgroundColor: colors.success }]}
                       onPress={handleReturn}
                       activeOpacity={0.85}
                     >
-                      <Ionicons name="arrow-back" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Ionicons name="arrow-back" size={18} color={colors.background} style={{ marginRight: 8 }} />
                       <Text style={styles.returnBtnText}>{doneLabel}</Text>
                     </TouchableOpacity>
                   ) : (
@@ -1326,7 +1337,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   // overlay lays the sheet out (flex:1, bottom-aligned); backdrop is an
   // absolutely-positioned sibling that only paints the dim tint and handles
   // tap-to-close. See the comment above this component's return for why
@@ -1409,7 +1420,7 @@ const styles = StyleSheet.create({
   returnBtnText: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: c.background,
   },
   multiSelector: {
     gap: 10,
@@ -1418,16 +1429,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.primarySoft,
     borderRadius: 10,
     paddingVertical: 13,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#93C5FD',
+    borderColor: c.primaryMid,
   },
   multiBtnSecondary: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceSubtle,
+    borderColor: c.border,
   },
   multiBtnDisabled: {
     opacity: 0.5,
@@ -1435,7 +1446,7 @@ const styles = StyleSheet.create({
   multiBtnText: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#0066FF',
+    color: c.primary,
   },
   selectHeaderRow: {
     flexDirection: 'row',
@@ -1450,6 +1461,6 @@ const styles = StyleSheet.create({
   selectAllBtn: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#0066FF',
+    color: c.primary,
   },
 });

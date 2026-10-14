@@ -21,6 +21,9 @@ import Constants from 'expo-constants';
 import { PRIVACY_URL, TERMS_URL, CONTACT_EMAIL } from '@/lib/legalLinks';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 function errorMessage(err: unknown): string | undefined {
   if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') {
@@ -39,6 +42,8 @@ function Row({
   danger?: boolean;
   onPress?: () => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity
       style={styles.row}
@@ -47,14 +52,14 @@ function Row({
       disabled={!onPress}
     >
       <View style={[styles.rowIcon, danger && styles.rowIconDanger]}>
-        <Ionicons name={icon as any} size={18} color={danger ? '#EF4444' : '#6B7280'} />
+        <Ionicons name={icon as any} size={18} color={danger ? colors.destructive : colors.textMuted} />
       </View>
       <View style={styles.rowContent}>
         <Text style={[styles.rowLabel, danger && styles.rowLabelDanger]}>{label}</Text>
         {value ? <Text style={styles.rowValue}>{value}</Text> : null}
       </View>
       {onPress && (
-        <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+        <Ionicons name="chevron-forward" size={16} color={colors.iconFaint} />
       )}
     </TouchableOpacity>
   );
@@ -68,6 +73,8 @@ function Row({
  * than being the unlabelled off position of something else.
  */
 function ThemePicker() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const { theme, systemScheme, setTheme } = useThemeControl();
 
   const options: Array<{ value: ThemeChoice; label: string; icon: string }> = [
@@ -91,7 +98,7 @@ function ThemePicker() {
               <Ionicons
                 name={option.icon as any}
                 size={17}
-                color={active ? '#0066FF' : '#9CA3AF'}
+                color={active ? colors.primary : colors.textFaint}
               />
               <Text style={[styles.themeOptionText, active && styles.themeOptionTextActive]}>
                 {option.label}
@@ -110,6 +117,8 @@ function ThemePicker() {
 }
 
 export default function ProfileScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isLoaded, isSignedIn, signOut, userId: myClerkId } = useAuth();
@@ -265,7 +274,7 @@ export default function ProfileScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
         <View style={{ width: 32 }} />
@@ -312,7 +321,7 @@ export default function ProfileScreen() {
                 value={usernameInput}
                 onChangeText={setUsernameInput}
                 placeholder="Enter username…"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textFaint}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -325,7 +334,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <ActivityIndicator size="small" color={colors.background} />
                 ) : (
                   <Text style={styles.saveBtnText}>Save</Text>
                 )}
@@ -335,7 +344,7 @@ export default function ProfileScreen() {
                 onPress={() => setEditingUsername(false)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={18} color="#6B7280" />
+                <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
           ) : (
@@ -354,7 +363,7 @@ export default function ProfileScreen() {
                 value={initialsInput}
                 onChangeText={(t) => setInitialsInput(t.slice(0, 3))}
                 placeholder="e.g. JPT"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textFaint}
                 autoFocus
                 autoCapitalize="characters"
                 autoCorrect={false}
@@ -367,7 +376,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <ActivityIndicator size="small" color={colors.background} />
                 ) : (
                   <Text style={styles.saveBtnText}>Save</Text>
                 )}
@@ -377,7 +386,7 @@ export default function ProfileScreen() {
                 onPress={() => setEditingInitials(false)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={18} color="#6B7280" />
+                <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
           ) : (
@@ -397,7 +406,7 @@ export default function ProfileScreen() {
           <Text style={styles.cardTitle}>Privacy</Text>
           <View style={styles.privacyRow}>
             <View style={styles.rowIcon}>
-              <Ionicons name="lock-closed-outline" size={18} color="#6B7280" />
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Private account</Text>
@@ -408,12 +417,12 @@ export default function ProfileScreen() {
               </Text>
             </View>
             {togglingPrivacy ? (
-              <ActivityIndicator size="small" color="#0066FF" />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <Switch
                 value={Boolean(profile?.isPrivate)}
                 onValueChange={handleTogglePrivacy}
-                trackColor={{ true: '#0066FF' }}
+                trackColor={{ true: colors.primary }}
               />
             )}
           </View>
@@ -480,7 +489,7 @@ export default function ProfileScreen() {
               value={feedbackText}
               onChangeText={(t) => setFeedbackText(t.slice(0, 2000))}
               placeholder="What's working, what's not, what you'd like to see…"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textFaint}
               multiline
               maxLength={2000}
               textAlignVertical="top"
@@ -494,7 +503,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {sendingFeedback ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <ActivityIndicator size="small" color={colors.background} />
                 ) : (
                   <Text style={styles.saveBtnText}>Send</Text>
                 )}
@@ -514,46 +523,46 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F9FAFB' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.surfaceSubtle },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    backgroundColor: c.background, borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4 },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  headerTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: c.text },
 
-  hero: { alignItems: 'center', paddingVertical: 32, backgroundColor: '#FFF', marginBottom: 20 },
+  hero: { alignItems: 'center', paddingVertical: 32, backgroundColor: c.background, marginBottom: 20 },
   avatarWrap: { marginBottom: 12 },
   avatar: { width: 80, height: 80, borderRadius: 40 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 28, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  heroName: { fontSize: 20, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 4 },
-  heroEmail: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 28, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  heroName: { fontSize: 20, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 4 },
+  heroEmail: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint },
 
   card: {
-    backgroundColor: '#FFF', marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: c.background, marginHorizontal: 16, marginBottom: 16,
     borderRadius: 12, overflow: 'hidden',
-    borderWidth: 1, borderColor: '#E5E7EB',
+    borderWidth: 1, borderColor: c.border,
   },
   cardTitle: {
     fontSize: 11, fontFamily: 'Inter_600SemiBold',
-    color: '#9CA3AF', letterSpacing: 0.6, textTransform: 'uppercase',
+    color: c.textFaint, letterSpacing: 0.6, textTransform: 'uppercase',
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4,
   },
 
   attribution: {
-    fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF',
+    fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint,
     lineHeight: 16, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14,
-    borderTopWidth: 1, borderTopColor: '#F3F4F6',
+    borderTopWidth: 1, borderTopColor: c.surfaceAlt,
   },
-  attributionLink: { color: '#6B7280', fontFamily: 'Inter_500Medium' },
+  attributionLink: { color: c.textMuted, fontFamily: 'Inter_500Medium' },
 
   row: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 13,
-    borderTopWidth: 1, borderTopColor: '#F3F4F6',
+    borderTopWidth: 1, borderTopColor: c.surfaceAlt,
   },
   privacyRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -561,10 +570,10 @@ const styles = StyleSheet.create({
   },
   rowIcon: {
     width: 32, height: 32, borderRadius: 8,
-    backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.surfaceSubtle, alignItems: 'center', justifyContent: 'center',
     marginRight: 12,
   },
-  rowIconDanger: { backgroundColor: '#FEF2F2' },
+  rowIconDanger: { backgroundColor: c.destructiveSoft },
   rowContent: { flex: 1 },
   themeRow: { flexDirection: 'row', gap: 8, paddingTop: 4 },
   themeOption: {
@@ -574,56 +583,56 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
+    borderColor: c.border,
+    backgroundColor: c.surfaceSubtle,
   },
-  themeOptionActive: { borderColor: '#0066FF', backgroundColor: '#EFF6FF' },
-  themeOptionText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
-  themeOptionTextActive: { color: '#0066FF' },
+  themeOptionActive: { borderColor: c.primary, backgroundColor: c.primarySoft },
+  themeOptionText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.textFaint },
+  themeOptionTextActive: { color: c.primary },
   themeHint: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     marginTop: 10,
     lineHeight: 17,
   },
 
-  rowLabel: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
-  rowLabelDanger: { color: '#EF4444' },
-  rowValue: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+  rowLabel: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
+  rowLabelDanger: { color: c.destructive },
+  rowValue: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
 
   editRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 16, paddingVertical: 10,
-    borderTopWidth: 1, borderTopColor: '#F3F4F6',
+    borderTopWidth: 1, borderTopColor: c.surfaceAlt,
   },
   textInput: {
     flex: 1, height: 40, paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB', borderRadius: 8,
-    borderWidth: 1, borderColor: '#E5E7EB',
-    fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    backgroundColor: c.surfaceSubtle, borderRadius: 8,
+    borderWidth: 1, borderColor: c.border,
+    fontSize: 15, fontFamily: 'Inter_400Regular', color: c.text,
     ...webInputReset,
   },
   saveBtn: {
-    backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: c.primary, paddingHorizontal: 16, paddingVertical: 10,
     borderRadius: 8, minWidth: 56, alignItems: 'center',
   },
   saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  saveBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
   cancelBtn: { padding: 8 },
 
   feedbackBody: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16 },
-  feedbackHint: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 10, lineHeight: 18 },
+  feedbackHint: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted, marginBottom: 10, lineHeight: 18 },
   feedbackInput: {
     minHeight: 90, maxHeight: 160, paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: '#F9FAFB', borderRadius: 8,
-    borderWidth: 1, borderColor: '#E5E7EB',
-    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    backgroundColor: c.surfaceSubtle, borderRadius: 8,
+    borderWidth: 1, borderColor: c.border,
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text,
     ...webInputReset,
   },
   feedbackFooter: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 8,
   },
-  feedbackCharCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  feedbackCharCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
 });

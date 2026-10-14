@@ -1,8 +1,11 @@
 import { Link, Stack } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 export default function NotFoundScreen() {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
 
   return (
@@ -32,7 +35,7 @@ export default function NotFoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -46,7 +49,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   button: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 15,
     fontWeight: '700',
     paddingVertical: 14,

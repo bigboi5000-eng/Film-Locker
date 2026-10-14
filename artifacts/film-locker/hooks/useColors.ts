@@ -16,6 +16,19 @@ import { useThemePreference } from '@/components/ThemeProvider';
  * such as an error boundary's fallback, which must not itself be able to
  * crash for want of context.
  */
+/**
+ * Built once, at import, so each palette has one stable identity.
+ *
+ * This matters more than it looks: useThemedStyles memoises on the palette
+ * object, so returning a freshly spread object from the hook would defeat
+ * the memo entirely and rebuild every stylesheet in the app on every
+ * render.
+ */
+const PALETTES: Record<'light' | 'dark', Palette> = {
+  light: { ...colors.light, radius: colors.radius },
+  dark: { ...colors.dark, radius: colors.radius },
+};
+
 export function useColors(): Palette {
   const systemScheme = useSystemScheme();
   const preference = useThemePreference();
@@ -27,7 +40,7 @@ export function useColors(): Palette {
         ? preference.systemScheme
         : preference.theme;
 
-  return { ...(resolved === 'dark' ? colors.dark : colors.light), radius: colors.radius };
+  return resolved === 'dark' ? PALETTES.dark : PALETTES.light;
 }
 
 /** True when the dark palette is in force — for status bars and overlays. */

@@ -34,12 +34,17 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
   playlistId: number;
   existingTmdbIds: Set<number>;
   onAdded: () => void;
 }) {
+  const colors = useColors();
+  const editStyles = useThemedStyles(makeEditStyles);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [justAddedIds, setJustAddedIds] = useState<Set<number>>(new Set());
@@ -77,25 +82,25 @@ function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
     <View>
       <Text style={editStyles.label}>Add Films</Text>
       <View style={editStyles.searchRow}>
-        <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <Ionicons name="search-outline" size={16} color={colors.textFaint} style={{ marginRight: 8 }} />
         <TextInput
           style={editStyles.searchInput}
           value={query}
           onChangeText={setQuery}
           placeholder="Search for a film to add…"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           autoCapitalize="none"
           returnKeyType="search"
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            <Ionicons name="close-circle" size={18} color={colors.textFaint} />
           </TouchableOpacity>
         )}
       </View>
 
       {isFetching ? (
-        <ActivityIndicator color="#0066FF" style={{ marginTop: 12 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
       ) : debouncedQuery.length >= 2 && results.length === 0 ? (
         <Text style={editStyles.searchEmptyText}>No films found for "{debouncedQuery}"</Text>
       ) : (
@@ -107,7 +112,7 @@ function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
                 <Image source={{ uri: movie.posterUrl }} style={editStyles.filmPoster} contentFit="cover" />
               ) : (
                 <View style={[editStyles.filmPoster, editStyles.filmPosterFallback]}>
-                  <Ionicons name="film-outline" size={16} color="#D1D5DB" />
+                  <Ionicons name="film-outline" size={16} color={colors.iconFaint} />
                 </View>
               )}
               <View style={{ flex: 1 }}>
@@ -116,13 +121,13 @@ function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
               </View>
               {alreadyIn ? (
                 <View style={editStyles.addedRow}>
-                  <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+                  <Ionicons name="checkmark-circle" size={22} color={colors.success} />
                 </View>
               ) : addingId === movie.tmdbId ? (
-                <ActivityIndicator color="#0066FF" size="small" />
+                <ActivityIndicator color={colors.primary} size="small" />
               ) : (
                 <TouchableOpacity onPress={() => handleAdd(movie)} hitSlop={8}>
-                  <Ionicons name="add-circle-outline" size={26} color="#0066FF" />
+                  <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -158,6 +163,8 @@ function EditSheet({
   onFilmAdded: () => void;
   saving: boolean;
 }) {
+  const colors = useColors();
+  const editStyles = useThemedStyles(makeEditStyles);
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription ?? '');
   const [isPublic, setIsPublic] = useState(initialIsPublic);
@@ -182,7 +189,7 @@ function EditSheet({
               value={name}
               onChangeText={setName}
               placeholder="Playlist name"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textFaint}
               maxLength={100}
             />
 
@@ -192,7 +199,7 @@ function EditSheet({
               value={description}
               onChangeText={setDescription}
               placeholder="Optional description…"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textFaint}
               multiline
               numberOfLines={3}
               maxLength={300}
@@ -206,8 +213,8 @@ function EditSheet({
               <Switch
                 value={isPublic}
                 onValueChange={setIsPublic}
-                trackColor={{ true: '#0066FF', false: '#E5E7EB' }}
-                thumbColor="#FFF"
+                trackColor={{ true: colors.primary, false: colors.border }}
+                thumbColor={colors.background}
               />
             </View>
 
@@ -218,7 +225,7 @@ function EditSheet({
               activeOpacity={0.8}
             >
               {saving ? (
-                <ActivityIndicator color="#FFF" />
+                <ActivityIndicator color={colors.background} />
               ) : (
                 <Text style={editStyles.saveBtnText}>Save Changes</Text>
               )}
@@ -231,7 +238,7 @@ function EditSheet({
             <View style={editStyles.divider} />
 
             <TouchableOpacity style={editStyles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
-              <Ionicons name="trash-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+              <Ionicons name="trash-outline" size={16} color={colors.destructive} style={{ marginRight: 6 }} />
               <Text style={editStyles.deleteBtnText}>Delete Playlist</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -241,57 +248,57 @@ function EditSheet({
   );
 }
 
-const editStyles = StyleSheet.create({
+const makeEditStyles = (c: Palette) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%', paddingTop: 12 },
+  sheet: { backgroundColor: c.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%', paddingTop: 12 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
-  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 20 },
-  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 20 },
-  label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#6B7280', marginBottom: 6 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginBottom: 16 },
+  divider: { height: 1, backgroundColor: c.surfaceAlt, marginVertical: 20 },
+  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 20 },
+  label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textMuted, marginBottom: 6 },
   input: {
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8,
+    borderWidth: 1, borderColor: c.border, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 10,
-    fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
-    marginBottom: 16, backgroundColor: '#F9FAFB',
+    fontSize: 15, fontFamily: 'Inter_400Regular', color: c.text,
+    marginBottom: 16, backgroundColor: c.surfaceSubtle,
     ...webInputReset,
   },
   inputMultiline: { height: 80, textAlignVertical: 'top' },
   toggleRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6', marginBottom: 20,
+    paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.surfaceAlt, marginBottom: 20,
   },
-  toggleLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 2 },
-  saveBtn: { backgroundColor: '#0066FF', padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 12 },
-  saveBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  toggleLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
+  toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
+  saveBtn: { backgroundColor: c.primary, padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 12 },
+  saveBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 14, borderRadius: 10, backgroundColor: '#FEF2F2',
+    padding: 14, borderRadius: 10, backgroundColor: c.destructiveSoft,
   },
-  deleteBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#EF4444' },
+  deleteBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.destructive },
 
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 4,
-    backgroundColor: '#F9FAFB', borderRadius: 10,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceSubtle, borderRadius: 10,
+    borderWidth: 1, borderColor: c.border,
   },
   searchInput: {
     flex: 1, paddingVertical: 10,
-    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827',
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text,
     ...webInputReset,
   },
-  searchEmptyText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 12 },
+  searchEmptyText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 12 },
   filmRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 8, marginTop: 4,
   },
   filmPoster: { width: 34, height: 50, borderRadius: 6 },
-  filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  filmTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  filmPosterFallback: { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  filmTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.text },
+  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
   addedRow: { flexDirection: 'row', alignItems: 'center' },
 });
 
@@ -307,6 +314,8 @@ interface ModalTarget {
 }
 
 export default function PlaylistScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const { id } = useLocalSearchParams<{ id: string }>();
   const numericId = Number(id);
   const insets = useSafeAreaInsets();
@@ -459,11 +468,11 @@ export default function PlaylistScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           {isLoading ? (
-            <ActivityIndicator color="#0066FF" />
+            <ActivityIndicator color={colors.primary} />
           ) : (
             <>
               <Text style={styles.headerTitle} numberOfLines={1}>{playlist?.name ?? 'Playlist'}</Text>
@@ -471,7 +480,7 @@ export default function PlaylistScreen() {
                 <Ionicons
                   name={playlist?.isPublic ? 'globe-outline' : 'lock-closed-outline'}
                   size={12}
-                  color="#9CA3AF"
+                  color={colors.textFaint}
                 />
                 <Text style={styles.headerMetaText}>
                   {playlist?.isPublic ? 'Public' : 'Private'} · {items.length} film{items.length !== 1 ? 's' : ''}
@@ -482,7 +491,7 @@ export default function PlaylistScreen() {
         </View>
         {isOwner ? (
           <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn} activeOpacity={0.7}>
-            <Ionicons name="pencil-outline" size={20} color="#6B7280" />
+            <Ionicons name="pencil-outline" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         ) : playlist ? (
           <TouchableOpacity
@@ -492,7 +501,7 @@ export default function PlaylistScreen() {
             activeOpacity={0.8}
           >
             {followBusy ? (
-              <ActivityIndicator size="small" color={playlist.isFollowed ? '#374151' : '#FFFFFF'} />
+              <ActivityIndicator size="small" color={playlist.isFollowed ? colors.textStrong : colors.background} />
             ) : (
               <Text style={[styles.followBtnText, playlist.isFollowed && styles.followingBtnText]}>
                 {playlist.isFollowed ? 'Following' : 'Follow'}
@@ -514,7 +523,7 @@ export default function PlaylistScreen() {
         </View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="film-outline" size={56} color="#D1D5DB" />
+          <Ionicons name="film-outline" size={56} color={colors.iconFaint} />
           <Text style={styles.emptyTitle}>Empty playlist</Text>
           <Text style={styles.emptySub}>
             Add films from the watchlist or film detail screens.
@@ -543,7 +552,7 @@ export default function PlaylistScreen() {
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Ionicons name="film-outline" size={56} color="#D1D5DB" />
+                <Ionicons name="film-outline" size={56} color={colors.iconFaint} />
                 <Text style={styles.emptyTitle}>No films match your filters</Text>
                 <Text style={styles.emptySub}>Try clearing your filters</Text>
               </View>
@@ -587,21 +596,21 @@ export default function PlaylistScreen() {
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4 },
   headerCenter: { flex: 1, marginHorizontal: 12 },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  headerTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: c.text },
   headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  headerMetaText: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  headerMetaText: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
   editBtn: { padding: 8 },
   followBtn: {
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 16,
@@ -609,13 +618,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  followingBtn: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
-  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
-  followingBtnText: { color: '#374151' },
+  followingBtn: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  followingBtnText: { color: c.textStrong },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },
-  emptyTitle: { fontSize: 18, fontFamily: 'Inter_600SemiBold', color: '#374151' },
-  emptySub: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 18, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
+  emptySub: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', lineHeight: 20 },
 
   contentContainer: { paddingHorizontal: HORIZONTAL_PADDING },
   columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
@@ -635,6 +644,6 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 10,
   },
-  sectionLabel: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF', letterSpacing: 1.5 },
-  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  sectionLabel: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: c.textFaint, letterSpacing: 1.5 },
+  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
 });

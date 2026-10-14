@@ -10,6 +10,9 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 const { width: SCREEN_W } = Dimensions.get('window');
 const DROPDOWN_W = SCREEN_W - 32;
 
@@ -122,6 +125,8 @@ function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
 }
 
 export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const wrapperRef = useRef<View>(null);
   const [pickerKey, setPickerKey] = useState<FilterKey | null>(null);
   const [dropdownTop, setDropdownTop] = useState(200);
@@ -210,7 +215,7 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
                 <Ionicons
                   name={isActive ? 'close' : 'chevron-down'}
                   size={12}
-                  color={isActive ? '#FFFFFF' : '#6B7280'}
+                  color={isActive ? colors.background : colors.textMuted}
                   style={{ marginLeft: 4 }}
                 />
               </TouchableOpacity>
@@ -238,7 +243,7 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
                 {pickerKey ? FILTER_LABELS[pickerKey] : ''}
               </Text>
               <TouchableOpacity onPress={closeDropdown} hitSlop={8}>
-                <Ionicons name="close" size={18} color="#6B7280" />
+                <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -269,7 +274,7 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
                         {item}
                       </Text>
                       {isSelected && (
-                        <Ionicons name="checkmark" size={16} color="#0066FF" />
+                        <Ionicons name="checkmark" size={16} color={colors.primary} />
                       )}
                     </TouchableOpacity>
                   );
@@ -283,7 +288,7 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   scroll: { flexGrow: 0 },
   row: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   chip: {
@@ -292,13 +297,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
   },
-  chipActive: { backgroundColor: '#0066FF', borderColor: '#0066FF' },
-  chipText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#374151' },
-  chipTextActive: { color: '#FFFFFF' },
+  chipActive: { backgroundColor: c.primary, borderColor: c.primary },
+  chipText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: c.textStrong },
+  chipTextActive: { color: c.background },
   // Dropdown
   backdrop: {
     flex: 1,
@@ -307,7 +312,7 @@ const styles = StyleSheet.create({
   dropdownCard: {
     position: 'absolute',
     left: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.background,
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -324,12 +329,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: c.border,
   },
   dropdownTitle: {
     fontSize: 14,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
   },
   optionScroll: { maxHeight: 220 },
   optionRow: {
@@ -339,17 +344,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: c.surfaceAlt,
   },
-  optionRowActive: { backgroundColor: '#EFF6FF' },
+  optionRowActive: { backgroundColor: c.primarySoft },
   optionText: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#111827',
+    color: c.text,
     flex: 1,
     marginRight: 8,
   },
-  optionTextActive: { fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  optionTextActive: { fontFamily: 'Inter_600SemiBold', color: c.primary },
   emptyDropdown: { padding: 20, alignItems: 'center' },
-  emptyDropdownText: { fontSize: 13, color: '#9CA3AF', fontFamily: 'Inter_400Regular' },
+  emptyDropdownText: { fontSize: 13, color: c.textFaint, fontFamily: 'Inter_400Regular' },
 });

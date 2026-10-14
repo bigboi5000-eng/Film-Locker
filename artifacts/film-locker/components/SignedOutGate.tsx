@@ -3,6 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 /**
  * What a tab shows when nobody is signed in.
@@ -26,13 +29,15 @@ export function SignedOutGate({
   title: string;
   blurb: string;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.iconCircle}>
-        <Ionicons name={icon} size={30} color="#0066FF" />
+        <Ionicons name={icon} size={30} color={colors.primary} />
       </View>
 
       <Text style={styles.title}>{title}</Text>
@@ -57,32 +62,32 @@ export function SignedOutGate({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: {
-    flex: 1, backgroundColor: '#FFFFFF',
+    flex: 1, backgroundColor: c.background,
     alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 32,
   },
   iconCircle: {
     width: 64, height: 64, borderRadius: 32,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.primarySoft,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 20,
   },
   title: {
-    fontSize: 20, fontFamily: 'Inter_700Bold', color: '#111827',
+    fontSize: 20, fontFamily: 'Inter_700Bold', color: c.text,
     textAlign: 'center', marginBottom: 8,
   },
   blurb: {
-    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280',
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted,
     textAlign: 'center', lineHeight: 20, marginBottom: 28,
   },
   primaryBtn: {
-    backgroundColor: '#0066FF', borderRadius: 12,
+    backgroundColor: c.primary, borderRadius: 12,
     paddingVertical: 15, paddingHorizontal: 40,
     alignSelf: 'stretch', alignItems: 'center',
   },
-  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.background },
   secondaryBtn: { paddingVertical: 16 },
-  secondaryBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#0066FF' },
+  secondaryBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.primary },
 });

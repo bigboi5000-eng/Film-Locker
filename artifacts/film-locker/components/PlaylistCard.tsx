@@ -3,8 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { Playlist } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 export function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPress: () => void }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const covers = playlist.coverPosters ?? [];
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
@@ -15,7 +20,7 @@ export function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPres
           ) : (
             <View key={i} style={[styles.coverCell, styles.coverPlaceholder]}>
               {i === 0 && covers.length === 0 && (
-                <Ionicons name="film-outline" size={20} color="#D1D5DB" />
+                <Ionicons name="film-outline" size={20} color={colors.iconFaint} />
               )}
             </View>
           )
@@ -27,7 +32,7 @@ export function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPres
           <Ionicons
             name={playlist.isPublic ? 'globe-outline' : 'lock-closed-outline'}
             size={11}
-            color="#9CA3AF"
+            color={colors.textFaint}
           />
           <Text style={styles.metaText}>{playlist.itemCount} film{playlist.itemCount !== 1 ? 's' : ''}</Text>
         </View>
@@ -39,17 +44,17 @@ export function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPres
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   card: { width: 140, marginRight: 12 },
   coverGrid: {
     width: 140, height: 100, borderRadius: 10, overflow: 'hidden',
     flexDirection: 'row', flexWrap: 'wrap',
   },
   coverCell: { width: '50%', height: '50%' },
-  coverPlaceholder: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  coverPlaceholder: { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   info: { paddingTop: 8, paddingHorizontal: 2 },
-  name: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827', marginBottom: 3 },
+  name: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.text, marginBottom: 3 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
-  owner: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 2 },
+  metaText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
+  owner: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
 });

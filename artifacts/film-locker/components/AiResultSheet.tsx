@@ -13,6 +13,8 @@ import {
 import { Image } from 'expo-image';
 import { useColors } from '@/hooks/useColors';
 import type { GeminiMovieMatch, Movie } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 interface AiResultSheetProps {
   visible: boolean;
@@ -25,12 +27,13 @@ const CONFIDENCE_THRESHOLD = 0.45;
 const { height: SCREEN_H } = Dimensions.get('window');
 
 function ConfidencePill({ score }: { score: number }) {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const pct = Math.round(score * 100);
   const bg =
-    pct >= 80 ? '#16A34A' :
+    pct >= 80 ? colors.success :
     pct >= 55 ? '#CA8A04' :
-    '#DC2626';
+    colors.destructiveStrong;
   return (
     <View style={[styles.pill, { backgroundColor: bg + '22', borderColor: bg }]}>
       <Text style={[styles.pillText, { color: bg }]}>{pct}%</Text>
@@ -39,6 +42,7 @@ function ConfidencePill({ score }: { score: number }) {
 }
 
 export function AiResultSheet({ visible, matches, saved, onClose }: AiResultSheetProps) {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -107,7 +111,7 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
           {belowThreshold ? (
             <Text style={[styles.skipLabel, { color: colors.mutedForeground }]}>skipped</Text>
           ) : savedMovie ? (
-            <Text style={[styles.savedLabel, { color: '#16A34A' }]}>✓ saved</Text>
+            <Text style={[styles.savedLabel, { color: colors.success }]}>✓ saved</Text>
           ) : (
             <Text style={[styles.skipLabel, { color: colors.mutedForeground }]}>not found</Text>
           )}
@@ -184,7 +188,7 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',

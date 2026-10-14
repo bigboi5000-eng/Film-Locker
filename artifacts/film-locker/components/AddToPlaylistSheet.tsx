@@ -24,6 +24,8 @@ import {
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 interface AddToPlaylistSheetProps {
   visible: boolean;
@@ -34,6 +36,7 @@ interface AddToPlaylistSheetProps {
 }
 
 export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose }: AddToPlaylistSheetProps) {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -108,7 +111,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                     activeOpacity={0.75}
                   >
                     <View style={[styles.plIcon, { backgroundColor: colors.muted }]}>
-                      <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color="#6B7280" />
+                      <Ionicons name={pl.isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color={colors.textMuted} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.plName, { color: colors.foreground }]} numberOfLines={1}>{pl.name}</Text>
@@ -117,9 +120,9 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                       </Text>
                     </View>
                     {addingId === pl.id ? (
-                      <ActivityIndicator size="small" color="#0066FF" />
+                      <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
-                      <Ionicons name="add-circle-outline" size={22} color="#0066FF" />
+                      <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -135,7 +138,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                 value={newName}
                 onChangeText={setNewName}
                 placeholder="New playlist name…"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textFaint}
                 maxLength={100}
                 returnKeyType="done"
                 onSubmitEditing={handleCreateAndAdd}
@@ -146,7 +149,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                 disabled={!newName.trim() || creating || addingId !== null}
                 activeOpacity={0.8}
               >
-                {creating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.newCreateText}>Create</Text>}
+                {creating ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={styles.newCreateText}>Create</Text>}
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -156,7 +159,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
@@ -195,6 +198,6 @@ const styles = StyleSheet.create({
     fontSize: 14, fontFamily: 'Inter_400Regular',
     ...webInputReset,
   },
-  newCreate: { backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
-  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  newCreate: { backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
 });

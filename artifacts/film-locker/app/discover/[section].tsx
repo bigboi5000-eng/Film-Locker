@@ -24,6 +24,9 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -64,6 +67,8 @@ function sortMovies(movies: TmdbMovieCard[], sort: SortKey): TmdbMovieCard[] {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function DiscoverScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const { section } = useLocalSearchParams<{ section: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -136,7 +141,7 @@ export default function DiscoverScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} hitSlop={12} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>
@@ -153,11 +158,11 @@ export default function DiscoverScreen() {
       {/* Search bar */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={16} color="#9CA3AF" style={styles.searchIcon} />
+          <Ionicons name="search" size={16} color={colors.textFaint} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search by title…"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             value={query}
             onChangeText={setQuery}
             autoCorrect={false}
@@ -189,7 +194,7 @@ export default function DiscoverScreen() {
       {/* Content */}
       {isLoading ? (
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color="#0066FF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
@@ -233,8 +238,8 @@ export default function DiscoverScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
 
   // Header
   header: {
@@ -244,14 +249,14 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: c.border,
     gap: 10,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -259,12 +264,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
   },
   headerCount: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     marginTop: 1,
   },
 
@@ -276,7 +281,7 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     borderRadius: 10,
     paddingHorizontal: 12,
     height: 42,
@@ -286,7 +291,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#111827',
+    color: c.text,
     height: '100%',
     ...webInputReset,
   },
@@ -302,17 +307,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
   },
-  sortChipActive: { backgroundColor: '#0066FF', borderColor: '#0066FF' },
+  sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
   sortChipText: {
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
-    color: '#374151',
+    color: c.textStrong,
   },
-  sortChipTextActive: { color: '#FFFFFF' },
+  sortChipTextActive: { color: c.background },
 
   // Grid
   grid: { paddingHorizontal: H_PAD, paddingTop: 2 },
@@ -323,13 +328,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
     marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     textAlign: 'center',
   },
 });

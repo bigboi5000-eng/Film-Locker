@@ -54,6 +54,9 @@ import {
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { WatchedFilmsSheet } from '@/components/WatchedFilmsSheet';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 /** How many posters the hero band shows before it starts repeating itself. */
 const HERO_POSTERS = 5;
@@ -72,13 +75,15 @@ function FilmStripCard({
   meta?: string | null;
   onPress: () => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity style={styles.filmCard} onPress={onPress} activeOpacity={0.8}>
       {film.posterUrl ? (
         <Image source={{ uri: film.posterUrl }} style={styles.filmPoster} contentFit="cover" />
       ) : (
         <View style={[styles.filmPoster, styles.filmPosterFallback]}>
-          <Ionicons name="film-outline" size={22} color="#9CA3AF" />
+          <Ionicons name="film-outline" size={22} color={colors.textFaint} />
         </View>
       )}
       <Text style={styles.filmTitle} numberOfLines={2}>
@@ -96,6 +101,8 @@ function stars(rating: number | null | undefined): string | null {
 }
 
 export default function UserProfileScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -195,10 +202,10 @@ export default function UserProfileScreen() {
     return (
       <View style={[styles.root, styles.centerFill, { paddingTop: insets.top }]}>
         {isLoading ? (
-          <ActivityIndicator color="#0066FF" size="large" />
+          <ActivityIndicator color={colors.primary} size="large" />
         ) : (
           <>
-            <Ionicons name="person-outline" size={40} color="#D1D5DB" />
+            <Ionicons name="person-outline" size={40} color={colors.iconFaint} />
             <Text style={styles.notFoundText}>User not found</Text>
           </>
         )}
@@ -242,7 +249,7 @@ export default function UserProfileScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{user.username ?? 'Profile'}</Text>
       </View>
@@ -256,7 +263,7 @@ export default function UserProfileScreen() {
             ))}
           </View>
           <LinearGradient
-            colors={['rgba(17,24,39,0.35)', 'rgba(17,24,39,0.82)', '#FFFFFF']}
+            colors={['rgba(17,24,39,0.35)', 'rgba(17,24,39,0.82)', colors.background]}
             locations={[0, 0.55, 1]}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
@@ -279,7 +286,7 @@ export default function UserProfileScreen() {
               had not already learned what it meant, and nothing at all on a
               public account. */}
           <View style={styles.badgeRow}>
-            <Ionicons name={user.isPrivate ? 'lock-closed' : 'earth'} size={12} color="#6B7280" />
+            <Ionicons name={user.isPrivate ? 'lock-closed' : 'earth'} size={12} color={colors.textMuted} />
             <Text style={styles.badgeText}>
               {user.isPrivate ? 'Private account' : 'Public account'}
             </Text>
@@ -322,7 +329,7 @@ export default function UserProfileScreen() {
                 <Ionicons
                   name={preview ? 'eye-off-outline' : 'eye-outline'}
                   size={15}
-                  color="#0066FF"
+                  color={colors.primary}
                 />
                 <Text style={styles.previewBtnText}>
                   {preview ? 'Back to your view' : 'Preview as a visitor'}
@@ -363,7 +370,7 @@ export default function UserProfileScreen() {
           {followStatus !== 'self' && (
             <View style={styles.actionRow}>
               {busy ? (
-                <ActivityIndicator color="#0066FF" style={{ marginTop: 14 }} />
+                <ActivityIndicator color={colors.primary} style={{ marginTop: 14 }} />
               ) : followStatus === 'accepted' ? (
                 <TouchableOpacity style={[styles.followBtn, styles.followingBtn]} onPress={handleUnfollow} activeOpacity={0.8}>
                   <Text style={styles.followingBtnText}>Following</Text>
@@ -392,7 +399,7 @@ export default function UserProfileScreen() {
                   }
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="chatbubble-ellipses-outline" size={16} color="#0066FF" />
+                  <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.primary} />
                   <Text style={styles.messageBtnText}>Message</Text>
                 </TouchableOpacity>
               )}
@@ -429,7 +436,7 @@ export default function UserProfileScreen() {
             same padlock repeated under every heading. */}
         {shownPlaylists === null && shownRatings === null ? (
           <View style={styles.privateNotice}>
-            <Ionicons name="lock-closed-outline" size={22} color="#9CA3AF" />
+            <Ionicons name="lock-closed-outline" size={22} color={colors.textFaint} />
             <Text style={styles.privateNoticeText}>
               {isSelf
                 ? 'Your account is private, so this is where a visitor stops. Everything below is hidden until you accept them.'
@@ -484,7 +491,7 @@ export default function UserProfileScreen() {
                   <Image source={{ uri: c.posterUrl }} style={styles.reviewPoster} contentFit="cover" />
                 ) : (
                   <View style={[styles.reviewPoster, styles.filmPosterFallback]}>
-                    <Ionicons name="film-outline" size={18} color="#9CA3AF" />
+                    <Ionicons name="film-outline" size={18} color={colors.textFaint} />
                   </View>
                 )}
                 <View style={styles.reviewBody}>
@@ -557,120 +564,120 @@ export default function UserProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   centerFill: { alignItems: 'center', justifyContent: 'center', gap: 8 },
-  notFoundText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#9CA3AF' },
+  notFoundText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.textFaint },
   backLink: { marginTop: 16 },
-  backLinkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  backLinkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.primary },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { flex: 1, fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  headerTitle: { flex: 1, fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
 
-  hero: { height: 150, backgroundColor: '#1F2937', overflow: 'hidden' },
+  hero: { height: 150, backgroundColor: c.heroBackdrop, overflow: 'hidden' },
   heroPosters: { flexDirection: 'row', height: '100%' },
   heroPoster: { flex: 1, height: '100%', opacity: 0.85 },
 
   // Pulled up over the hero so the avatar straddles the two.
   identity: { alignItems: 'center', marginTop: -44, paddingBottom: 18, paddingHorizontal: 20 },
-  avatar: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: '#FFFFFF' },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 28, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  avatar: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: c.background },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 28, fontFamily: 'Inter_700Bold', color: c.avatarFg },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
-  badgeText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+  badgeText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: c.textMuted },
 
   connectionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
-  connectionsText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280' },
-  connectionsValue: { fontFamily: 'Inter_700Bold', color: '#111827' },
-  connectionsDot: { fontSize: 13, color: '#D1D5DB' },
+  connectionsText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted },
+  connectionsValue: { fontFamily: 'Inter_700Bold', color: c.text },
+  connectionsDot: { fontSize: 13, color: c.iconFaint },
 
   relationshipText: {
-    fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280',
+    fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted,
     textAlign: 'center', marginTop: 10, paddingHorizontal: 24, lineHeight: 18,
   },
   usernameRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  username: { fontSize: 19, fontFamily: 'Inter_700Bold', color: '#111827' },
+  username: { fontSize: 19, fontFamily: 'Inter_700Bold', color: c.text },
 
   selfBanner: {
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: c.surfaceSubtle,
     alignItems: 'center',
     gap: 8,
   },
   selfBannerText: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     textAlign: 'center',
     lineHeight: 17,
   },
   previewBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  previewBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  previewBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.primary },
 
-  inertBtn: { backgroundColor: '#E5E7EB' },
-  inertBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
+  inertBtn: { backgroundColor: c.border },
+  inertBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.textFaint },
 
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   followBtn: {
-    marginTop: 16, backgroundColor: '#0066FF',
+    marginTop: 16, backgroundColor: c.primary,
     paddingHorizontal: 28, paddingVertical: 9, borderRadius: 20,
   },
-  followBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
-  followingBtn: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
-  followingBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  followBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
+  followingBtn: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  followingBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
   messageBtn: {
     marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
-    borderWidth: 1, borderColor: '#0066FF',
+    borderWidth: 1, borderColor: c.primary,
   },
-  messageBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  messageBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.primary },
 
   statsRow: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 20, paddingVertical: 16,
-    backgroundColor: '#F9FAFB', borderRadius: 14,
+    backgroundColor: c.surfaceSubtle, borderRadius: 14,
   },
   statTile: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 20, fontFamily: 'Inter_700Bold', color: '#111827' },
-  statLabel: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 2 },
-  statDivider: { width: 1, height: 32, backgroundColor: '#E5E7EB' },
+  statValue: { fontSize: 20, fontFamily: 'Inter_700Bold', color: c.text },
+  statLabel: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
+  statDivider: { width: 1, height: 32, backgroundColor: c.border },
 
   section: { marginTop: 28 },
-  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#111827', paddingHorizontal: 20, marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: c.text, paddingHorizontal: 20, marginBottom: 12 },
   horizontalList: { paddingHorizontal: 20, gap: 12 },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', paddingHorizontal: 20 },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, paddingHorizontal: 20 },
   quietText: {
-    fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF',
+    fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint,
     paddingHorizontal: 20, marginTop: 28, textAlign: 'center', lineHeight: 19,
   },
 
   filmCard: { width: 96 },
-  filmPoster: { width: 96, height: 144, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  filmPoster: { width: 96, height: 144, borderRadius: 8, backgroundColor: c.surfaceAlt },
   filmPosterFallback: { alignItems: 'center', justifyContent: 'center' },
-  filmTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
-  filmMeta: { fontSize: 11, fontFamily: 'Inter_500Medium', color: '#FF8C00', marginTop: 1 },
+  filmTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.text, marginTop: 6 },
+  filmMeta: { fontSize: 11, fontFamily: 'Inter_500Medium', color: c.star, marginTop: 1 },
 
   reviewRow: {
     flexDirection: 'row', gap: 12,
     marginHorizontal: 20, marginBottom: 12,
-    padding: 12, borderRadius: 12, backgroundColor: '#F9FAFB',
+    padding: 12, borderRadius: 12, backgroundColor: c.surfaceSubtle,
   },
-  reviewPoster: { width: 44, height: 66, borderRadius: 6, backgroundColor: '#F3F4F6' },
+  reviewPoster: { width: 44, height: 66, borderRadius: 6, backgroundColor: c.surfaceAlt },
   reviewBody: { flex: 1 },
-  reviewFilm: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#111827' },
-  reviewText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#4B5563', marginTop: 3, lineHeight: 18 },
+  reviewFilm: { fontSize: 13, fontFamily: 'Inter_700Bold', color: c.text },
+  reviewText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textBody, marginTop: 3, lineHeight: 18 },
 
   privateNotice: {
     marginHorizontal: 20, marginTop: 24, padding: 20, borderRadius: 12,
-    backgroundColor: '#F9FAFB', alignItems: 'center', gap: 10,
+    backgroundColor: c.surfaceSubtle, alignItems: 'center', gap: 10,
   },
-  privateNoticeText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center', lineHeight: 19 },
+  privateNoticeText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted, textAlign: 'center', lineHeight: 19 },
 });

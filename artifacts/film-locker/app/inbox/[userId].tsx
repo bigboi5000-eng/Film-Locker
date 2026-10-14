@@ -23,6 +23,9 @@ import {
   type ConversationMessageContent,
 } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 // Top row — ordered by how likely each is to be someone's go-to reaction to
 // a friend's film pick (warm/positive first, niche ones toward the end).
@@ -148,6 +151,8 @@ function ComposerPanel({
   disabled?: boolean;
   bottomInset: number;
 }) {
+  const colors = useColors();
+  const kStyles = useThemedStyles(makeKStyles);
   // Personalisation only — which emoji sits first — so it's a device-local
   // preference, not something worth round-tripping to the server for.
   const [lastEmoji, setLastEmoji] = useState<(typeof EMOJI_KEYS)[number] | null>(null);
@@ -215,7 +220,7 @@ function ComposerPanel({
             {replyTarget ? `Reply to "${replyTarget.filmTitle}"` : 'New message'}
           </Text>
           <TouchableOpacity onPress={onClose} style={kStyles.closeBtn} hitSlop={8}>
-            <Ionicons name="close" size={20} color="#6B7280" />
+            <Ionicons name="close" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -267,7 +272,7 @@ function ComposerPanel({
                       <Ionicons
                         name="checkmark-circle"
                         size={13}
-                        color="#059669"
+                        color={colors.successStrong}
                         style={{ marginRight: 4 }}
                       />
                     )}
@@ -283,16 +288,16 @@ function ComposerPanel({
   );
 }
 
-const kStyles = StyleSheet.create({
+const makeKStyles = (c: Palette) => StyleSheet.create({
   sheet: {
     flex: 1,
-    backgroundColor: '#F1F3F6', // keyboard-body grey, not white
+    backgroundColor: c.bubbleOther, // keyboard-body grey, not white
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
   },
-  headerTitle: { flex: 1, fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  headerTitle: { flex: 1, fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.text },
   closeBtn: { padding: 4, marginLeft: 8 },
 
   // Emoji row — plain glyphs on the grey body, no key background, matching
@@ -309,13 +314,13 @@ const kStyles = StyleSheet.create({
   quoteRow: { paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
   quoteKey: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.background,
     paddingHorizontal: 12, paddingVertical: 10,
     borderRadius: 8,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 1,
     elevation: 1,
   },
-  quoteText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#111827' },
+  quoteText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: c.text },
 });
 
 // ── Recommendation card — a film shared in the thread, from either side.
@@ -336,6 +341,8 @@ function RecommendationCard({
   onAddToWatchlist: (item: ConversationFeedItem) => void;
   onOpenFilm: (item: ConversationFeedItem) => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   // Someone sending you a film is the point at which you most want to know
   // what it is, and the only thing on offer used to be adding it unseen.
   // Tapping the poster or the title opens the full sheet instead.
@@ -364,7 +371,7 @@ function RecommendationCard({
               onPress={() => onAddToWatchlist(item)}
               activeOpacity={0.8}
             >
-              <Ionicons name="bookmark-outline" size={13} color="#FFF" style={{ marginRight: 4 }} />
+              <Ionicons name="bookmark-outline" size={13} color={colors.background} style={{ marginRight: 4 }} />
               <Text style={styles.addBtnText}>Add to Watchlist</Text>
             </TouchableOpacity>
           )}
@@ -376,7 +383,7 @@ function RecommendationCard({
             onPress={() => onOpenReply(item)}
             activeOpacity={0.8}
           >
-            <Ionicons name="happy-outline" size={14} color="#6B7280" style={{ marginRight: 4 }} />
+            <Ionicons name="happy-outline" size={14} color={colors.textMuted} style={{ marginRight: 4 }} />
             <Text style={styles.reactBtnPromptText}>React</Text>
           </TouchableOpacity>
         </View>
@@ -390,12 +397,14 @@ function RecommendationCard({
 // the text when it targets a specific film. ──
 
 function MessageBubble({ item, isMine }: { item: ConversationFeedItem; isMine: boolean }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
       <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
         {item.replyToFilmTitle && (
           <View style={styles.replyPreview}>
-            <Ionicons name="arrow-undo" size={11} color={isMine ? '#DBEAFE' : '#6B7280'} />
+            <Ionicons name="arrow-undo" size={11} color={isMine ? colors.primarySofter : colors.textMuted} />
             <Text
               style={[styles.replyPreviewText, isMine && styles.replyPreviewTextMine]}
               numberOfLines={1}
@@ -421,6 +430,8 @@ function SwipeToReplyRow({
   onReply: () => void;
   children: React.ReactNode;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const ref = useRef<Swipeable>(null);
 
   return (
@@ -430,7 +441,7 @@ function SwipeToReplyRow({
       overshootLeft={false}
       renderLeftActions={() => (
         <View style={styles.swipeReplyHint}>
-          <Ionicons name="arrow-undo" size={20} color="#0066FF" />
+          <Ionicons name="arrow-undo" size={20} color={colors.primary} />
         </View>
       )}
       onSwipeableWillOpen={() => {
@@ -445,6 +456,8 @@ function SwipeToReplyRow({
 }
 
 export default function InboxThreadScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const { userId, username } = useLocalSearchParams<{ userId: string; username: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -566,7 +579,7 @@ export default function InboxThreadScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerCenter}
@@ -589,7 +602,7 @@ export default function InboxThreadScreen() {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#0066FF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -615,7 +628,7 @@ export default function InboxThreadScreen() {
           }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="film-outline" size={48} color="#D1D5DB" />
+              <Ionicons name="film-outline" size={48} color={colors.iconFaint} />
               <Text style={styles.emptyText}>No messages with this person yet. Say hi below.</Text>
             </View>
           }
@@ -631,7 +644,7 @@ export default function InboxThreadScreen() {
           message even when no recommendation exists between them yet. */}
       <View style={[styles.composerBar, { paddingBottom: composerOpen ? 10 : insets.bottom + 10 }]}>
         <TouchableOpacity style={styles.composerBtn} onPress={openStandalone} activeOpacity={0.8}>
-          <Ionicons name="happy-outline" size={16} color="#6B7280" style={{ marginRight: 8 }} />
+          <Ionicons name="happy-outline" size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
           <Text style={styles.composerBtnText}>Send a message…</Text>
         </TouchableOpacity>
       </View>
@@ -667,51 +680,51 @@ export default function InboxThreadScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4, marginRight: 8 },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   headerAvatar: { width: 38, height: 38, borderRadius: 19 },
-  headerAvatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  headerAvatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  headerName: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  headerSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  headerAvatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  headerAvatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  headerName: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text },
+  headerSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   filmCard: {
     flexDirection: 'row', gap: 14,
-    backgroundColor: '#FFF', paddingVertical: 12,
+    backgroundColor: c.background, paddingVertical: 12,
     maxWidth: '85%',
   },
   filmCardMine: { alignSelf: 'flex-end' },
   filmCardTheirs: { alignSelf: 'flex-start' },
   poster: { width: 80, height: 120, borderRadius: 8, flexShrink: 0 },
   filmInfo: { flex: 1 },
-  filmMeta: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
-  filmTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827', marginBottom: 4 },
-  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginBottom: 10 },
+  filmMeta: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.textFaint, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
+  filmTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text, marginBottom: 4 },
+  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginBottom: 10 },
 
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
 
   addBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0066FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: c.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
   },
-  addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.background },
 
   reactBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border,
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
   },
-  reactBtnPromptText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#6B7280' },
+  reactBtnPromptText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.textMuted },
 
   swipeReplyHint: {
     width: 64, alignItems: 'center', justifyContent: 'center',
@@ -724,31 +737,31 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 14, paddingVertical: 9,
   },
-  bubbleMine: { backgroundColor: '#0066FF', borderBottomRightRadius: 4 },
-  bubbleTheirs: { backgroundColor: '#F1F3F6', borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
-  bubbleTextMine: { color: '#FFFFFF' },
-  bubbleTime: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 3, marginHorizontal: 4 },
+  bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4 },
+  bubbleTheirs: { backgroundColor: c.bubbleOther, borderBottomLeftRadius: 4 },
+  bubbleText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
+  bubbleTextMine: { color: c.background },
+  bubbleTime: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 3, marginHorizontal: 4 },
 
   replyPreview: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     marginBottom: 4, opacity: 0.85,
   },
-  replyPreviewText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: '#6B7280', flexShrink: 1 },
-  replyPreviewTextMine: { color: '#DBEAFE' },
+  replyPreviewText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: c.textMuted, flexShrink: 1 },
+  replyPreviewTextMine: { color: c.primarySofter },
 
   composerBar: {
     paddingHorizontal: 16, paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1, borderTopColor: c.border,
+    backgroundColor: c.background,
   },
   composerBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceSubtle, borderWidth: 1, borderColor: c.border,
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10,
   },
-  composerBtnText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  composerBtnText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, transform: [{ scaleY: -1 }] },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center' },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center' },
 });

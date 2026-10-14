@@ -25,6 +25,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -62,11 +65,16 @@ const ICON: Record<ToastVariant, string> = {
   info: 'information-circle',
 };
 
-const ACCENT: Record<ToastVariant, string> = {
-  success: '#16A34A',
-  error: '#DC2626',
-  info: '#0066FF',
-};
+/**
+ * A function of the palette rather than a constant: these are semantic and
+ * have to follow the theme, and a module-level object is built once at
+ * import, before any palette exists.
+ */
+function accentFor(variant: ToastVariant, colors: Palette): string {
+  if (variant === 'success') return colors.success;
+  if (variant === 'error') return colors.destructiveStrong;
+  return colors.primary;
+}
 
 function ToastItem({
   toast,
@@ -77,10 +85,12 @@ function ToastItem({
   topOffset: number;
   onDismiss: (id: number) => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const variant = toast.variant ?? 'success';
-  const accent = ACCENT[variant];
+  const accent = accentFor(variant, colors);
   const icon = ICON[variant] as keyof typeof Ionicons.glyphMap;
 
   React.useEffect(() => {
@@ -151,6 +161,7 @@ function ToastItem({
 // ── Provider ───────────────────────────────────────────────────────────────────
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const [toasts, setToasts] = useState<ActiveToast[]>([]);
   const nextId = useRef(1);
@@ -184,7 +195,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
@@ -193,7 +204,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.background,
     borderRadius: 14,
     borderLeftWidth: 4,
     shadowColor: '#000',
@@ -218,13 +229,13 @@ const styles = StyleSheet.create({
   toastTitle: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#111827',
+    color: c.text,
     lineHeight: 19,
   },
   toastSubtitle: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     marginTop: 2,
     lineHeight: 17,
   },

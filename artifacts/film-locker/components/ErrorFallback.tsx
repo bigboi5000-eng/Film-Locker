@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { reloadAppAsync } from 'expo';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -19,6 +21,7 @@ export type ErrorFallbackProps = {
 };
 
 export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
@@ -167,7 +170,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     width: '100%',

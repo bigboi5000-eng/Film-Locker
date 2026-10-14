@@ -27,6 +27,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@clerk/expo';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 /** Per-account, so the key is completed with the Clerk user ID. */
 const WELCOME_SEEN_PREFIX = 'film-locker:hasSeenWelcome:';
@@ -34,6 +37,9 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ── Fireworks ────────────────────────────────────────────────────────────────
 
+// theme-ignore: fireworks over a dark splash. These are decoration rather
+// theme-ignore: than palette — they read the same on either theme, and the
+// theme-ignore: splash behind them is dark in both.
 const FIREWORK_COLORS = [
   '#0066FF', '#FF8C00', '#16A34A', '#EF4444', '#A855F7',
   '#F59E0B', '#EC4899', '#22D3EE', '#FACC15', '#F97316',
@@ -76,6 +82,7 @@ function pickColor(): string {
 }
 
 function FireworkBurst({ burst }: { burst: Burst }) {
+  const styles = useThemedStyles(makeStyles);
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -177,6 +184,7 @@ function FireworkBurst({ burst }: { burst: Burst }) {
 }
 
 function Fireworks() {
+  const styles = useThemedStyles(makeStyles);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const nextId = useRef(0);
 
@@ -303,6 +311,8 @@ const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; blurb: st
 ];
 
 function FeatureRow({ icon, title, blurb, index }: { icon: keyof typeof Ionicons.glyphMap; title: string; blurb: string; index: number }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -325,7 +335,7 @@ function FeatureRow({ icon, title, blurb, index }: { icon: keyof typeof Ionicons
       ]}
     >
       <View style={styles.featureIcon}>
-        <Ionicons name={icon} size={20} color="#0066FF" />
+        <Ionicons name={icon} size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.featureTitle}>{title}</Text>
@@ -338,6 +348,8 @@ function FeatureRow({ icon, title, blurb, index }: { icon: keyof typeof Ionicons
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function WelcomeScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isLoaded, isSignedIn, userId } = useAuth();
@@ -399,14 +411,14 @@ export default function WelcomeScreen() {
 
         <TouchableOpacity style={styles.cta} onPress={handleGetStarted} activeOpacity={0.85}>
           <Text style={styles.ctaText}>Aim for the bushes!</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+          <Ionicons name="arrow-forward" size={18} color={colors.background} style={{ marginLeft: 8 }} />
         </TouchableOpacity>
       </View>
     </LinearGradient>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1 },
   fireworksLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -441,7 +453,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: c.background,
     textAlign: 'center',
   },
   subtitle: {
@@ -470,7 +482,7 @@ const styles = StyleSheet.create({
   featureTitle: {
     fontSize: 15,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: c.background,
     marginBottom: 2,
   },
   featureBlurb: {
@@ -483,7 +495,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     height: 54,
     borderRadius: 14,
     marginTop: 24,
@@ -491,6 +503,6 @@ const styles = StyleSheet.create({
   ctaText: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: c.background,
   },
 });

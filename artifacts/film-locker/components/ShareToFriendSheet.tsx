@@ -32,6 +32,9 @@ import {
   useSendNotification,
   type NotificationUser,
 } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 interface ShareToFriendSheetProps {
   visible: boolean;
@@ -48,6 +51,8 @@ export function ShareToFriendSheet({
   filmTitle,
   posterUrl,
 }: ShareToFriendSheetProps) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const [query, setQuery] = useState('');
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [sendingTo, setSendingTo] = useState<string | null>(null);
@@ -107,10 +112,10 @@ export function ShareToFriendSheet({
         )}
         <Text style={styles.username}>{user.username ?? 'Unknown'}</Text>
         {sending ? (
-          <ActivityIndicator size="small" color="#0066FF" />
+          <ActivityIndicator size="small" color={colors.primary} />
         ) : alreadySent ? (
           <View style={styles.sentBadge}>
-            <Ionicons name="checkmark" size={14} color="#059669" />
+            <Ionicons name="checkmark" size={14} color={colors.successStrong} />
             <Text style={styles.sentText}>Sent!</Text>
           </View>
         ) : (
@@ -119,7 +124,7 @@ export function ShareToFriendSheet({
             onPress={() => handleSend(user)}
             activeOpacity={0.8}
           >
-            <Ionicons name="paper-plane-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
+            <Ionicons name="paper-plane-outline" size={14} color={colors.background} style={{ marginRight: 4 }} />
             <Text style={styles.sendBtnText}>Send</Text>
           </TouchableOpacity>
         )}
@@ -153,26 +158,26 @@ export function ShareToFriendSheet({
               </View>
             </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={22} color="#6B7280" />
+              <Ionicons name="close" size={22} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
           {/* Search */}
           <View style={styles.searchRow}>
-            <Ionicons name="search-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+            <Ionicons name="search-outline" size={16} color={colors.textFaint} style={{ marginRight: 8 }} />
             <TextInput
               style={styles.searchInput}
               value={query}
               onChangeText={setQuery}
               placeholder="Filter people…"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textFaint}
               autoCapitalize="none"
             />
           </View>
 
           {/* List */}
           {isLoading ? (
-            <ActivityIndicator color="#0066FF" style={{ marginVertical: 32 }} />
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: 32 }} />
           ) : filtered.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>
@@ -196,11 +201,11 @@ export function ShareToFriendSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
-    backgroundColor: '#FFF',
+    backgroundColor: c.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '75%',
@@ -208,53 +213,53 @@ const styles = StyleSheet.create({
   },
   handle: {
     width: 40, height: 4, borderRadius: 2,
-    backgroundColor: '#E5E7EB', alignSelf: 'center', marginTop: 10, marginBottom: 8,
+    backgroundColor: c.border, alignSelf: 'center', marginTop: 10, marginBottom: 8,
   },
 
   sheetHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingBottom: 14,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    borderBottomWidth: 1, borderBottomColor: c.surfaceAlt,
   },
   sheetHeaderInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   filmPoster: { width: 36, height: 54, borderRadius: 6, marginRight: 10 },
   sheetHeaderText: { flex: 1 },
-  sheetTitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginBottom: 2 },
-  sheetFilm: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  sheetTitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginBottom: 2 },
+  sheetFilm: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
   closeBtn: { padding: 4, marginLeft: 8 },
 
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginVertical: 12,
-    backgroundColor: '#F9FAFB', borderRadius: 8,
+    backgroundColor: c.surfaceSubtle, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    borderWidth: 1, borderColor: c.border,
   },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827', ...webInputReset },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text, ...webInputReset },
 
   list: { flex: 1 },
 
   userRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#F9FAFB',
+    borderBottomWidth: 1, borderBottomColor: c.surfaceSubtle,
   },
   avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
 
   sendBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  sendBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  sendBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
   sentBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#ECFDF5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    backgroundColor: c.successSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
   },
-  sentText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#059669' },
+  sentText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.successStrong },
 
   empty: { padding: 32, alignItems: 'center' },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', lineHeight: 20 },
 });

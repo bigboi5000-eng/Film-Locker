@@ -2,8 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 export function EmptyState() {
+  const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   return (
     <View style={styles.container}>
@@ -18,7 +21,7 @@ export function EmptyState() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',

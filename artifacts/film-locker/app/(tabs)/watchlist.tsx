@@ -41,6 +41,9 @@ import {
   looksLikeUrl,
   looksLikeSentence,
 } from '@/components/FilmSearchTools';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
@@ -67,6 +70,8 @@ interface SearchResultRowProps {
 }
 
 function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRowProps) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity
       style={styles.resultRow}
@@ -90,7 +95,7 @@ function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRo
       </View>
       {isSaved && (
         <View style={styles.savedBadge}>
-          <Ionicons name="bookmark" size={14} color="#FFFFFF" />
+          <Ionicons name="bookmark" size={14} color={colors.background} />
         </View>
       )}
     </TouchableOpacity>
@@ -111,6 +116,8 @@ interface ModalTarget {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function WatchlistScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { isSignedIn } = useAuth();
 
@@ -397,11 +404,11 @@ export default function WatchlistScreen() {
           ListEmptyComponent={
             tools.isRecommending ? (
               <View style={styles.searchingState}>
-                <ActivityIndicator color="#0066FF" />
+                <ActivityIndicator color={colors.primary} />
               </View>
             ) : (
               <View style={styles.emptyState}>
-                <Ionicons name="sparkles" size={48} color="#D1D5DB" />
+                <Ionicons name="sparkles" size={48} color={colors.iconFaint} />
                 <Text style={styles.emptyTitle}>Ask for a recommendation</Text>
                 <Text style={styles.emptySubtitle}>
                   e.g. "a 90 minute horror film similar to Texas Chainsaw"
@@ -423,11 +430,11 @@ export default function WatchlistScreen() {
           ListEmptyComponent={
             isSearchFetching ? (
               <View style={styles.searchingState}>
-                <ActivityIndicator color="#0066FF" />
+                <ActivityIndicator color={colors.primary} />
               </View>
             ) : (
               <View style={styles.emptyState}>
-                <Ionicons name="film-outline" size={48} color="#D1D5DB" />
+                <Ionicons name="film-outline" size={48} color={colors.iconFaint} />
                 <Text style={styles.emptyTitle}>No films found</Text>
                 <Text style={styles.emptySubtitle}>
                   Try a different title or check your spelling
@@ -472,7 +479,7 @@ export default function WatchlistScreen() {
           ]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="bookmark-outline" size={48} color="#D1D5DB" />
+              <Ionicons name="bookmark-outline" size={48} color={colors.iconFaint} />
               <Text style={styles.emptyTitle}>
                 {Object.keys(filters).length > 0
                   ? 'No films match your filters'
@@ -491,8 +498,8 @@ export default function WatchlistScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#0066FF"
-              colors={['#0066FF']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         />
@@ -527,8 +534,8 @@ export default function WatchlistScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   contentContainer: { paddingHorizontal: HORIZONTAL_PADDING },
 
   screenHeader: {
@@ -538,24 +545,24 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: c.border,
   },
   screenTitle: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
     letterSpacing: 0.5,
   },
   countBadge: {
     minWidth: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 7,
   },
-  countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFFFFF' },
+  countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: c.background },
 
   // Search / paste-link bar, plus the separate AI recommendation bar
   // Same shape as searchContainer but blue-tinted, so it reads as a distinct
@@ -564,7 +571,7 @@ const styles = StyleSheet.create({
   processingHint: {
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     marginHorizontal: HORIZONTAL_PADDING,
     marginBottom: 8,
   },
@@ -581,14 +588,14 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
-    color: '#9CA3AF',
+    color: c.textFaint,
     letterSpacing: 1.5,
   },
-  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
   clearSearchText: {
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
-    color: '#0066FF',
+    color: c.primary,
   },
 
   // Search result rows
@@ -598,33 +605,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: HORIZONTAL_PADDING,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: c.surfaceAlt,
   },
   resultPoster: {
     width: 42,
     height: 63,
     borderRadius: 6,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     marginRight: 12,
   },
   resultInfo: { flex: 1 },
   resultTitle: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#111827',
+    color: c.text,
     lineHeight: 19,
   },
   resultYear: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#FF8C00',
+    color: c.star,
     marginTop: 3,
   },
   savedBadge: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 10,
@@ -648,14 +655,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
-    color: '#374151',
+    color: c.textStrong,
     marginTop: 16,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 20,

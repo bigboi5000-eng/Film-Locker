@@ -40,6 +40,9 @@ import {
   getGetNotificationUsersQueryKey,
   type PublicUserProfile,
 } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 type Mode = 'followers' | 'following';
 
@@ -47,6 +50,8 @@ type Mode = 'followers' | 'following';
 type Relationship = 'self' | 'none' | 'pending' | 'accepted';
 
 export default function ConnectionsScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -157,7 +162,7 @@ export default function ConnectionsScreen() {
               <Text style={styles.youChipText}>You</Text>
             </View>
           ) : busyId === item.clerkId ? (
-            <ActivityIndicator size="small" color="#0066FF" />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : relationship === 'accepted' ? (
             <TouchableOpacity
               style={[styles.btn, styles.btnQuiet]}
@@ -193,7 +198,7 @@ export default function ConnectionsScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {params.username ? params.username : 'Connections'}
@@ -223,7 +228,7 @@ export default function ConnectionsScreen() {
 
       {active.isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#0066FF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -238,7 +243,7 @@ export default function ConnectionsScreen() {
             <RefreshControl
               refreshing={active.isRefetching}
               onRefresh={active.refetch}
-              tintColor="#0066FF"
+              tintColor={colors.primary}
             />
           }
           ListEmptyComponent={
@@ -246,7 +251,7 @@ export default function ConnectionsScreen() {
               <Ionicons
                 name={refused ? 'lock-closed-outline' : 'people-outline'}
                 size={48}
-                color="#D1D5DB"
+                color={colors.iconFaint}
               />
               <Text style={styles.emptyText}>
                 {refused
@@ -263,53 +268,53 @@ export default function ConnectionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { flex: 1, fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  headerTitle: { flex: 1, fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
 
   switcher: {
     flexDirection: 'row',
     marginHorizontal: 16, marginTop: 14, marginBottom: 6,
-    backgroundColor: '#F3F4F6', borderRadius: 10, padding: 3,
+    backgroundColor: c.surfaceAlt, borderRadius: 10, padding: 3,
   },
   switchBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  switchBtnActive: { backgroundColor: '#FFFFFF' },
-  switchText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
-  switchTextActive: { color: '#111827' },
+  switchBtnActive: { backgroundColor: c.background },
+  switchText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textFaint },
+  switchTextActive: { color: c.text },
 
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11 },
-  separator: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 72 },
+  separator: { height: 1, backgroundColor: c.surfaceAlt, marginLeft: 72 },
   avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.avatarFg },
   rowBody: { flex: 1 },
-  rowName: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  rowMeta: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+  rowName: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
+  rowMeta: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
 
   youChip: {
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: c.avatarBg,
   },
-  youChipText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#4F46E5' },
+  youChipText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.avatarFg },
 
-  btn: { backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 },
-  btnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
-  btnQuiet: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
-  btnQuietText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  btn: { backgroundColor: c.primary, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 },
+  btnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  btnQuiet: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  btnQuietText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   emptyText: {
-    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF',
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint,
     textAlign: 'center', lineHeight: 20,
   },
 });

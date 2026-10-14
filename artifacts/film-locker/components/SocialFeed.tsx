@@ -281,8 +281,7 @@ export function SocialFeedView() {
   );
 }
 
-const makeStyles = (c: Palette) =>
-  StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   sectionLabel: {

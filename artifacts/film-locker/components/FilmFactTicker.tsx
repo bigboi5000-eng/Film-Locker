@@ -14,6 +14,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { shuffledFacts } from '@/constants/filmFacts';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import type { Palette } from '@/constants/colors';
 
 /** How long a fact stays up. Long enough to read twice without hurrying. */
 const DWELL_MS = 7000;
@@ -36,6 +38,7 @@ export interface FilmFactTickerProps {
 }
 
 export function FilmFactTicker({ minHeight = 76, style }: FilmFactTickerProps) {
+  const styles = useThemedStyles(makeStyles);
   // Shuffled once per mount, so a wait never repeats itself and two waits in
   // a row do not open with the same fact.
   const order = useRef<string[]>(shuffledFacts()).current;
@@ -85,19 +88,19 @@ export function FilmFactTicker({ minHeight = 76, style }: FilmFactTickerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'flex-start', paddingHorizontal: 4 },
   label: {
     fontSize: 10,
     fontFamily: 'Inter_700Bold',
-    color: '#C2410C',
+    color: c.emphasis,
     letterSpacing: 1.2,
     marginBottom: 6,
   },
   fact: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: '#4B5563',
+    color: c.textBody,
     textAlign: 'center',
     lineHeight: 19,
   },

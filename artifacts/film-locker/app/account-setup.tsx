@@ -18,6 +18,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useGetMe, useUpdateMe, getGetMeQueryKey } from '@workspace/api-client-react';
 import { useToast } from '@/components/ToastProvider';
 import { webInputReset } from '@/lib/webInputReset';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 /**
  * Shown once, straight after the welcome tour, so the first thing someone
@@ -34,6 +37,8 @@ import { webInputReset } from '@/lib/webInputReset';
  * straight through.
  */
 export default function AccountSetupScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -96,7 +101,7 @@ export default function AccountSetupScreen() {
   if (isLoading) {
     return (
       <View style={[styles.root, styles.centred]}>
-        <ActivityIndicator color="#0066FF" />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -125,7 +130,7 @@ export default function AccountSetupScreen() {
           value={username}
           onChangeText={(v) => { setUsername(v); setError(null); }}
           placeholder="Your username"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           maxLength={30}
@@ -141,7 +146,7 @@ export default function AccountSetupScreen() {
           value={initials}
           onChangeText={setInitials}
           placeholder="e.g. JT"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           autoCapitalize="characters"
           autoCorrect={false}
           maxLength={5}
@@ -159,8 +164,8 @@ export default function AccountSetupScreen() {
           <Switch
             value={isPrivate}
             onValueChange={setIsPrivate}
-            trackColor={{ true: '#0066FF', false: '#E5E7EB' }}
-            thumbColor="#FFF"
+            trackColor={{ true: colors.primary, false: colors.border }}
+            thumbColor={colors.background}
           />
         </View>
 
@@ -173,11 +178,11 @@ export default function AccountSetupScreen() {
           activeOpacity={0.85}
         >
           {saving ? (
-            <ActivityIndicator color="#FFF" />
+            <ActivityIndicator color={colors.background} />
           ) : (
             <>
               <Text style={styles.primaryBtnText}>Save and continue</Text>
-              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+              <Ionicons name="arrow-forward" size={18} color={colors.background} style={{ marginLeft: 8 }} />
             </>
           )}
         </TouchableOpacity>
@@ -190,22 +195,22 @@ export default function AccountSetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   centred: { alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: '#111827' },
+  title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: c.text },
   subtitle: {
-    fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280',
+    fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted,
     marginTop: 6, marginBottom: 28,
   },
-  label: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827', marginBottom: 2 },
-  hint: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginBottom: 8 },
+  label: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.text, marginBottom: 2 },
+  hint: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginBottom: 8 },
   input: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    backgroundColor: c.surfaceSubtle,
+    borderWidth: 1, borderColor: c.border, borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, fontFamily: 'Inter_400Regular', color: '#111827',
+    fontSize: 16, fontFamily: 'Inter_400Regular', color: c.text,
     marginBottom: 22,
     ...webInputReset,
   },
@@ -215,16 +220,16 @@ const styles = StyleSheet.create({
   },
   toggleText: { flex: 1 },
   error: {
-    fontSize: 13, fontFamily: 'Inter_400Regular', color: '#DC2626',
+    fontSize: 13, fontFamily: 'Inter_400Regular', color: c.destructiveStrong,
     marginTop: 8, marginBottom: 4,
   },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#0066FF', borderRadius: 12,
+    backgroundColor: c.primary, borderRadius: 12,
     paddingVertical: 16, marginTop: 24,
   },
   btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.background },
   skipRow: { alignItems: 'center', paddingVertical: 16 },
-  skipText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+  skipText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.textMuted },
 });

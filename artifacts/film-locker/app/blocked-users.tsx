@@ -15,8 +15,13 @@ import {
   type PublicUserProfile,
 } from '@workspace/api-client-react';
 import { useToast } from '@/components/ToastProvider';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 export default function BlockedUsersScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -46,14 +51,14 @@ export default function BlockedUsersScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Blocked Users</Text>
       </View>
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#0066FF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -73,7 +78,7 @@ export default function BlockedUsersScreen() {
                 )}
                 <Text style={styles.username} numberOfLines={1}>{item.username ?? 'Unnamed user'}</Text>
                 {busy ? (
-                  <ActivityIndicator size="small" color="#0066FF" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <TouchableOpacity style={styles.unblockBtn} onPress={() => handleUnblock(item)} activeOpacity={0.8}>
                     <Text style={styles.unblockBtnText}>Unblock</Text>
@@ -84,7 +89,7 @@ export default function BlockedUsersScreen() {
           }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="shield-checkmark-outline" size={48} color="#D1D5DB" />
+              <Ionicons name="shield-checkmark-outline" size={48} color={colors.iconFaint} />
               <Text style={styles.emptyText}>You haven't blocked anyone.</Text>
             </View>
           }
@@ -95,33 +100,33 @@ export default function BlockedUsersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    borderBottomWidth: 1, borderBottomColor: c.surfaceAlt,
   },
   avatar: { width: 40, height: 40, borderRadius: 20 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
 
   unblockBtn: {
-    backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceAlt, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: c.border,
   },
-  unblockBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  unblockBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center' },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center' },
 });

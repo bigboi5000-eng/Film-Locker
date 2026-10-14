@@ -24,11 +24,16 @@ import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { confirmDestructive } from '@/lib/confirm';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 10;
 
 function WatchedScreenInner() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
@@ -135,7 +140,7 @@ function WatchedScreenInner() {
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="checkmark-circle-outline" size={48} color="#D1D5DB" />
+              <Ionicons name="checkmark-circle-outline" size={48} color={colors.iconFaint} />
               <Text style={styles.emptyTitle}>
                 {Object.keys(filters).length > 0 ? 'No films match your filters' : 'Nothing watched yet'}
               </Text>
@@ -151,8 +156,8 @@ function WatchedScreenInner() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#0066FF"
-              colors={['#0066FF']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         />
@@ -174,8 +179,8 @@ function WatchedScreenInner() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   contentContainer: { paddingHorizontal: HORIZONTAL_PADDING },
   screenHeader: {
     flexDirection: 'row',
@@ -184,24 +189,24 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: c.border,
   },
   screenTitle: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
     letterSpacing: 0.5,
   },
   countBadge: {
     minWidth: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#FF8C00',
+    backgroundColor: c.star,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 7,
   },
-  countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFFFFF' },
+  countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: c.background },
   sectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -213,10 +218,10 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
-    color: '#9CA3AF',
+    color: c.textFaint,
     letterSpacing: 1.5,
   },
-  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
   columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
   skeletonGrid: {
     flexDirection: 'row',
@@ -228,14 +233,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
-    color: '#374151',
+    color: c.textStrong,
     marginTop: 16,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 20,

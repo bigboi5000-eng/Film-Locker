@@ -22,8 +22,13 @@ import {
   getGetNotificationUsersQueryKey,
   type PublicUserProfile,
 } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 export default function PeopleScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -127,11 +132,11 @@ export default function PeopleScreen() {
         <View style={styles.userInfo}>
           <View style={styles.usernameRow}>
             <Text style={styles.username}>{user.username ?? 'Unnamed user'}</Text>
-            {user.isPrivate && <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginLeft: 4 }} />}
+            {user.isPrivate && <Ionicons name="lock-closed" size={12} color={colors.textFaint} style={{ marginLeft: 4 }} />}
           </View>
         </View>
         {busy ? (
-          <ActivityIndicator size="small" color="#0066FF" style={{ marginLeft: 12 }} />
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 12 }} />
         ) : state === 'accepted' ? (
           <TouchableOpacity style={styles.unfollowBtn} onPress={() => handleUnfollow(user)} activeOpacity={0.8}>
             <Text style={styles.unfollowBtnText}>Following</Text>
@@ -158,27 +163,27 @@ export default function PeopleScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Find People</Text>
       </View>
 
       {/* Search bar */}
       <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+        <Ionicons name="search-outline" size={18} color={colors.textFaint} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           value={query}
           onChangeText={setQuery}
           placeholder="Search by username or email…"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            <Ionicons name="close-circle" size={18} color={colors.textFaint} />
           </TouchableOpacity>
         )}
       </View>
@@ -193,7 +198,7 @@ export default function PeopleScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Search Results</Text>
                 {searchLoading ? (
-                  <ActivityIndicator color="#0066FF" style={{ marginVertical: 16 }} />
+                  <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
                 ) : searchResults.length === 0 ? (
                   <Text style={styles.emptyText}>No users found for "{debouncedQ}"</Text>
                 ) : (
@@ -212,7 +217,7 @@ export default function PeopleScreen() {
                     Following{following.length > 0 ? ` (${following.length})` : ''}
                   </Text>
                   {followsLoading ? (
-                    <ActivityIndicator color="#0066FF" style={{ marginVertical: 16 }} />
+                    <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
                   ) : following.length === 0 ? (
                     <Text style={styles.emptyText}>You're not following anyone yet. Search above to find people.</Text>
                   ) : (
@@ -241,26 +246,26 @@ export default function PeopleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
 
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     margin: 16, paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB', borderRadius: 10,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceSubtle, borderRadius: 10,
+    borderWidth: 1, borderColor: c.border,
   },
   searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1, paddingVertical: 12,
-    fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    fontSize: 15, fontFamily: 'Inter_400Regular', color: c.text,
     ...webInputReset,
   },
   clearBtn: { padding: 4 },
@@ -268,31 +273,31 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 16, marginBottom: 24 },
   sectionTitle: {
     fontSize: 13, fontFamily: 'Inter_600SemiBold',
-    color: '#9CA3AF', letterSpacing: 0.5, textTransform: 'uppercase',
+    color: c.textFaint, letterSpacing: 0.5, textTransform: 'uppercase',
     marginBottom: 12,
   },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', lineHeight: 20 },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, lineHeight: 20 },
 
   userRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    borderBottomWidth: 1, borderBottomColor: c.surfaceAlt,
   },
   avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.avatarFg },
   userInfo: { flex: 1 },
   usernameRow: { flexDirection: 'row', alignItems: 'center' },
-  username: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  email: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+  username: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
+  email: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
 
   followBtn: {
-    backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: c.primary, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
   },
-  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
   unfollowBtn: {
-    backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceAlt, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: c.border,
   },
-  unfollowBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  unfollowBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
 });

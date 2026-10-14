@@ -24,11 +24,16 @@ import {
   type Playlist,
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 type Tab = 'mine' | 'discover';
 type DiscoverMode = 'name' | 'film';
 
 export default function PlaylistsScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -114,7 +119,7 @@ export default function PlaylistsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Playlists</Text>
       </View>
@@ -139,7 +144,7 @@ export default function PlaylistsScreen() {
 
       {tab === 'mine' ? (
         myLoading ? (
-          <ActivityIndicator color="#0066FF" style={{ marginTop: 32 }} />
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
         ) : (
           <FlatList
             data={myPlaylists}
@@ -150,7 +155,7 @@ export default function PlaylistsScreen() {
             ListEmptyComponent={
               followedPlaylists.length > 0 ? null : (
                 <TouchableOpacity style={styles.emptyCard} onPress={() => setCreateVisible(true)} activeOpacity={0.8}>
-                  <Ionicons name="add-circle-outline" size={28} color="#0066FF" />
+                  <Ionicons name="add-circle-outline" size={28} color={colors.primary} />
                   <Text style={styles.emptyCardText}>Create your first playlist</Text>
                 </TouchableOpacity>
               )
@@ -204,37 +209,37 @@ export default function PlaylistsScreen() {
 
           {discoverMode === 'name' ? (
             <View style={styles.searchRow}>
-              <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+              <Ionicons name="search-outline" size={18} color={colors.textFaint} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 value={nameQuery}
                 onChangeText={setNameQuery}
                 placeholder="Search public playlists by name…"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textFaint}
                 autoCapitalize="none"
                 returnKeyType="search"
               />
               {nameQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setNameQuery('')} style={styles.clearBtn}>
-                  <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                  <Ionicons name="close-circle" size={18} color={colors.textFaint} />
                 </TouchableOpacity>
               )}
             </View>
           ) : (
             <View style={styles.searchRow}>
-              <Ionicons name="film-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+              <Ionicons name="film-outline" size={18} color={colors.textFaint} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 value={filmQuery}
                 onChangeText={(t) => { setFilmQuery(t); setSelectedFilm(null); }}
                 placeholder="Search for a film…"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textFaint}
                 autoCapitalize="none"
                 returnKeyType="search"
               />
               {filmQuery.length > 0 && (
                 <TouchableOpacity onPress={handleClearFilm} style={styles.clearBtn}>
-                  <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                  <Ionicons name="close-circle" size={18} color={colors.textFaint} />
                 </TouchableOpacity>
               )}
             </View>
@@ -243,7 +248,7 @@ export default function PlaylistsScreen() {
           {/* Film picker dropdown */}
           {discoverMode === 'film' && !selectedFilm && debouncedFilm.length >= 2 && (
             filmResultsLoading ? (
-              <ActivityIndicator color="#0066FF" style={{ marginTop: 12 }} />
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
             ) : filmResults.length === 0 ? (
               <Text style={styles.emptyText}>No films found for "{debouncedFilm}"</Text>
             ) : (
@@ -258,7 +263,7 @@ export default function PlaylistsScreen() {
                       <Image source={{ uri: item.posterUrl }} style={styles.filmPoster} contentFit="cover" />
                     ) : (
                       <View style={[styles.filmPoster, styles.filmPosterFallback]}>
-                        <Ionicons name="film-outline" size={16} color="#D1D5DB" />
+                        <Ionicons name="film-outline" size={16} color={colors.iconFaint} />
                       </View>
                     )}
                     <View style={{ flex: 1 }}>
@@ -274,7 +279,7 @@ export default function PlaylistsScreen() {
           {/* Results */}
           {(discoverMode === 'name' ? debouncedName.length >= 2 : Boolean(selectedFilm)) && (
             publicLoading ? (
-              <ActivityIndicator color="#0066FF" style={{ marginTop: 16 }} />
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
             ) : publicPlaylists.length === 0 ? (
               <Text style={styles.emptyText}>No public playlists found.</Text>
             ) : (
@@ -298,7 +303,7 @@ export default function PlaylistsScreen() {
 
       {tab === 'mine' && (
         <TouchableOpacity style={styles.fab} onPress={() => setCreateVisible(true)} activeOpacity={0.85}>
-          <Ionicons name="add" size={26} color="#FFF" />
+          <Ionicons name="add" size={26} color={colors.background} />
         </TouchableOpacity>
       )}
 
@@ -312,80 +317,80 @@ export default function PlaylistsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  headerTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
 
   tabRow: {
     flexDirection: 'row', marginHorizontal: 16, marginTop: 14,
-    backgroundColor: '#F3F4F6', borderRadius: 10, padding: 3,
+    backgroundColor: c.surfaceAlt, borderRadius: 10, padding: 3,
   },
   tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  tabBtnActive: { backgroundColor: '#FFFFFF' },
-  tabBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
-  tabBtnTextActive: { color: '#111827' },
+  tabBtnActive: { backgroundColor: c.background },
+  tabBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.textFaint },
+  tabBtnTextActive: { color: c.text },
 
   modeRow: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 16 },
   modeBtn: {
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16,
-    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border,
   },
-  modeBtnActive: { backgroundColor: '#EFF6FF', borderColor: '#93C5FD' },
-  modeBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#6B7280' },
-  modeBtnTextActive: { color: '#0066FF' },
+  modeBtnActive: { backgroundColor: c.primarySoft, borderColor: c.primaryMid },
+  modeBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textMuted },
+  modeBtnTextActive: { color: c.primary },
 
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB', borderRadius: 10,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceSubtle, borderRadius: 10,
+    borderWidth: 1, borderColor: c.border,
   },
   searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1, paddingVertical: 12,
-    fontSize: 15, fontFamily: 'Inter_400Regular', color: '#111827',
+    fontSize: 15, fontFamily: 'Inter_400Regular', color: c.text,
     ...webInputReset,
   },
   clearBtn: { padding: 4 },
 
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 16, marginHorizontal: 16 },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 16, marginHorizontal: 16 },
 
   filmRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 8,
   },
   filmPoster: { width: 34, height: 50, borderRadius: 6 },
-  filmPosterFallback: { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  filmTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  filmPosterFallback: { backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  filmTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.text },
+  filmYear: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
 
   followingSection: { marginTop: 28, paddingHorizontal: 16 },
   followingLabel: {
     fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
     letterSpacing: 0.8,
-    color: '#9CA3AF',
+    color: c.textFaint,
     marginBottom: 12,
   },
   followingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
 
   emptyCard: {
     marginHorizontal: 16, height: 100, borderRadius: 12,
-    backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center',
-    gap: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: '#93C5FD',
+    backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center',
+    gap: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: c.primaryMid,
   },
-  emptyCardText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#0066FF' },
+  emptyCardText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.primary },
 
   fab: {
     position: 'absolute', right: 20, bottom: 28,
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: '#0066FF', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
   },
 });

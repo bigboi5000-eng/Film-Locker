@@ -15,6 +15,9 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGetPerson, getGetPersonQueryKey, type TmdbMovieCard } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 /**
  * A director or actor, and everything they have made.
@@ -45,6 +48,8 @@ const GRID_CARD_WIDTH =
   ) - 1;
 
 export default function PersonScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const { personId } = useLocalSearchParams<{ personId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -85,7 +90,7 @@ export default function PersonScreen() {
   if (isLoading) {
     return (
       <View style={[styles.root, styles.centred]}>
-        <ActivityIndicator color="#0066FF" />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -105,7 +110,7 @@ export default function PersonScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="chevron-back" size={24} color="#111827" />
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{person.name}</Text>
       </View>
@@ -119,7 +124,7 @@ export default function PersonScreen() {
             <Image source={{ uri: person.profileUrl }} style={styles.portrait} contentFit="cover" />
           ) : (
             <View style={[styles.portrait, styles.portraitFallback]}>
-              <Ionicons name="person" size={34} color="#9CA3AF" />
+              <Ionicons name="person" size={34} color={colors.textFaint} />
             </View>
           )}
           <Text style={styles.name}>{person.name}</Text>
@@ -177,7 +182,7 @@ export default function PersonScreen() {
                   <Ionicons
                     name={asGrid ? 'chevron-up' : 'chevron-down'}
                     size={18}
-                    color="#0066FF"
+                    color={colors.primary}
                   />
                 ) : null}
               </TouchableOpacity>
@@ -227,21 +232,21 @@ export default function PersonScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   centred: { alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 8, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    borderBottomWidth: 1, borderBottomColor: c.surfaceAlt,
   },
   backBtn: { padding: 6 },
-  headerTitle: { flex: 1, fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827', marginLeft: 4 },
+  headerTitle: { flex: 1, fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text, marginLeft: 4 },
   identity: { alignItems: 'center', paddingTop: 24, paddingHorizontal: 24 },
-  portrait: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#F3F4F6' },
+  portrait: { width: 110, height: 110, borderRadius: 55, backgroundColor: c.surfaceAlt },
   portraitFallback: { alignItems: 'center', justifyContent: 'center' },
-  name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: '#111827', marginTop: 14, textAlign: 'center' },
-  knownFor: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 4 },
+  name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: c.text, marginTop: 14, textAlign: 'center' },
+  knownFor: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted, marginTop: 4 },
   section: { paddingHorizontal: 20, marginTop: 26 },
   sectionHeader: {
     flexDirection: 'row',
@@ -249,16 +254,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#111827' },
+  sectionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', color: c.text },
   // GRID_GAP, not a literal: the card width is derived from it, so a change
   // here with the constant left behind is how three columns become two.
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
-  bio: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#4B5563', lineHeight: 21 },
+  bio: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textBody, lineHeight: 21 },
   card: { width: 112 },
-  poster: { width: 112, height: 168, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  cardTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
-  cardYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
-  errorTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  poster: { width: 112, height: 168, borderRadius: 8, backgroundColor: c.surfaceAlt },
+  cardTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.text, marginTop: 6 },
+  cardYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
+  errorTitle: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text },
   backLink: { marginTop: 12 },
-  backLinkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  backLinkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.primary },
 });

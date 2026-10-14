@@ -57,6 +57,9 @@ import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
 import { useToast } from '@/components/ToastProvider';
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 const { width: W, height: H } = Dimensions.get('window');
 const POSTER_HEIGHT = H * 0.45;
@@ -85,6 +88,8 @@ function StarRating({
   value: number | null | undefined;
   onChange: (n: number) => void;
 }) {
+  const colors = useColors();
+  const starStyles = useThemedStyles(makeStarStyles);
   return (
     <View style={starStyles.row}>
       {[1, 2, 3, 4, 5].map((n) => (
@@ -92,7 +97,7 @@ function StarRating({
           <Ionicons
             name={typeof value === 'number' && value >= n ? 'star' : 'star-outline'}
             size={28}
-            color="#FF8C00"
+            color={colors.star}
             style={{ marginHorizontal: 4 }}
           />
         </TouchableOpacity>
@@ -101,7 +106,7 @@ function StarRating({
   );
 }
 
-const starStyles = StyleSheet.create({
+const makeStarStyles = (c: Palette) => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
 });
 
@@ -113,10 +118,12 @@ const PROVIDER_TYPE_LABEL: Record<string, string> = {
   buy: 'Rent / Buy',
 };
 
+// theme-ignore: a provider badge's green and orange are the badge's own,
+// theme-ignore: and this is module scope, where no palette hook can reach.
 const PROVIDER_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
-  flatrate: { bg: '#D1FAE5', text: '#065F46' }, // green — subscription
-  rent:     { bg: '#FFF0DC', text: '#FF8C00' }, // orange — rent/buy
-  buy:      { bg: '#FFF0DC', text: '#FF8C00' }, // orange — rent/buy
+  flatrate: { bg: '#D1FAE5', text: '#065F46' }, // theme-ignore green — subscription
+  rent:     { bg: '#FFF0DC', text: '#FF8C00' }, // theme-ignore orange — rent/buy
+  buy:      { bg: '#FFF0DC', text: '#FF8C00' }, // theme-ignore orange — rent/buy
 };
 
 async function openProviderLink(provider: WatchProvider, movieTitle: string) {
@@ -145,9 +152,10 @@ function ProviderPill({
   provider: WatchProvider;
   movieTitle: string;
 }) {
+  const providerStyles = useThemedStyles(makeProviderStyles);
   const typeKey = provider.type ?? 'flatrate';
   const label = PROVIDER_TYPE_LABEL[typeKey] ?? typeKey;
-  const colors = PROVIDER_TYPE_COLORS[typeKey] ?? PROVIDER_TYPE_COLORS.flatrate;
+  const badgeTone = PROVIDER_TYPE_COLORS[typeKey] ?? PROVIDER_TYPE_COLORS.flatrate;
 
   return (
     <TouchableOpacity
@@ -173,8 +181,8 @@ function ProviderPill({
       <Text style={providerStyles.name} numberOfLines={1}>
         {provider.provider_name}
       </Text>
-      <View style={[providerStyles.badge, { backgroundColor: colors.bg }]}>
-        <Text style={[providerStyles.badgeText, { color: colors.text }]}>
+      <View style={[providerStyles.badge, { backgroundColor: badgeTone.bg }]}>
+        <Text style={[providerStyles.badgeText, { color: badgeTone.text }]}>
           {label}
         </Text>
       </View>
@@ -182,12 +190,12 @@ function ProviderPill({
   );
 }
 
-const providerStyles = StyleSheet.create({
+const makeProviderStyles = (c: Palette) => StyleSheet.create({
   pill: { alignItems: 'center', marginRight: 14, width: 64 },
   logo: { width: 48, height: 48, borderRadius: 10, marginBottom: 4 },
-  logoFallback: { backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' },
-  logoFallbackText: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#6B7280' },
-  name: { fontSize: 10, fontFamily: 'Inter_400Regular', color: '#6B7280', textAlign: 'center', marginBottom: 3 },
+  logoFallback: { backgroundColor: c.border, alignItems: 'center', justifyContent: 'center' },
+  logoFallbackText: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.textMuted },
+  name: { fontSize: 10, fontFamily: 'Inter_400Regular', color: c.textMuted, textAlign: 'center', marginBottom: 3 },
   badge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
   badgeText: { fontSize: 9, fontFamily: 'Inter_700Bold', letterSpacing: 0.2 },
 });
@@ -195,6 +203,7 @@ const providerStyles = StyleSheet.create({
 // ── Genre tag ──────────────────────────────────────────────────────────────────
 
 function GenreTag({ label }: { label: string }) {
+  const tagStyles = useThemedStyles(makeTagStyles);
   return (
     <View style={tagStyles.tag}>
       <Text style={tagStyles.text}>{label}</Text>
@@ -202,21 +211,22 @@ function GenreTag({ label }: { label: string }) {
   );
 }
 
-const tagStyles = StyleSheet.create({
+const makeTagStyles = (c: Palette) => StyleSheet.create({
   tag: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.primarySoft,
     marginRight: 6,
     marginBottom: 6,
   },
-  text: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#0066FF' },
+  text: { fontSize: 12, fontFamily: 'Inter_500Medium', color: c.primary },
 });
 
 // ── Community Stars (read-only display) ───────────────────────────────────────
 
 function CommunityStars({ value }: { value: number | null | undefined }) {
+  const colors = useColors();
   const filled = Math.round(value ?? 0);
   return (
     <View style={{ flexDirection: 'row' }}>
@@ -225,7 +235,7 @@ function CommunityStars({ value }: { value: number | null | undefined }) {
           key={n}
           name={filled >= n ? 'star' : 'star-outline'}
           size={18}
-          color="#FF8C00"
+          color={colors.star}
           style={{ marginRight: 2 }}
         />
       ))}
@@ -244,6 +254,8 @@ function CommentRow({
   onDelete: (id: number) => void;
   onReport: (comment: FilmComment) => void;
 }) {
+  const colors = useColors();
+  const commentStyles = useThemedStyles(makeCommentStyles);
   const router = useRouter();
   const initials = (comment.username ?? comment.userId.slice(0, 2)).slice(0, 2).toUpperCase();
   const timeAgo = formatRelative(new Date(comment.createdAt));
@@ -281,7 +293,7 @@ function CommentRow({
                   key={n}
                   name={comment.rating! >= n ? 'star' : 'star-outline'}
                   size={11}
-                  color="#FF8C00"
+                  color={colors.star}
                 />
               ))}
             </View>
@@ -293,7 +305,7 @@ function CommentRow({
               hitSlop={10}
               style={commentStyles.deleteBtn}
             >
-              <Ionicons name="trash-outline" size={14} color="#9CA3AF" />
+              <Ionicons name="trash-outline" size={14} color={colors.textFaint} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -301,7 +313,7 @@ function CommentRow({
               hitSlop={10}
               style={commentStyles.deleteBtn}
             >
-              <Ionicons name="flag-outline" size={14} color="#9CA3AF" />
+              <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
             </TouchableOpacity>
           )}
         </View>
@@ -335,6 +347,8 @@ function ReportSheet({
   onClose: () => void;
   submitting: boolean;
 }) {
+  const colors = useColors();
+  const reportStyles = useThemedStyles(makeReportStyles);
   const [reason, setReason] = useState('');
 
   const handleClose = useCallback(() => {
@@ -354,7 +368,7 @@ function ReportSheet({
             value={reason}
             onChangeText={(t) => setReason(t.slice(0, 1000))}
             placeholder="What's wrong with this? (required)"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             multiline
             maxLength={1000}
             textAlignVertical="top"
@@ -380,7 +394,7 @@ function ReportSheet({
             disabled={!reason.trim() || submitting}
             activeOpacity={0.85}
           >
-            {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
+            {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={reportStyles.blockBtn} onPress={onBlock} activeOpacity={0.85}>
             <Text style={reportStyles.blockBtnText}>Block {targetUsername}</Text>
@@ -394,39 +408,39 @@ function ReportSheet({
   );
 }
 
-const reportStyles = StyleSheet.create({
+const makeReportStyles = (c: Palette) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
-    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: c.background, borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24,
   },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 17, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 12 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginBottom: 16 },
+  title: { fontSize: 17, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 12 },
   input: {
-    minHeight: 80, maxHeight: 140, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    minHeight: 80, maxHeight: 140, borderWidth: 1, borderColor: c.border, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontFamily: 'Inter_400Regular',
-    color: '#111827', backgroundColor: '#F9FAFB', marginBottom: 12,
+    color: c.text, backgroundColor: c.surfaceSubtle, marginBottom: 12,
     ...webInputReset,
   },
   assurance: {
-    fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280',
+    fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted,
     lineHeight: 17, marginBottom: 12,
   },
-  assuranceLink: { color: '#0066FF', fontFamily: 'Inter_600SemiBold' },
+  assuranceLink: { color: c.primary, fontFamily: 'Inter_600SemiBold' },
   submitBtn: {
-    backgroundColor: '#0066FF', borderRadius: 10, paddingVertical: 13,
+    backgroundColor: c.primary, borderRadius: 10, paddingVertical: 13,
     alignItems: 'center', marginBottom: 10,
   },
   btnDisabled: { opacity: 0.5 },
-  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
   blockBtn: {
     borderRadius: 10, paddingVertical: 13, alignItems: 'center',
     borderWidth: 1, borderColor: '#FCA5A5', marginBottom: 10,
   },
-  blockBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#DC2626' },
+  blockBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.destructiveStrong },
   cancelBtn: { alignItems: 'center', paddingVertical: 8 },
-  cancelBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+  cancelBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.textMuted },
 });
 
 function formatRelative(date: Date): string {
@@ -463,17 +477,17 @@ function formatRuntime(minutes: number | null | undefined): string | null {
   return `${hrs}h ${mins}m`;
 }
 
-const commentStyles = StyleSheet.create({
+const makeCommentStyles = (c: Palette) => StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   avatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: c.avatarFg },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
-  username: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  username: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.text },
   ratingRow: { flexDirection: 'row', gap: 1 },
-  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
   deleteBtn: { marginLeft: 'auto' },
-  body: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#374151', lineHeight: 20 },
+  body: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textStrong, lineHeight: 20 },
 });
 
 // ── Community section ─────────────────────────────────────────────────────────
@@ -496,6 +510,8 @@ function CommunitySection({
    */
   onRatingChanged?: (rating: number | null) => void;
 }) {
+  const colors = useColors();
+  const communityStyles = useThemedStyles(makeCommunityStyles);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [commentText, setCommentText] = useState('');
@@ -647,14 +663,14 @@ function CommunitySection({
     <View style={communityStyles.container}>
       {/* Section header */}
       <View style={communityStyles.headerRow}>
-        <Ionicons name="people-outline" size={16} color="#111827" style={{ marginRight: 6 }} />
+        <Ionicons name="people-outline" size={16} color={colors.text} style={{ marginRight: 6 }} />
         <Text style={communityStyles.title}>COMMUNITY</Text>
       </View>
 
       {/* Aggregate score */}
       <View style={communityStyles.scoreRow}>
         {scoreLoading ? (
-          <ActivityIndicator size="small" color="#0066FF" />
+          <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <>
             <CommunityStars value={average} />
@@ -676,7 +692,7 @@ function CommunitySection({
           onChange={handleCommunityRating}
         />
         {(ratingPending || ratingDeleting) && (
-          <ActivityIndicator size="small" color="#0066FF" style={{ marginLeft: 8 }} />
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 8 }} />
         )}
       </View>
 
@@ -689,7 +705,7 @@ function CommunitySection({
           <TextInput
             style={communityStyles.input}
             placeholder="Share your thoughts… (280 chars)"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             value={commentText}
             onChangeText={(t) => setCommentText(t.slice(0, COMMENT_MAX))}
             multiline
@@ -710,7 +726,7 @@ function CommunitySection({
               activeOpacity={0.8}
             >
               {commentPending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={colors.background} />
               ) : (
                 <Text style={communityStyles.postBtnText}>Post</Text>
               )}
@@ -730,7 +746,7 @@ function CommunitySection({
 
       {/* Comments list */}
       {commentsLoading ? (
-        <ActivityIndicator size="small" color="#0066FF" style={{ marginTop: 12 }} />
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 12 }} />
       ) : comments.length === 0 ? (
         <Text style={communityStyles.emptyText}>
           No comments yet. Be the first to share your thoughts!
@@ -763,18 +779,18 @@ function CommunitySection({
   );
 }
 
-const communityStyles = StyleSheet.create({
+const makeCommunityStyles = (c: Palette) => StyleSheet.create({
   container: {
     marginTop: 4,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: c.border,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   title: {
     fontSize: 13,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
     letterSpacing: 0.5,
   },
   scoreRow: {
@@ -786,12 +802,12 @@ const communityStyles = StyleSheet.create({
   scoreText: {
     fontSize: 20,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
   },
   ratingCount: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
   },
   userRatingRow: {
     flexDirection: 'row',
@@ -802,21 +818,21 @@ const communityStyles = StyleSheet.create({
   userRatingLabel: {
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
-    color: '#6B7280',
+    color: c.textMuted,
   },
-  divider: { height: 1, backgroundColor: '#F3F4F6', marginBottom: 16 },
+  divider: { height: 1, backgroundColor: c.surfaceAlt, marginBottom: 16 },
   compose: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: c.surfaceSubtle,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
     padding: 12,
     marginBottom: 10,
   },
   input: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#111827',
+    color: c.text,
     minHeight: 60,
     maxHeight: 120,
     ...webInputReset,
@@ -830,40 +846,40 @@ const communityStyles = StyleSheet.create({
   charCount: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
   },
   postBtn: {
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 8,
     minWidth: 60,
     alignItems: 'center',
   },
-  postBtnDisabled: { backgroundColor: '#93C5FD' },
+  postBtnDisabled: { backgroundColor: c.primaryMid },
   postBtnText: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
   },
   signInHint: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    color: '#6B7280',
+    color: c.textMuted,
     marginBottom: 10,
     fontStyle: 'italic',
   },
   disclaimer: {
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     marginBottom: 16,
     fontStyle: 'italic',
   },
   emptyText: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     textAlign: 'center',
     marginVertical: 16,
   },
@@ -874,7 +890,7 @@ const communityStyles = StyleSheet.create({
   loadMoreText: {
     fontSize: 14,
     fontFamily: 'Inter_500Medium',
-    color: '#0066FF',
+    color: c.primary,
   },
 });
 
@@ -893,6 +909,8 @@ function RecommendSheet({
   filmTitle: string;
   posterUrl: string;
 }) {
+  const colors = useColors();
+  const rsStyles = useThemedStyles(makeRsStyles);
   const insets = useSafeAreaInsets();
   const { data, isLoading } = useGetNotificationUsers({ query: { queryKey: getGetNotificationUsersQueryKey(), enabled: visible } });
   const { mutateAsync: sendNotification, isPending } = useSendNotification();
@@ -951,7 +969,7 @@ function RecommendSheet({
             activeOpacity={0.8}
           >
             {sent ? (
-              <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+              <Ionicons name="checkmark" size={15} color={colors.background} />
             ) : (
               <Text style={rsStyles.sendBtnText}>Send</Text>
             )}
@@ -974,7 +992,7 @@ function RecommendSheet({
         <View style={rsStyles.header}>
           <Text style={rsStyles.title}>Recommend to…</Text>
           <TouchableOpacity onPress={handleClose} hitSlop={8}>
-            <Ionicons name="close" size={22} color="#111827" />
+            <Ionicons name="close" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -985,10 +1003,10 @@ function RecommendSheet({
         </View>
 
         {isLoading ? (
-          <ActivityIndicator size="large" color="#0066FF" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
         ) : users.length === 0 ? (
           <View style={rsStyles.empty}>
-            <Ionicons name="people-outline" size={48} color="#D1D5DB" />
+            <Ionicons name="people-outline" size={48} color={colors.iconFaint} />
             <Text style={rsStyles.emptyText}>Follow someone first to recommend films to them.</Text>
           </View>
         ) : (
@@ -1005,8 +1023,8 @@ function RecommendSheet({
   );
 }
 
-const rsStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeRsStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1014,22 +1032,22 @@ const rsStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: c.border,
   },
-  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827' },
+  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
   filmPill: {
     flexDirection: 'row',
     alignItems: 'center',
     margin: 16,
     padding: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: c.surfaceSubtle,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
     gap: 12,
   },
   pillPoster: { width: 40, height: 60, borderRadius: 6 },
-  pillTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#111827', flex: 1 },
+  pillTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.text, flex: 1 },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1038,11 +1056,11 @@ const rsStyles = StyleSheet.create({
     gap: 12,
   },
   avatar: { width: 40, height: 40, borderRadius: 20, flexShrink: 0 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
-  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: '#111827' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
   sendBtn: {
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 8,
@@ -1051,10 +1069,10 @@ const rsStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnSent: { backgroundColor: '#10B981' },
-  sendBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
-  separator: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 72 },
+  sendBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
+  separator: { height: 1, backgroundColor: c.surfaceAlt, marginLeft: 72 },
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 32 },
+  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', paddingHorizontal: 32 },
 });
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -1079,6 +1097,8 @@ function SimilarFilms({
   visible: boolean;
   onPick: (movie: TmdbMovieCard) => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const { data, isLoading } = useGetSimilarMovies(tmdbId, {
     query: { queryKey: getGetSimilarMoviesQueryKey(tmdbId), enabled: visible },
   });
@@ -1090,7 +1110,7 @@ function SimilarFilms({
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>More like this</Text>
       {isLoading ? (
-        <ActivityIndicator color="#0066FF" style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+        <ActivityIndicator color={colors.primary} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           {movies.map((m) => (
@@ -1121,6 +1141,8 @@ export function FilmDetailModal({
   overview: overviewProp,
   savedMovie: savedMovieProp,
 }: FilmDetailModalProps) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   /**
    * The film currently on screen, which starts as the one the parent asked
    * for and changes when someone taps through "More like this".
@@ -1323,7 +1345,7 @@ export function FilmDetailModal({
               made it untappable, since the opaque status bar was
               intercepting the touch before it reached the button). */}
           <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 12 }]} onPress={handleClose} hitSlop={12}>
-            <Ionicons name="close" size={22} color="#111827" />
+            <Ionicons name="close" size={22} color={colors.text} />
           </TouchableOpacity>
 
           <ScrollView
@@ -1362,14 +1384,14 @@ export function FilmDetailModal({
               {/* Director + Language */}
               {isLoading && (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#0066FF" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                   <Text style={styles.loadingText}>Loading details…</Text>
                 </View>
               )}
 
               {displayRuntime ? (
                 <View style={styles.metaRow}>
-                  <Ionicons name="time-outline" size={15} color="#6B7280" style={styles.metaIcon} />
+                  <Ionicons name="time-outline" size={15} color={colors.textMuted} style={styles.metaIcon} />
                   <Text style={styles.metaLabel}>Runtime</Text>
                   <Text style={styles.metaValue}>{displayRuntime}</Text>
                 </View>
@@ -1387,7 +1409,7 @@ export function FilmDetailModal({
 
               {displayDirector ? (
                 <View style={styles.metaRow}>
-                  <Ionicons name="film-outline" size={15} color="#6B7280" style={styles.metaIcon} />
+                  <Ionicons name="film-outline" size={15} color={colors.textMuted} style={styles.metaIcon} />
                   <Text style={styles.metaLabel}>Director</Text>
                   {directorRef ? (
                     <Text
@@ -1404,7 +1426,7 @@ export function FilmDetailModal({
 
               {displayLanguage ? (
                 <View style={styles.metaRow}>
-                  <Ionicons name="language-outline" size={15} color="#6B7280" style={styles.metaIcon} />
+                  <Ionicons name="language-outline" size={15} color={colors.textMuted} style={styles.metaIcon} />
                   <Text style={styles.metaLabel}>Language</Text>
                   <Text style={styles.metaValue}>{displayLanguage}</Text>
                 </View>
@@ -1484,9 +1506,9 @@ export function FilmDetailModal({
                   onPress={openWebSearch}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="globe-outline" size={16} color="#0066FF" />
+                  <Ionicons name="globe-outline" size={16} color={colors.primary} />
                   <Text style={styles.webSearchText}>Search the web for this film</Text>
-                  <Ionicons name="open-outline" size={14} color="#0066FF" />
+                  <Ionicons name="open-outline" size={14} color={colors.primary} />
                 </TouchableOpacity>
               </View>
 
@@ -1537,13 +1559,13 @@ export function FilmDetailModal({
                     activeOpacity={0.85}
                   >
                     {isWatchingPending ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      <ActivityIndicator color={colors.background} size="small" />
                     ) : (
                       <>
                         <Ionicons
                           name={currentWatched ? 'bookmark-outline' : 'checkmark-circle-outline'}
                           size={20}
-                          color="#FFFFFF"
+                          color={colors.background}
                           style={{ marginRight: 8 }}
                         />
                         <Text style={styles.actionButtonText}>
@@ -1566,13 +1588,13 @@ export function FilmDetailModal({
                     activeOpacity={0.85}
                   >
                     {isAddingPending ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      <ActivityIndicator color={colors.background} size="small" />
                     ) : (
                       <>
                         <Ionicons
                           name="bookmark-outline"
                           size={20}
-                          color="#FFFFFF"
+                          color={colors.background}
                           style={{ marginRight: 8 }}
                         />
                         <Text style={styles.actionButtonText}>Add to Watchlist</Text>
@@ -1589,7 +1611,7 @@ export function FilmDetailModal({
                     <Ionicons
                       name="checkmark-circle-outline"
                       size={18}
-                      color="#0066FF"
+                      color={colors.primary}
                       style={{ marginRight: 5 }}
                     />
                     <Text style={styles.actionButtonWatchedText} numberOfLines={1}>Watched</Text>
@@ -1607,7 +1629,7 @@ export function FilmDetailModal({
                   <Ionicons
                     name="paper-plane-outline"
                     size={20}
-                    color="#0066FF"
+                    color={colors.primary}
                     style={{ marginRight: 8 }}
                   />
                   <Text style={styles.actionButtonRecommendText}>Recommend to…</Text>
@@ -1624,7 +1646,7 @@ export function FilmDetailModal({
                   <Ionicons
                     name="list-outline"
                     size={20}
-                    color="#0066FF"
+                    color={colors.primary}
                     style={{ marginRight: 8 }}
                   />
                   <Text style={styles.actionButtonRecommendText}>Add to Playlist</Text>
@@ -1657,8 +1679,8 @@ export function FilmDetailModal({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   closeBtn: {
     position: 'absolute',
     top: 12,
@@ -1684,20 +1706,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   posterTitle: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 24,
     fontFamily: 'Inter_700Bold',
     lineHeight: 30,
   },
   posterYear: {
-    color: '#FF8C00',
+    color: c.star,
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     marginTop: 4,
   },
   content: { paddingHorizontal: 20, paddingTop: 20 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  loadingText: { marginLeft: 8, fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular' },
+  loadingText: { marginLeft: 8, fontSize: 13, color: c.textMuted, fontFamily: 'Inter_400Regular' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 },
   metaRow: {
     flexDirection: 'row',
@@ -1708,15 +1730,15 @@ const styles = StyleSheet.create({
   metaLabel: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#6B7280',
+    color: c.textMuted,
     width: 72,
   },
-  metaValue: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#111827', flex: 1 },
+  metaValue: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text, flex: 1 },
   section: { marginBottom: 20 },
   sectionTitle: {
     fontSize: 13,
     fontFamily: 'Inter_700Bold',
-    color: '#111827',
+    color: c.text,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 10,
@@ -1725,19 +1747,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
   },
-  actorName: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#374151' },
+  actorName: { fontSize: 13, fontFamily: 'Inter_500Medium', color: c.textStrong },
   synopsisText: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#374151',
+    color: c.textStrong,
     lineHeight: 22,
   },
-  divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 20 },
-  savingText: { fontSize: 12, color: '#9CA3AF', marginTop: 6, fontFamily: 'Inter_400Regular' },
+  divider: { height: 1, backgroundColor: c.border, marginVertical: 20 },
+  savingText: { fontSize: 12, color: c.textFaint, marginTop: 6, fontFamily: 'Inter_400Regular' },
   addRow: { flexDirection: 'row', gap: 8 },
   webSearchRow: {
     flexDirection: 'row',
@@ -1747,27 +1769,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
-    backgroundColor: '#F5F9FF',
+    borderColor: c.primarySofter,
+    backgroundColor: c.primarySoft,
   },
   webSearchText: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#0066FF',
+    color: c.primary,
   },
   // 1 : 0.4 — the second button is 40% the width of the first.
   addPrimary: { flex: 1, marginBottom: 0 },
   addSecondary: { flex: 0.4, marginBottom: 0, paddingHorizontal: 4 },
-  actionButtonWatched: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' },
-  actionButtonWatchedText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
-  metaValueLink: { color: '#0066FF', textDecorationLine: 'underline' },
-  actorPillLink: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' },
-  actorNameLink: { color: '#0066FF' },
+  actionButtonWatched: { backgroundColor: c.primarySoft, borderWidth: 1, borderColor: c.primaryBorder },
+  actionButtonWatchedText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.primary },
+  metaValueLink: { color: c.primary, textDecorationLine: 'underline' },
+  actorPillLink: { backgroundColor: c.primarySoft, borderWidth: 1, borderColor: c.primaryBorder },
+  actorNameLink: { color: c.primary },
   similarCard: { width: 108 },
-  similarPoster: { width: 108, height: 162, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  similarTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
-  similarYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+  similarPoster: { width: 108, height: 162, borderRadius: 8, backgroundColor: c.surfaceAlt },
+  similarTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.text, marginTop: 6 },
+  similarYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
   actionButton: {
     height: 52,
     borderRadius: 12,
@@ -1777,20 +1799,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
   },
-  actionButtonPrimary: { backgroundColor: '#0066FF' },
-  actionButtonSecondary: { backgroundColor: '#FF8C00' },
+  actionButtonPrimary: { backgroundColor: c.primary },
+  actionButtonSecondary: { backgroundColor: c.star },
   actionButtonText: {
-    color: '#FFFFFF',
+    color: c.background,
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
   actionButtonRecommend: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.primarySoft,
     borderWidth: 1.5,
-    borderColor: '#BFDBFE',
+    borderColor: c.primaryBorder,
   },
   actionButtonRecommendText: {
-    color: '#0066FF',
+    color: c.primary,
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },

@@ -25,6 +25,9 @@ import {
   type ConversationSummary,
   type PublicUserProfile,
 } from '@workspace/api-client-react';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 function formatRelative(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -67,6 +70,8 @@ function ConversationRow({
   myClerkId: string | null | undefined;
   onPress: () => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { user, lastItem, unreadCount, posters } = conversation;
   const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
@@ -120,7 +125,7 @@ function ConversationRow({
         ))}
       </View>
 
-      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
+      <Ionicons name="chevron-forward" size={16} color={colors.iconFaint} style={{ marginLeft: 4 }} />
     </TouchableOpacity>
   );
 }
@@ -130,6 +135,7 @@ function ConversationRow({
 // the same "people I have a relationship with" surface as the inbox. ──
 
 function PalAvatar({ user, onPress }: { user: PublicUserProfile; onPress?: () => void }) {
+  const styles = useThemedStyles(makeStyles);
   const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
   const avatar = user.avatarUrl ? (
     <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
@@ -144,6 +150,8 @@ function PalAvatar({ user, onPress }: { user: PublicUserProfile; onPress?: () =>
 }
 
 function FilmPalsView() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data, isLoading, refetch, isRefetching } = useGetFollows();
@@ -242,7 +250,7 @@ function FilmPalsView() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0066FF" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -257,7 +265,7 @@ function FilmPalsView() {
     <FlatList
       data={[]}
       renderItem={null}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0066FF" />}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
       contentContainerStyle={isEmpty ? { flex: 1 } : { paddingBottom: 24 }}
       ListHeaderComponent={
         <>
@@ -269,7 +277,7 @@ function FilmPalsView() {
                   <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
                   {busyId === u.clerkId ? (
-                    <ActivityIndicator size="small" color="#0066FF" />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TouchableOpacity style={styles.declineBtn} onPress={() => handleDecline(u)} activeOpacity={0.8}>
@@ -293,7 +301,7 @@ function FilmPalsView() {
                   <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
                   {busyId === u.clerkId ? (
-                    <ActivityIndicator size="small" color="#0066FF" />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <TouchableOpacity style={styles.pendingBtn} onPress={() => handleCancel(u)} activeOpacity={0.8}>
                       <Text style={styles.pendingBtnText}>Requested</Text>
@@ -315,7 +323,7 @@ function FilmPalsView() {
                   <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
                   {busyId === u.clerkId ? (
-                    <ActivityIndicator size="small" color="#0066FF" />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <TouchableOpacity
                       style={styles.acceptBtn}
@@ -348,7 +356,7 @@ function FilmPalsView() {
                 >
                   <PalAvatar user={u} onPress={() => router.push(`/user/${u.clerkId}`)} />
                   <Text style={styles.palName} numberOfLines={1}>{u.username ?? 'Unnamed user'}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                  <Ionicons name="chevron-forward" size={16} color={colors.iconFaint} />
                 </TouchableOpacity>
               ))
             )}
@@ -361,6 +369,8 @@ function FilmPalsView() {
 }
 
 function NotificationsScreenInner() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId: myClerkId } = useAuth();
@@ -431,7 +441,7 @@ function NotificationsScreenInner() {
           onPress={() => router.push('/people')}
           activeOpacity={0.75}
         >
-          <Ionicons name="people-outline" size={18} color="#0066FF" />
+          <Ionicons name="people-outline" size={18} color={colors.primary} />
           <Text style={styles.peopleBtnText}>Find People</Text>
         </TouchableOpacity>
       </View>
@@ -482,7 +492,7 @@ function NotificationsScreenInner() {
         <FilmPalsView />
       ) : isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#0066FF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -497,7 +507,7 @@ function NotificationsScreenInner() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="mail-open-outline" size={56} color="#D1D5DB" />
+              <Ionicons name="mail-open-outline" size={56} color={colors.iconFaint} />
               <Text style={styles.emptyTitle}>No conversations yet</Text>
               <Text style={styles.emptySub}>
                 Recommend a film to a Film Pal, or wait for one to land here.
@@ -507,7 +517,7 @@ function NotificationsScreenInner() {
                 onPress={() => router.push('/people')}
                 activeOpacity={0.8}
               >
-                <Ionicons name="people-outline" size={16} color="#FFF" />
+                <Ionicons name="people-outline" size={16} color={colors.background} />
                 <Text style={styles.findBtnText}>Find People</Text>
               </TouchableOpacity>
             </View>
@@ -516,7 +526,7 @@ function NotificationsScreenInner() {
             conversations.length === 0 ? { flex: 1 } : { paddingBottom: insets.bottom + 16 }
           }
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0066FF" />
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
@@ -525,121 +535,121 @@ function NotificationsScreenInner() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', color: '#111827' },
+  headerTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', color: c.text },
   headerBadge: {
-    backgroundColor: '#0066FF', borderRadius: 10,
+    backgroundColor: c.primary, borderRadius: 10,
     paddingHorizontal: 7, paddingVertical: 2,
   },
-  headerBadgeText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: '#FFF' },
+  headerBadgeText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: c.background },
   peopleBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    backgroundColor: c.primarySoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
   },
-  peopleBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+  peopleBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.primary },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   tabBar: {
     flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, gap: 8,
-    borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   tabBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 4, paddingBottom: 10,
     borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
-  tabBtnActive: { borderBottomColor: '#0066FF' },
-  tabBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
-  tabBtnTextActive: { color: '#0066FF' },
+  tabBtnActive: { borderBottomColor: c.primary },
+  tabBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.textFaint },
+  tabBtnTextActive: { color: c.primary },
   tabBadge: {
-    backgroundColor: '#EF4444', borderRadius: 9, minWidth: 18, height: 18,
+    backgroundColor: c.destructive, borderRadius: 9, minWidth: 18, height: 18,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
-  tabBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#FFF' },
+  tabBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: c.background },
 
   section: { paddingHorizontal: 16, paddingTop: 20 },
   sectionHint: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
-    color: '#9CA3AF',
+    color: c.textFaint,
     marginTop: -2,
     marginBottom: 10,
     lineHeight: 17,
   },
   sectionTitle: {
     fontSize: 13, fontFamily: 'Inter_600SemiBold',
-    color: '#9CA3AF', letterSpacing: 0.5, textTransform: 'uppercase',
+    color: c.textFaint, letterSpacing: 0.5, textTransform: 'uppercase',
     marginBottom: 8,
   },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', lineHeight: 20 },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, lineHeight: 20 },
 
   palRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.surfaceAlt,
   },
-  palName: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
+  palName: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
   acceptBtn: {
-    backgroundColor: '#0066FF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  acceptBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  acceptBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
   declineBtn: {
-    backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceAlt, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: c.border,
   },
-  declineBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  declineBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
   pendingBtn: {
-    backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.surfaceAlt, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: c.border,
   },
-  pendingBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151' },
+  pendingBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
 
   row: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.background,
   },
   avatarWrap: { position: 'relative', marginRight: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24 },
-  avatarFallback: { backgroundColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#4F46E5' },
+  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.avatarFg },
   unreadBadge: {
     position: 'absolute', top: -4, right: -4,
     minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: '#0066FF', alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4, borderWidth: 2, borderColor: '#FFF',
+    backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4, borderWidth: 2, borderColor: c.background,
   },
-  unreadBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#FFF' },
+  unreadBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: c.background },
 
   content: { flex: 1 },
   contentHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
-  username: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#374151' },
-  usernameUnread: { fontFamily: 'Inter_700Bold', color: '#111827' },
-  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
-  preview: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#6B7280' },
+  username: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.textStrong },
+  usernameUnread: { fontFamily: 'Inter_700Bold', color: c.text },
+  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
+  preview: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted },
 
   posterStack: { position: 'relative', width: 60, height: 52, marginLeft: 8, marginRight: 4 },
   previewPoster: {
     position: 'absolute', width: 36, height: 52,
-    borderRadius: 4, borderWidth: 1.5, borderColor: '#FFF',
+    borderRadius: 4, borderWidth: 1.5, borderColor: c.background,
   },
 
-  separator: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 76 },
+  separator: { height: 1, backgroundColor: c.surfaceAlt, marginLeft: 76 },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
-  emptyTitle: { fontSize: 18, fontFamily: 'Inter_600SemiBold', color: '#374151', textAlign: 'center' },
-  emptySub: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 18, fontFamily: 'Inter_600SemiBold', color: c.textStrong, textAlign: 'center' },
+  emptySub: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', lineHeight: 20 },
   findBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#0066FF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 4,
+    backgroundColor: c.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 4,
   },
-  findBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  findBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
 });
 
 

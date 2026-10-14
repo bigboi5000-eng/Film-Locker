@@ -44,6 +44,9 @@ import {
   AiResultRow,
 } from '@/components/FilmSearchTools';
 import { getDeviceRegion } from '@/lib/region';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 const CARD_W = 120;
 const CARD_H = 180;
@@ -51,6 +54,7 @@ const CARD_H = 180;
 // ── Skeleton ─────────────────────────────────────────────────────────────────
 
 function SectionSkeleton() {
+  const colors = useColors();
   return (
     <ScrollView
       horizontal
@@ -58,8 +62,8 @@ function SectionSkeleton() {
       contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
     >
       {[...Array(5)].map((_, i) => (
-        <View key={i} style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color="#D1D5DB" size="small" />
+        <View key={i} style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.iconFaint} size="small" />
         </View>
       ))}
     </ScrollView>
@@ -82,6 +86,8 @@ function SectionHeader({
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const seeAllTarget = section ? `/discover/${section}` : seeAllHref;
   return (
@@ -95,11 +101,11 @@ function SectionHeader({
           hitSlop={8}
         >
           <Text style={styles.seeAllText}>See All</Text>
-          <Ionicons name="chevron-forward" size={13} color="#0066FF" />
+          <Ionicons name="chevron-forward" size={13} color={colors.primary} />
         </TouchableOpacity>
       ) : actionLabel ? (
         <TouchableOpacity style={styles.seeAllBtn} onPress={onAction} activeOpacity={0.7} hitSlop={8}>
-          <Ionicons name="add" size={16} color="#0066FF" />
+          <Ionicons name="add" size={16} color={colors.primary} />
           <Text style={styles.seeAllText}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
@@ -122,6 +128,8 @@ function useDebounce<T>(value: T, delay: number): T {
 const SEARCH_DEBOUNCE_MS = 350;
 
 export default function HomeScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isSignedIn } = useAuth();
@@ -279,8 +287,8 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor="#0066FF"
-            colors={['#0066FF']}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
@@ -303,7 +311,7 @@ export default function HomeScreen() {
               {displayInitials ? (
                 <Text style={styles.profileInitials}>{displayInitials.slice(0, 5).toUpperCase()}</Text>
               ) : (
-                <Ionicons name="person" size={18} color="#FFFFFF" />
+                <Ionicons name="person" size={18} color={colors.background} />
               )}
             </TouchableOpacity>
           ) : (
@@ -341,7 +349,7 @@ export default function HomeScreen() {
                   : 'Ask for a recommendation'}
             </Text>
             {tools.isRecommending ? (
-              <ActivityIndicator color="#0066FF" style={{ marginTop: 16 }} />
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
             ) : tools.aiResults.length === 0 ? (
               <Text style={styles.searchEmpty}>
                 Describe what you are after — “a 90 minute horror film similar to Texas Chainsaw”.
@@ -463,7 +471,7 @@ export default function HomeScreen() {
                 onPress={() => setCreatePlaylistVisible(true)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="add-circle-outline" size={28} color="#0066FF" />
+                <Ionicons name="add-circle-outline" size={28} color={colors.primary} />
                 <Text style={styles.emptyPlaylistText}>Create your first playlist</Text>
               </TouchableOpacity>
             ) : (
@@ -485,7 +493,7 @@ export default function HomeScreen() {
                     onPress={() => setCreatePlaylistVisible(true)}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="add" size={28} color="#0066FF" />
+                    <Ionicons name="add" size={28} color={colors.primary} />
                     <Text style={styles.newPlaylistText}>New</Text>
                   </TouchableOpacity>
                 }
@@ -537,55 +545,55 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   header: {
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  appTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: '#111827' },
-  appSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#6B7280', marginTop: 2 },
-  searchEmpty: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
+  appTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: c.text },
+  appSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted, marginTop: 2 },
+  searchEmpty: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted },
   searchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   searchCard: { width: '30%' },
-  searchPoster: { width: '100%', aspectRatio: 2 / 3, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  searchTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#111827', marginTop: 6 },
-  searchYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+  searchPoster: { width: '100%', aspectRatio: 2 / 3, borderRadius: 8, backgroundColor: c.surfaceAlt },
+  searchTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.text, marginTop: 6 },
+  searchYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
   signInBtn: {
-    backgroundColor: '#0066FF', borderRadius: 18,
+    backgroundColor: c.primary, borderRadius: 18,
     paddingHorizontal: 16, paddingVertical: 9,
   },
-  signInBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  signInBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
   profileBtn: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#0066FF', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   profileAvatar: { width: 36, height: 36, borderRadius: 18 },
-  profileInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#FFF' },
+  profileInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.background },
 
   section: { marginTop: 24 },
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, marginBottom: 12,
   },
-  sectionTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: '#111827' },
+  sectionTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: c.text },
   seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  seeAllText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#0066FF' },
+  seeAllText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: c.primary },
   horizontalList: { paddingHorizontal: 20 },
 
   emptyPlaylistCard: {
     marginHorizontal: 20, height: 100, borderRadius: 12,
-    backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center',
-    gap: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: '#93C5FD',
+    backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center',
+    gap: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: c.primaryMid,
   },
-  emptyPlaylistText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: '#0066FF' },
+  emptyPlaylistText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.primary },
 
   newPlaylistCard: {
     width: 100, height: 100, borderRadius: 10,
-    backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center',
-    gap: 4, borderWidth: 1, borderStyle: 'dashed', borderColor: '#D1D5DB',
+    backgroundColor: c.surfaceSubtle, alignItems: 'center', justifyContent: 'center',
+    gap: 4, borderWidth: 1, borderStyle: 'dashed', borderColor: c.iconFaint,
   },
-  newPlaylistText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: '#6B7280' },
+  newPlaylistText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: c.textMuted },
 });

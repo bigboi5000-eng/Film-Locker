@@ -35,6 +35,9 @@ import { useToast } from '@/components/ToastProvider';
 import { SHOW_APPLE_SIGN_IN } from '@/lib/appleSignIn';
 import { getOAuthRedirectUrl } from '@/lib/oauthRedirect';
 import { clerkErrorMessage } from '@/lib/clerkErrors';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -47,6 +50,8 @@ function useWarmUpBrowser() {
 }
 
 export default function SignInScreen() {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   useWarmUpBrowser();
   const router = useRouter();
   const { signIn, errors, fetchStatus } = useSignIn();
@@ -204,7 +209,7 @@ export default function SignInScreen() {
             value={resetCode}
             onChangeText={setResetCode}
             placeholder="Reset code"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             keyboardType="number-pad"
             autoFocus
           />
@@ -218,7 +223,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color="#FFF" />
+              ? <ActivityIndicator color={colors.background} />
               : <Text style={styles.primaryBtnText}>Continue</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => signIn.resetPasswordEmailCode.sendCode()} style={styles.linkRow}>
@@ -246,7 +251,7 @@ export default function SignInScreen() {
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="New password"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textFaint}
               secureTextEntry={!showNewPassword}
               autoComplete="new-password"
               returnKeyType="done"
@@ -254,7 +259,7 @@ export default function SignInScreen() {
               autoFocus
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowNewPassword((v) => !v)}>
-              <Ionicons name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6B7280" />
+              <Ionicons name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
           {errors?.fields?.password && (
@@ -267,7 +272,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color="#FFF" />
+              ? <ActivityIndicator color={colors.background} />
               : <Text style={styles.primaryBtnText}>Save and sign in</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={cancelReset} style={styles.linkRow}>
@@ -291,7 +296,7 @@ export default function SignInScreen() {
             value={mfaCode}
             onChangeText={setMfaCode}
             placeholder="Verification code"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             keyboardType="number-pad"
             autoFocus
           />
@@ -305,7 +310,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color="#FFF" />
+              ? <ActivityIndicator color={colors.background} />
               : <Text style={styles.primaryBtnText}>Verify</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => signIn.mfa.sendEmailCode()} style={styles.linkRow}>
@@ -335,7 +340,7 @@ export default function SignInScreen() {
             value={email}
             onChangeText={setEmail}
             placeholder="you@example.com"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
@@ -353,14 +358,14 @@ export default function SignInScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="Your password"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textFaint}
               secureTextEntry={!showPassword}
               autoComplete="password"
               returnKeyType="done"
               onSubmitEditing={handleSignIn}
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword((v) => !v)}>
-              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6B7280" />
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
           {errors?.fields?.password && (
@@ -388,7 +393,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color="#FFF" />
+              ? <ActivityIndicator color={colors.background} />
               : <Text style={styles.primaryBtnText}>Sign In</Text>}
           </TouchableOpacity>
 
@@ -407,9 +412,9 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {oauthLoading === 'google'
-              ? <ActivityIndicator color="#374151" size="small" />
+              ? <ActivityIndicator color={colors.textStrong} size="small" />
               : <>
-                  <Ionicons name="logo-google" size={18} color="#374151" />
+                  <Ionicons name="logo-google" size={18} color={colors.textStrong} />
                   <Text style={styles.oauthBtnText}>Continue with Google</Text>
                 </>}
           </TouchableOpacity>
@@ -423,9 +428,9 @@ export default function SignInScreen() {
               activeOpacity={0.85}
             >
               {oauthLoading === 'apple'
-                ? <ActivityIndicator color="#FFF" size="small" />
+                ? <ActivityIndicator color={colors.background} size="small" />
                 : <>
-                    <Ionicons name="logo-apple" size={18} color="#FFFFFF" />
+                    <Ionicons name="logo-apple" size={18} color={colors.background} />
                     <Text style={[styles.oauthBtnText, styles.appleBtnText]}>Continue with Apple</Text>
                   </>}
             </TouchableOpacity>
@@ -444,33 +449,33 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
   scroll: { flexGrow: 1, justifyContent: 'center' },
   inner: { paddingHorizontal: 24, paddingVertical: 48 },
   logoImage: { width: 200, height: 85, marginBottom: 24, alignSelf: 'flex-start' },
-  title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 6 },
-  subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280', marginBottom: 28 },
-  label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#374151', marginBottom: 6 },
+  title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 6 },
+  subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted, marginBottom: 28 },
+  label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong, marginBottom: 6 },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: c.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
-    color: '#111827',
+    color: c.text,
     marginBottom: 14,
     ...webInputReset,
   },
   passwordRow: { position: 'relative' },
   passwordInput: { paddingRight: 46 },
   eyeBtn: { position: 'absolute', right: 14, top: 12 },
-  error: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#EF4444', marginTop: -10, marginBottom: 10 },
+  error: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.destructive, marginTop: -10, marginBottom: 10 },
   primaryBtn: {
-    backgroundColor: '#0066FF',
+    backgroundColor: c.primary,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -478,29 +483,29 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   btnDisabled: { opacity: 0.5 },
-  primaryBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+  primaryBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  dividerText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#9CA3AF' },
+  dividerLine: { flex: 1, height: 1, backgroundColor: c.border },
+  dividerText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint },
   oauthBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: c.border,
     borderRadius: 10,
     paddingVertical: 13,
     marginBottom: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.background,
   },
-  oauthBtnText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: '#374151' },
-  appleBtn: { backgroundColor: '#111827', borderColor: '#111827' },
-  appleBtnText: { color: '#FFFFFF' },
+  oauthBtnText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.textStrong },
+  appleBtn: { backgroundColor: c.text, borderColor: c.text },
+  appleBtnText: { color: c.background },
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
-  linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
-  linkTextDisabled: { color: '#9CA3AF' },
+  linkText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.primary },
+  linkTextDisabled: { color: c.textFaint },
   forgotRow: { alignSelf: 'flex-end', paddingVertical: 6 },
   linkRow: { alignItems: 'center', paddingVertical: 8 },
-  mutedText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: '#6B7280' },
+  mutedText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted },
 });

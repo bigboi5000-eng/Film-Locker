@@ -4,6 +4,9 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { webInputReset } from '@/lib/webInputReset';
+import { useThemedStyles } from '@/hooks/useThemedStyles';
+import { useColors } from '@/hooks/useColors';
+import type { Palette } from '@/constants/colors';
 
 export function CreatePlaylistModal({
   visible,
@@ -16,6 +19,8 @@ export function CreatePlaylistModal({
   onCreate: (name: string, isPublic: boolean) => void;
   creating: boolean;
 }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState('');
   const [isPublic, setIsPublic] = useState(false);
 
@@ -50,7 +55,7 @@ export function CreatePlaylistModal({
             value={name}
             onChangeText={setName}
             placeholder="Playlist name…"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             autoFocus
             maxLength={100}
             returnKeyType="done"
@@ -65,8 +70,8 @@ export function CreatePlaylistModal({
             <Switch
               value={isPublic}
               onValueChange={setIsPublic}
-              trackColor={{ true: '#0066FF', false: '#E5E7EB' }}
-              thumbColor="#FFF"
+              trackColor={{ true: colors.primary, false: colors.border }}
+              thumbColor={colors.background}
             />
           </View>
 
@@ -77,7 +82,7 @@ export function CreatePlaylistModal({
             activeOpacity={0.8}
           >
             {creating ? (
-              <ActivityIndicator color="#FFF" />
+              <ActivityIndicator color={colors.background} />
             ) : (
               <Text style={styles.createBtnText}>Create Playlist</Text>
             )}
@@ -88,26 +93,26 @@ export function CreatePlaylistModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: '#111827', marginBottom: 16 },
+  sheet: { backgroundColor: c.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginBottom: 16 },
+  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 16 },
   input: {
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    borderWidth: 1, borderColor: c.border, borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, fontFamily: 'Inter_400Regular', color: '#111827',
-    marginBottom: 16, backgroundColor: '#F9FAFB',
+    fontSize: 16, fontFamily: 'Inter_400Regular', color: c.text,
+    marginBottom: 16, backgroundColor: c.surfaceSubtle,
     ...webInputReset,
   },
   toggleRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6', marginBottom: 20,
+    paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.surfaceAlt, marginBottom: 20,
   },
-  toggleLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
-  toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 2 },
-  createBtn: { backgroundColor: '#0066FF', padding: 14, borderRadius: 10, alignItems: 'center' },
+  toggleLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
+  toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
+  createBtn: { backgroundColor: c.primary, padding: 14, borderRadius: 10, alignItems: 'center' },
   createBtnDisabled: { opacity: 0.5 },
-  createBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  createBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
 });
