@@ -26,6 +26,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetUserFollowers,
@@ -51,6 +52,7 @@ export default function ConnectionsScreen() {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ userId: string; mode?: string; username?: string }>();
   const userId = params.userId;
+  const { userId: myClerkId } = useAuth();
 
   const [mode, setMode] = useState<Mode>(params.mode === 'following' ? 'following' : 'followers');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -84,9 +86,19 @@ export default function ConnectionsScreen() {
     return map;
   }, [myFollows]);
 
+  /**
+   * "self" means this row is the signed-in user, not the person whose list
+   * is open.
+   *
+   * It was comparing against the profile owner, which is a different
+   * question and the wrong one: on a friend's followers list your own row
+   * fell through to "not followed" and was given a Follow button pointing
+   * at yourself. The viewer is who the button is about.
+   */
   const relationshipFor = useCallback(
-    (clerkId: string): Relationship => (clerkId === userId ? 'self' : relationships.get(clerkId) ?? 'none'),
-    [relationships, userId]
+    (clerkId: string): Relationship =>
+      clerkId === myClerkId ? 'self' : relationships.get(clerkId) ?? 'none',
+    [relationships, myClerkId]
   );
 
   const invalidate = useCallback(async () => {
@@ -140,7 +152,11 @@ export default function ConnectionsScreen() {
             {item.isPrivate ? <Text style={styles.rowMeta}>Private account</Text> : null}
           </View>
 
-          {relationship === 'self' ? null : busyId === item.clerkId ? (
+          {relationship === 'self' ? (
+            <View style={styles.youChip}>
+              <Text style={styles.youChipText}>You</Text>
+            </View>
+          ) : busyId === item.clerkId ? (
             <ActivityIndicator size="small" color="#0066FF" />
           ) : relationship === 'accepted' ? (
             <TouchableOpacity
@@ -277,6 +293,14 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowName: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#111827' },
   rowMeta: { fontSize: 12, fontFamily: 'Inter_400Regular', color: '#9CA3AF', marginTop: 1 },
+
+  youChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: '#EEF2FF',
+  },
+  youChipText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#4F46E5' },
 
   btn: { backgroundColor: '#0066FF', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 },
   btnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },

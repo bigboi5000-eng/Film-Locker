@@ -62,7 +62,7 @@ function Row({
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isLoaded, isSignedIn, signOut } = useAuth();
+  const { isLoaded, isSignedIn, signOut, userId: myClerkId } = useAuth();
   const { user: clerkUser } = useUser();
   const queryClient = useQueryClient();
 
@@ -232,6 +232,24 @@ export default function ProfileScreen() {
           <Text style={styles.heroName}>{displayName}</Text>
           <Text style={styles.heroEmail}>{email}</Text>
         </View>
+
+        {/*
+          The public side of the account, which this screen is not. Everything
+          below here is settings; the page other people actually open lives at
+          /user/<id> and had no route into it from anywhere the owner would
+          look — so the only way to see your own profile was to find yourself
+          in somebody else's followers list.
+        */}
+        {myClerkId ? (
+          <View style={styles.card}>
+            <Row
+              icon="person-circle-outline"
+              label="View your profile"
+              value="See what other people see"
+              onPress={() => router.push(`/user/${myClerkId}`)}
+            />
+          </View>
+        ) : null}
 
         {/* Username edit */}
         <View style={styles.card}>

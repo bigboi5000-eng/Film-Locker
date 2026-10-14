@@ -15,6 +15,14 @@
  *
  * The server decides all of that and sends null for a section the viewer
  * may not see, so nothing here infers visibility from the relationship.
+ *
+ * The one exception is the preview on your own profile. Viewing yourself,
+ * the server hands over everything — correctly, it is your data — so the
+ * screen applies a visitor's rules itself to answer "what does this look
+ * like to someone who has just found me". It can do that honestly because
+ * the rules are not a judgement call: nobody who does not follow you is a
+ * Film Pal, so watched films are always hidden, and a private account hides
+ * everything else as well.
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -95,6 +103,8 @@ export default function UserProfileScreen() {
 
   const [busy, setBusy] = useState(false);
   const [watchedVisible, setWatchedVisible] = useState(false);
+  /** On your own profile: render it as somebody who does not follow you. */
+  const [preview, setPreview] = useState(false);
   const [selected, setSelected] = useState<ProfileFilmCard | null>(null);
 
   const { data, isLoading } = useGetUserProfile(clerkId, {
@@ -126,11 +136,18 @@ export default function UserProfileScreen() {
       seen.add(uri);
       out.push(uri);
     };
-    for (const f of data?.recentWatched ?? []) push(f.posterUrl);
-    for (const f of data?.recentRatings ?? []) push(f.posterUrl);
-    for (const pl of data?.publicPlaylists ?? []) (pl.coverPosters ?? []).forEach(push);
+    if (!data) return out;
+
+    // Previewing has to reach the hero as well, or the band keeps showing
+    // films the visitor it is imitating would never be shown.
+    const asVisitor = data.followStatus === 'self' && preview;
+    if (!asVisitor) for (const f of data.recentWatched ?? []) push(f.posterUrl);
+    if (!(asVisitor && data.user.isPrivate)) {
+      for (const f of data.recentRatings ?? []) push(f.posterUrl);
+      for (const pl of data.publicPlaylists ?? []) (pl.coverPosters ?? []).forEach(push);
+    }
     return out;
-  }, [data]);
+  }, [data, preview]);
 
   const invalidate = useCallback(async () => {
     await Promise.all([
@@ -204,6 +221,22 @@ export default function UserProfileScreen() {
   } = data;
   const initials = initialsFor(user.displayInitials, user.username);
   const them = user.username ?? 'them';
+  const isSelf = followStatus === 'self';
+
+  /**
+   * What a stranger would be shown, when previewing.
+   *
+   * Watched films need a mutual follow, so they are hidden for any visitor
+   * who does not already follow you — which is everyone this preview is
+   * about. A private account hides the rest too, and gets the same notice a
+   * real visitor gets.
+   */
+  const asVisitor = isSelf && preview;
+  const hideAll = asVisitor && user.isPrivate;
+  const shownWatched = asVisitor ? null : recentWatched;
+  const shownRatings = hideAll ? null : recentRatings;
+  const shownComments = hideAll ? null : recentComments;
+  const shownPlaylists = hideAll ? null : publicPlaylists;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -269,6 +302,45 @@ export default function UserProfileScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Your own profile, which is reachable from Settings. Without this
+              it is indistinguishable from someone else's — same layout, and
+              the only tell is the absence of a Follow button. */}
+          {isSelf && (
+            <View style={styles.selfBanner}>
+              <Text style={styles.selfBannerText}>
+                {preview
+                  ? user.isPrivate
+                    ? 'This is all someone who doesn’t follow you can see. Your account is private.'
+                    : 'This is what someone who doesn’t follow you sees. Watched films stay hidden until you follow each other.'
+                  : 'This is your profile — the page other people open.'}
+              </Text>
+              <TouchableOpacity
+                style={styles.previewBtn}
+                onPress={() => setPreview((p) => !p)}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={preview ? 'eye-off-outline' : 'eye-outline'}
+                  size={15}
+                  color="#0066FF"
+                />
+                <Text style={styles.previewBtnText}>
+                  {preview ? 'Back to your view' : 'Preview as a visitor'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Previewing shows the control a visitor would be offered, inert.
+              Worth seeing rather than describing: on a private account it
+              reads "Request" rather than "Follow", which is the thing people
+              are usually checking. */}
+          {asVisitor && (
+            <View style={[styles.followBtn, styles.inertBtn]} pointerEvents="none">
+              <Text style={styles.inertBtnText}>{user.isPrivate ? 'Request' : 'Follow'}</Text>
+            </View>
+          )}
+
           {/* Where the two of you stand. Messaging needs a follow each way, so
               "Following" on its own is not enough to explain why a
               conversation is or is not available. */}
@@ -330,7 +402,7 @@ export default function UserProfileScreen() {
 
         {/* Headline stats */}
         <View style={styles.statsRow}>
-          {followStatus === 'self' || isFilmPal ? (
+          {(isSelf && !preview) || isFilmPal ? (
             <TouchableOpacity style={styles.statTile} onPress={() => setWatchedVisible(true)} activeOpacity={0.7}>
               <Text style={styles.statValue}>{stats.watchedCount}</Text>
               <Text style={styles.statLabel}>Watched</Text>
@@ -355,21 +427,22 @@ export default function UserProfileScreen() {
 
         {/* Private accounts get one explanation, at the top, rather than the
             same padlock repeated under every heading. */}
-        {publicPlaylists === null && recentRatings === null ? (
+        {shownPlaylists === null && shownRatings === null ? (
           <View style={styles.privateNotice}>
             <Ionicons name="lock-closed-outline" size={22} color="#9CA3AF" />
             <Text style={styles.privateNoticeText}>
-              This account is private. Follow {them} to see what they have been watching, rating
-              and recommending.
+              {isSelf
+                ? 'Your account is private, so this is where a visitor stops. Everything below is hidden until you accept them.'
+                : `This account is private. Follow ${them} to see what they have been watching, rating and recommending.`}
             </Text>
           </View>
         ) : null}
 
-        {recentWatched && recentWatched.length > 0 ? (
+        {shownWatched && shownWatched.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recently watched</Text>
             <FlatList
-              data={recentWatched}
+              data={shownWatched}
               horizontal
               keyExtractor={(f) => `w-${f.tmdbId}`}
               showsHorizontalScrollIndicator={false}
@@ -381,11 +454,11 @@ export default function UserProfileScreen() {
           </View>
         ) : null}
 
-        {recentRatings && recentRatings.length > 0 ? (
+        {shownRatings && shownRatings.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Rated</Text>
             <FlatList
-              data={recentRatings}
+              data={shownRatings}
               horizontal
               keyExtractor={(f) => `r-${f.tmdbId}`}
               showsHorizontalScrollIndicator={false}
@@ -397,10 +470,10 @@ export default function UserProfileScreen() {
           </View>
         ) : null}
 
-        {recentComments && recentComments.length > 0 ? (
+        {shownComments && shownComments.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Reviews</Text>
-            {recentComments.map((c) => (
+            {shownComments.map((c) => (
               <TouchableOpacity
                 key={`c-${c.tmdbId}-${String(c.at)}`}
                 style={styles.reviewRow}
@@ -424,14 +497,14 @@ export default function UserProfileScreen() {
         ) : null}
 
         {/* Playlists — full list when visible, otherwise just the count above */}
-        {publicPlaylists !== null ? (
+        {shownPlaylists !== null ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Playlists</Text>
-            {publicPlaylists.length === 0 ? (
+            {shownPlaylists.length === 0 ? (
               <Text style={styles.emptyText}>No public playlists yet.</Text>
             ) : (
               <FlatList
-                data={publicPlaylists}
+                data={shownPlaylists}
                 horizontal
                 keyExtractor={(item) => `pl-${item.id}`}
                 showsHorizontalScrollIndicator={false}
@@ -449,13 +522,15 @@ export default function UserProfileScreen() {
 
         {/* A public account that has not done anything yet still needs to say
             so, or the screen just stops under the stats. */}
-        {publicPlaylists !== null &&
-        publicPlaylists.length === 0 &&
-        (recentRatings?.length ?? 0) === 0 &&
-        (recentComments?.length ?? 0) === 0 &&
-        (recentWatched?.length ?? 0) === 0 ? (
+        {shownPlaylists !== null &&
+        shownPlaylists.length === 0 &&
+        (shownRatings?.length ?? 0) === 0 &&
+        (shownComments?.length ?? 0) === 0 &&
+        (shownWatched?.length ?? 0) === 0 ? (
           <Text style={styles.quietText}>
-            {user.username ?? 'This person'} hasn&apos;t rated or reviewed anything yet.
+            {isSelf
+              ? 'Nothing to show yet. Rate a film or make a playlist public and it appears here.'
+              : `${user.username ?? 'This person'} hasn’t rated or reviewed anything yet.`}
           </Text>
         ) : null}
       </ScrollView>
@@ -520,6 +595,28 @@ const styles = StyleSheet.create({
   },
   usernameRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   username: { fontSize: 19, fontFamily: 'Inter_700Bold', color: '#111827' },
+
+  selfBanner: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selfBannerText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  previewBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  previewBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#0066FF' },
+
+  inertBtn: { backgroundColor: '#E5E7EB' },
+  inertBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#9CA3AF' },
 
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   followBtn: {
