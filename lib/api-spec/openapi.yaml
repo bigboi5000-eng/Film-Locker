@@ -731,12 +731,20 @@ paths:
         feed, which the client advances through POST /feed/seen.
 
 
-        Four sources, two privacy bars. Ratings, reviews and public
-        playlists come from everybody the caller has an accepted follow on,
-        since being an accepted follower is the bar those already use.
-        Watched films need a mutual follow, matching GET /users/{id}/watched,
-        so a one-way follow shows what somebody says about films but not what
-        they have seen. Blocked accounts are excluded in both directions.
+        Two populations. The people the caller follows, whose ratings,
+        reviews and public playlists all appear — watched films among them
+        where the follow is mutual, matching GET /users/{id}/watched, so a
+        one-way follow shows what somebody says about films but not what
+        they have seen. And everybody else with a public account, but only
+        where they have rated or reviewed a film the caller already has in
+        their locker: a stranger's opinion is worth reading about a film you
+        are thinking of watching and is noise about one you have never heard
+        of. Blocked accounts are excluded in both directions.
+
+
+        Followed activity sorts above public activity, and within each the
+        unseen comes first. `fromFollowed` says which population an item
+        came from.
 
 
         One page, no cursor: ordering unseen-first and paging by cursor pull
@@ -2361,6 +2369,12 @@ components:
         isNew:
           type: boolean
           description: Newer than the caller's last look at the feed.
+        fromFollowed:
+          type: boolean
+          description: >
+            True for somebody the caller follows. False for a public account
+            who happens to have said something about a film in the caller's
+            locker.
         user:
           $ref: "#/components/schemas/NotificationUser"
         tmdbId:
@@ -2407,6 +2421,7 @@ components:
         - type
         - at
         - isNew
+        - fromFollowed
         - user
 
     FeedResponse:
@@ -2419,9 +2434,16 @@ components:
         newCount:
           type: integer
           description: How many of the items returned the caller has not seen.
+        followedCount:
+          type: integer
+          description: >
+            How many of the items came from somebody the caller follows.
+            They are the first that many, so this is also where the public
+            activity starts.
       required:
         - items
         - newCount
+        - followedCount
 
     MarkFeedSeenBody:
       type: object

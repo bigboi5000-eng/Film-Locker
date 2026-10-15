@@ -999,7 +999,9 @@ export const SendConversationMessageResponse = zod.object({
 /**
  * Activity from accounts the caller follows, newest first — except that anything the caller has not seen yet comes first, newest first within each group. "Seen" means older than the caller's last look at the feed, which the client advances through POST /feed/seen.
  *
- * Four sources, two privacy bars. Ratings, reviews and public playlists come from everybody the caller has an accepted follow on, since being an accepted follower is the bar those already use. Watched films need a mutual follow, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. Blocked accounts are excluded in both directions.
+ * Two populations. The people the caller follows, whose ratings, reviews and public playlists all appear — watched films among them where the follow is mutual, matching GET /users/{id}/watched, so a one-way follow shows what somebody says about films but not what they have seen. And everybody else with a public account, but only where they have rated or reviewed a film the caller already has in their locker: a stranger's opinion is worth reading about a film you are thinking of watching and is noise about one you have never heard of. Blocked accounts are excluded in both directions.
+ *
+ * Followed activity sorts above public activity, and within each the unseen comes first. `fromFollowed` says which population an item came from.
  *
  * One page, no cursor: ordering unseen-first and paging by cursor pull in opposite directions, and a feed of the people you actually follow is not long enough to need both.
  * @summary What the people you follow have been watching, rating and reviewing
@@ -1019,6 +1021,7 @@ export const GetFeedResponse = zod.object({
   "type": zod.enum(['watched', 'rated', 'commented', 'playlist']),
   "at": zod.coerce.date(),
   "isNew": zod.boolean().describe('Newer than the caller\'s last look at the feed.'),
+  "fromFollowed": zod.boolean().describe('True for somebody the caller follows. False for a public account who happens to have said something about a film in the caller\'s locker.\n'),
   "user": zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
@@ -1036,7 +1039,8 @@ export const GetFeedResponse = zod.object({
   "playlistItemCount": zod.number().nullish(),
   "playlistPosters": zod.array(zod.string()).nullish().describe('Up to four covers from the playlist, newest first.')
 }).describe('One thing somebody the caller follows did to a film.')),
-  "newCount": zod.number().describe('How many of the items returned the caller has not seen.')
+  "newCount": zod.number().describe('How many of the items returned the caller has not seen.'),
+  "followedCount": zod.number().describe('How many of the items came from somebody the caller follows. They are the first that many, so this is also where the public activity starts.\n')
 })
 
 

@@ -8,16 +8,25 @@
  * union (it will not at the size of a feed of people you actually follow),
  * a denormalised activity table is the next step, not a first one.
  *
- * Two privacy bars, both inherited rather than invented here:
+ * Two populations, and two privacy bars, all inherited rather than invented
+ * here.
  *
  *  - ratings, reviews and public playlists go to anyone with an accepted
  *    follow, which is the bar those already use elsewhere;
  *  - watched films need a MUTUAL accepted follow, matching
  *    GET /users/:id/watched, so following somebody one way shows what they
  *    say about films but not what they have been seeing.
+ *
+ * Beyond the people the caller follows there is everybody else, and a feed
+ * of strangers is a feed nobody reads. So the second population is narrowed
+ * by the only thing that makes a stranger's opinion worth anything: whether
+ * it is about a film the caller already has. Public accounts only, rating or
+ * reviewing something in the caller's locker — which is the same bar the
+ * film's own comments section already uses, so nothing is exposed here that
+ * was not already visible by opening that film.
  */
 import { Router, type IRouter } from "express";
-import { and, eq, desc, inArray, sql, count } from "drizzle-orm";
+import { and, eq, desc, inArray, notInArray, sql, count } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -70,7 +79,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   // Someone whose row has not been provisioned yet has nothing to show and
   // no watermark to compare against; an empty feed is the honest answer.
   if (!me) {
-    res.json(GetFeedResponse.parse({ items: [], newCount: 0 }));
+    res.json(GetFeedResponse.parse({ items: [], newCount: 0, followedCount: 0 }));
     return;
   }
 
@@ -91,12 +100,40 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   // Film Pals — the only people whose watched films the caller may see.
   const mutual = following.filter((id) => followsMe.has(id));
 
-  if (following.length === 0) {
-    res.json(GetFeedResponse.parse({ items: [], newCount: 0 }));
+  // The caller's own films, which is what makes a stranger's activity
+  // relevant. Capped: somebody with a thousand films does not need a
+  // thousand-id IN clause on every feed load, and the newest are the ones
+  // they are most likely to still care about.
+  const MY_FILMS_CONSIDERED = 300;
+  const myFilmRows = await db
+    .select({ tmdbId: moviesTable.tmdbId })
+    .from(moviesTable)
+    .where(eq(moviesTable.clerkUserId, clerkUserId))
+    .orderBy(desc(moviesTable.addedAt))
+    .limit(MY_FILMS_CONSIDERED);
+  const myTmdbIds = [...new Set(myFilmRows.map((r) => r.tmdbId))];
+
+  if (following.length === 0 && myTmdbIds.length === 0) {
+    res.json(GetFeedResponse.parse({ items: [], newCount: 0, followedCount: 0 }));
     return;
   }
 
-  const [watchedRows, ratingRows, commentRows, playlistRows, actorRows] = await Promise.all([
+  /**
+   * Everybody whose activity the followed queries already return.
+   *
+   * Always contains the caller, so it is never empty — which matters,
+   * because an empty notInArray is not a condition Postgres will accept.
+   */
+  const alreadyCovered = [...following, clerkUserId];
+
+  const [
+    watchedRows,
+    ratingRows,
+    commentRows,
+    playlistRows,
+    publicRatingRows,
+    publicCommentRows,
+  ] = await Promise.all([
     mutual.length
       ? db
           .select({
@@ -119,64 +156,135 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
           .limit(limit)
       : Promise.resolve([]),
 
-    db
-      .select({
-        id: filmCommunityRatingsTable.id,
-        userId: filmCommunityRatingsTable.userId,
-        tmdbId: filmCommunityRatingsTable.tmdbId,
-        rating: filmCommunityRatingsTable.rating,
-        at: filmCommunityRatingsTable.createdAt,
-      })
-      .from(filmCommunityRatingsTable)
-      .where(inArray(filmCommunityRatingsTable.userId, following))
-      .orderBy(desc(filmCommunityRatingsTable.createdAt))
-      .limit(limit),
+    following.length
+      ? db
+          .select({
+            id: filmCommunityRatingsTable.id,
+            userId: filmCommunityRatingsTable.userId,
+            tmdbId: filmCommunityRatingsTable.tmdbId,
+            rating: filmCommunityRatingsTable.rating,
+            at: filmCommunityRatingsTable.createdAt,
+          })
+          .from(filmCommunityRatingsTable)
+          .where(inArray(filmCommunityRatingsTable.userId, following))
+          .orderBy(desc(filmCommunityRatingsTable.createdAt))
+          .limit(limit)
+      : Promise.resolve([]),
 
-    db
-      .select({
-        id: filmCommentsTable.id,
-        userId: filmCommentsTable.userId,
-        tmdbId: filmCommentsTable.tmdbId,
-        body: filmCommentsTable.body,
-        at: filmCommentsTable.createdAt,
-      })
-      .from(filmCommentsTable)
-      .where(inArray(filmCommentsTable.userId, following))
-      .orderBy(desc(filmCommentsTable.createdAt))
-      .limit(limit),
+    following.length
+      ? db
+          .select({
+            id: filmCommentsTable.id,
+            userId: filmCommentsTable.userId,
+            tmdbId: filmCommentsTable.tmdbId,
+            body: filmCommentsTable.body,
+            at: filmCommentsTable.createdAt,
+          })
+          .from(filmCommentsTable)
+          .where(inArray(filmCommentsTable.userId, following))
+          .orderBy(desc(filmCommentsTable.createdAt))
+          .limit(limit)
+      : Promise.resolve([]),
 
     // Public playlists only, and only ones with something in them: an empty
     // playlist somebody made and has not filled is not news, and it would
     // arrive as a card with four blank covers.
-    db
-      .select({
-        id: playlistsTable.id,
-        userId: playlistsTable.userId,
-        name: playlistsTable.name,
-        at: playlistsTable.createdAt,
-        itemCount: count(playlistItemsTable.id),
-        posters: sql<string[]>`
-          array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
-          FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
-        `.as("posters"),
-      })
-      .from(playlistsTable)
-      .innerJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
-      .where(and(inArray(playlistsTable.userId, following), eq(playlistsTable.isPublic, true)))
-      .groupBy(playlistsTable.id)
-      .orderBy(desc(playlistsTable.createdAt))
-      .limit(limit),
+    following.length
+      ? db
+          .select({
+            id: playlistsTable.id,
+            userId: playlistsTable.userId,
+            name: playlistsTable.name,
+            at: playlistsTable.createdAt,
+            itemCount: count(playlistItemsTable.id),
+            posters: sql<string[]>`
+              array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
+              FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
+            `.as("posters"),
+          })
+          .from(playlistsTable)
+          .innerJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
+          .where(and(inArray(playlistsTable.userId, following), eq(playlistsTable.isPublic, true)))
+          .groupBy(playlistsTable.id)
+          .orderBy(desc(playlistsTable.createdAt))
+          .limit(limit)
+      : Promise.resolve([]),
 
-    db
-      .select({
-        clerkId: usersTable.clerkId,
-        username: usersTable.username,
-        displayInitials: usersTable.displayInitials,
-        avatarUrl: usersTable.avatarUrl,
-      })
-      .from(usersTable)
-      .where(inArray(usersTable.clerkId, following)),
+    myTmdbIds.length
+      ? db
+          .select({
+            id: filmCommunityRatingsTable.id,
+            userId: filmCommunityRatingsTable.userId,
+            tmdbId: filmCommunityRatingsTable.tmdbId,
+            rating: filmCommunityRatingsTable.rating,
+            at: filmCommunityRatingsTable.createdAt,
+          })
+          .from(filmCommunityRatingsTable)
+          .innerJoin(usersTable, eq(usersTable.clerkId, filmCommunityRatingsTable.userId))
+          .where(
+            and(
+              inArray(filmCommunityRatingsTable.tmdbId, myTmdbIds),
+              eq(usersTable.isPrivate, false),
+              notInArray(filmCommunityRatingsTable.userId, alreadyCovered),
+              blocked.size
+                ? notInArray(filmCommunityRatingsTable.userId, [...blocked])
+                : undefined
+            )
+          )
+          .orderBy(desc(filmCommunityRatingsTable.createdAt))
+          .limit(limit)
+      : Promise.resolve([]),
+
+    myTmdbIds.length
+      ? db
+          .select({
+            id: filmCommentsTable.id,
+            userId: filmCommentsTable.userId,
+            tmdbId: filmCommentsTable.tmdbId,
+            body: filmCommentsTable.body,
+            at: filmCommentsTable.createdAt,
+          })
+          .from(filmCommentsTable)
+          .innerJoin(usersTable, eq(usersTable.clerkId, filmCommentsTable.userId))
+          .where(
+            and(
+              inArray(filmCommentsTable.tmdbId, myTmdbIds),
+              eq(usersTable.isPrivate, false),
+              notInArray(filmCommentsTable.userId, alreadyCovered),
+              blocked.size ? notInArray(filmCommentsTable.userId, [...blocked]) : undefined
+            )
+          )
+          .orderBy(desc(filmCommentsTable.createdAt))
+          .limit(limit)
+      : Promise.resolve([]),
+
   ]);
+
+  // Named afterwards rather than alongside: who appears is not known until
+  // the sources have run, and the alternative — fetching every user and
+  // picking from the result — is a table scan on every feed load.
+  const actorIds = [
+    ...new Set([
+      ...watchedRows.map((r) => r.userId),
+      ...ratingRows.map((r) => r.userId),
+      ...commentRows.map((r) => r.userId),
+      ...playlistRows.map((r) => r.userId),
+      ...publicRatingRows.map((r) => r.userId),
+      ...publicCommentRows.map((r) => r.userId),
+    ]),
+  ];
+
+  const actorRows = actorIds.length
+    ? await db
+        .select({
+          clerkId: usersTable.clerkId,
+          username: usersTable.username,
+          displayInitials: usersTable.displayInitials,
+          avatarUrl: usersTable.avatarUrl,
+        })
+        .from(usersTable)
+        .where(inArray(usersTable.clerkId, actorIds))
+    : [];
 
   const actors = new Map<string, Actor>(actorRows.map((a) => [a.clerkId, a]));
 
@@ -185,6 +293,8 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   const cards = await resolveFilmCards([
     ...ratingRows.map((r) => r.tmdbId),
     ...commentRows.map((c) => c.tmdbId),
+    ...publicRatingRows.map((r) => r.tmdbId),
+    ...publicCommentRows.map((c) => c.tmdbId),
   ]);
 
   const seenBefore = me.feedLastSeenAt;
@@ -194,6 +304,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     type: "watched" | "rated" | "commented" | "playlist";
     at: Date;
     isNew: boolean;
+    fromFollowed: boolean;
     user: Actor;
     tmdbId: number | null;
     title: string | null;
@@ -209,15 +320,20 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
 
   const items: Item[] = [];
 
-  const add = (
-    partial: Omit<Item, "isNew" | "user"> & { userId: string }
-  ) => {
+  const followedSet = new Set(following);
+
+  const add = (partial: Omit<Item, "isNew" | "fromFollowed" | "user"> & { userId: string }) => {
     const user = actors.get(partial.userId);
     // An actor with no users row is an account mid-deletion. Dropping the
     // item is better than a feed card attributed to nobody.
     if (!user) return;
-    const { userId: _userId, ...rest } = partial;
-    items.push({ ...rest, isNew: rest.at > seenBefore, user });
+    const { userId, ...rest } = partial;
+    items.push({
+      ...rest,
+      isNew: rest.at > seenBefore,
+      fromFollowed: followedSet.has(userId),
+      user,
+    });
   };
 
   for (const w of watchedRows) {
@@ -277,6 +393,44 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     });
   }
 
+  for (const r of publicRatingRows) {
+    add({
+      id: `rated-${r.id}`,
+      type: "rated",
+      at: r.at,
+      userId: r.userId,
+      tmdbId: r.tmdbId,
+      title: cards.get(r.tmdbId)?.title ?? null,
+      posterUrl: cards.get(r.tmdbId)?.posterUrl ?? null,
+      releaseYear: cards.get(r.tmdbId)?.releaseYear ?? null,
+      rating: r.rating,
+      comment: null,
+      playlistId: null,
+      playlistName: null,
+      playlistItemCount: null,
+      playlistPosters: null,
+    });
+  }
+
+  for (const c of publicCommentRows) {
+    add({
+      id: `commented-${c.id}`,
+      type: "commented",
+      at: c.at,
+      userId: c.userId,
+      tmdbId: c.tmdbId,
+      title: cards.get(c.tmdbId)?.title ?? null,
+      posterUrl: cards.get(c.tmdbId)?.posterUrl ?? null,
+      releaseYear: cards.get(c.tmdbId)?.releaseYear ?? null,
+      rating: null,
+      comment: c.body,
+      playlistId: null,
+      playlistName: null,
+      playlistItemCount: null,
+      playlistPosters: null,
+    });
+  }
+
   for (const pl of playlistRows) {
     add({
       id: `playlist-${pl.id}`,
@@ -297,15 +451,21 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   }
 
   /**
-   * Unseen first, each group newest first.
+   * People you follow, then everybody else; unseen before seen within each;
+   * newest first within that.
    *
-   * Strict chronological order buries the point of opening the feed: the
-   * thing that happened while you were away sits below everything you
-   * already read, and on a quiet week it is the only thing you came for.
-   * Within each group the order is the ordinary one, so the feed still
-   * reads as a timeline rather than a shuffled pile.
+   * The outermost key is who it came from rather than when. A friend's
+   * week-old review is worth more than a stranger's from this morning, and
+   * without that key a popular film in the caller's locker would bury the
+   * handful of people they actually care about under strangers.
+   *
+   * Unseen still comes before seen inside each group, for the same reason it
+   * did when there was only one: strict recency buries the thing that
+   * happened while you were away, which on a quiet week is the only thing
+   * you came for.
    */
   items.sort((a, b) => {
+    if (a.fromFollowed !== b.fromFollowed) return a.fromFollowed ? -1 : 1;
     if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
     return b.at.getTime() - a.at.getTime();
   });
@@ -337,6 +497,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     GetFeedResponse.parse({
       items: page,
       newCount: page.filter((i) => i.isNew).length,
+      followedCount: page.filter((i) => i.fromFollowed).length,
     })
   );
 });

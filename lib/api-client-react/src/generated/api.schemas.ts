@@ -464,6 +464,8 @@ export interface FeedItem {
   at: string;
   /** Newer than the caller's last look at the feed. */
   isNew: boolean;
+  /** True for somebody the caller follows. False for a public account who happens to have said something about a film in the caller's locker. */
+  fromFollowed: boolean;
   user: NotificationUser;
   /** The film, on everything but a "playlist" item. */
   tmdbId?: number | null;
@@ -486,6 +488,8 @@ export interface FeedResponse {
   items: FeedItem[];
   /** How many of the items returned the caller has not seen. */
   newCount: number;
+  /** How many of the items came from somebody the caller follows. They are the first that many, so this is also where the public activity starts. */
+  followedCount: number;
 }
 
 export interface MarkFeedSeenBody {
