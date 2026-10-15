@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { sendPush } from "../lib/push";
+import { logger } from "../lib/logger";
 import { isBlockedEitherWay, getMutualBlockSet } from "../lib/blocks";
 
 
@@ -537,31 +538,50 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
     })),
   ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-  // Opening the thread reads everything in it that came from them —
-  // recommendations and reactions alike. In the background: the feed has
-  // already been assembled, and a failure here costs a badge that clears on
-  // the next open rather than the screen the caller asked for.
-  void db
-    .update(filmNotificationsTable)
-    .set({ isRead: true })
-    .where(
-      and(
-        eq(filmNotificationsTable.fromUserId, otherUserId),
-        eq(filmNotificationsTable.toUserId, clerkUserId),
-        eq(filmNotificationsTable.isRead, false)
-      )
-    );
-
-  void db
-    .update(conversationMessagesTable)
-    .set({ isRead: true })
-    .where(
-      and(
-        eq(conversationMessagesTable.fromUserId, otherUserId),
-        eq(conversationMessagesTable.toUserId, clerkUserId),
-        eq(conversationMessagesTable.isRead, false)
-      )
-    );
+  /**
+   * Opening the thread reads everything in it that came from them —
+   * recommendations and reactions alike.
+   *
+   * Awaited, and that is the whole point. These were fired as
+   * `void db.update(...)`, which looks like a deliberate
+   * background write and is in fact nothing at all: a drizzle builder is
+   * lazy, it sends no SQL until something calls `.then()`, and `void`
+   * discards it without ever doing so. Nothing has ever been marked read by
+   * opening a thread.
+   *
+   * Awaiting also closes a race that would have remained even if the write
+   * had run. The app invalidates its conversation list the moment this
+   * response arrives, so an unawaited update can easily still be in flight
+   * when the refetch reads the same rows — and the badge comes back.
+   *
+   * A failure still must not fail the request: the caller asked for the
+   * thread, not for its read state, and an unread badge that clears on the
+   * next open is a far smaller thing to lose than the screen.
+   */
+  await Promise.all([
+    db
+      .update(filmNotificationsTable)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(filmNotificationsTable.fromUserId, otherUserId),
+          eq(filmNotificationsTable.toUserId, clerkUserId),
+          eq(filmNotificationsTable.isRead, false)
+        )
+      ),
+    db
+      .update(conversationMessagesTable)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(conversationMessagesTable.fromUserId, otherUserId),
+          eq(conversationMessagesTable.toUserId, clerkUserId),
+          eq(conversationMessagesTable.isRead, false)
+        )
+      ),
+  ]).catch((err) => {
+    logger.warn({ err, otherUserId }, "failed to mark thread as read");
+  });
 
   res.json({ sender: sender ?? null, feed });
 });
