@@ -3,6 +3,7 @@ import {
   text,
   serial,
   integer,
+  real,
   timestamp,
   uniqueIndex,
   boolean,
@@ -40,6 +41,10 @@ export const moviesTable = pgTable(
     // this row yet" and "TMDB has no runtime for this film" both have to be
     // distinguishable from a real length — and 0 is not a real length.
     runtime: integer("runtime"),
+    // TMDB's own average, 0-10. Nullable for the same reason as runtime:
+    // "not enriched yet" and "TMDB has no score for this film" both have to
+    // stay distinguishable from a real one, and 0 is a real one.
+    tmdbRating: real("tmdb_rating"),
     watchProviders: jsonb("watch_providers")
       .$type<WatchProvider[]>()
       .notNull()
@@ -47,7 +52,12 @@ export const moviesTable = pgTable(
     // Per-user owner (Clerk user ID)
     clerkUserId: text("clerk_user_id").notNull().default(""),
     // User state
-    rating: integer("rating"), // nullable 1–5
+    // The owner's own score, 0.5-5 in half-star steps. Real rather than
+    // integer so a half can be stored, and real rather than numeric because
+    // node-postgres hands numeric back as a string to preserve precision it
+    // does not have — every half-star value is exact in binary floating
+    // point, so there is nothing to preserve.
+    rating: real("rating"), // nullable 0.5–5, in steps of 0.5
     isWatched: boolean("is_watched").notNull().default(false),
     watchedAt: timestamp("watched_at", { withTimezone: true }),
     addedAt: timestamp("added_at", { withTimezone: true })

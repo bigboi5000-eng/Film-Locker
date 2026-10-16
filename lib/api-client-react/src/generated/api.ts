@@ -1297,7 +1297,7 @@ export const getPatchRatingUrl = (id: number,) => {
 }
 
 /**
- * @summary Set or clear the star rating (1–5) for a movie
+ * @summary Set or clear the star rating (0.5–5, in halves) for a movie
  */
 export const patchRating = async (id: number,
     patchRatingBody: PatchRatingBody, options?: RequestInit): Promise<Movie> => {
@@ -1346,7 +1346,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PatchRatingMutationError = ErrorType<unknown>
 
     /**
- * @summary Set or clear the star rating (1–5) for a movie
+ * @summary Set or clear the star rating (0.5–5, in halves) for a movie
  */
 export const usePatchRating = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchRating>>, TError,{id: number;data: BodyType<PatchRatingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}

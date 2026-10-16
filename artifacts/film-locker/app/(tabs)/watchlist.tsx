@@ -115,6 +115,18 @@ interface ModalTarget {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
+/**
+ * Watchlist and Watched, which were two tabs.
+ *
+ * They were the same grid over the same query filtered two ways, with the
+ * same filters and the same card, and keeping them apart cost a tab slot
+ * for no difference. The toggle at the top is the whole distinction now.
+ *
+ * The route is still "watchlist". Both the share handler and the film
+ * modal navigate to it by name, and the tab's label is not its path.
+ */
+type FilmsMode = 'watchlist' | 'watched';
+
 export default function WatchlistScreen() {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -146,7 +158,15 @@ export default function WatchlistScreen() {
 
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
+  const [mode, setMode] = useState<FilmsMode>('watchlist');
+  // Cleared on switching: the two lists rarely share a director or a
+  // streaming service, so carrying a filter across usually lands on an
+  // empty grid that looks like the switch did nothing.
   const [filters, setFilters] = useState<FilterState>({});
+  const switchMode = useCallback((next: FilmsMode) => {
+    setMode(next);
+    setFilters({});
+  }, []);
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
   const [resultMatches, setResultMatches] = useState<GeminiMovieMatch[]>([]);
   const [resultListTitle, setResultListTitle] = useState<string | null>(null);
@@ -194,7 +214,13 @@ export default function WatchlistScreen() {
   );
 
   const allMovies = moviesData?.movies ?? [];
-  const watchlistMovies = allMovies.filter((m) => !m.isWatched);
+  // The same query, split the way the toggle asks for it.
+  const watchlistMovies = useMemo(
+    () => allMovies.filter((m) => (mode === 'watched' ? m.isWatched : !m.isWatched)),
+    [allMovies, mode]
+  );
+  const watchedCount = useMemo(() => allMovies.filter((m) => m.isWatched).length, [allMovies]);
+  const watchlistCount = allMovies.length - watchedCount;
 
   // Map tmdbId → saved Movie for quick look-up in search results
   const savedByTmdbId = useMemo(
@@ -221,7 +247,8 @@ export default function WatchlistScreen() {
   const handleDelete = useCallback(
     (id: number) => {
       const title = allMovies.find((m) => m.id === id)?.title ?? 'this film';
-      confirmDestructive(`Would you like to remove "${title}" from your watchlist?`, 'Remove', async () => {
+      const from = mode === 'watched' ? 'Watched list' : 'watchlist';
+      confirmDestructive(`Would you like to remove "${title}" from your ${from}?`, 'Remove', async () => {
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
@@ -233,7 +260,7 @@ export default function WatchlistScreen() {
         }
       });
     },
-    [deleteMovie, queryClient, allMovies]
+    [deleteMovie, queryClient, allMovies, mode]
   );
 
   const openMovieModal = useCallback(
@@ -316,6 +343,7 @@ export default function WatchlistScreen() {
         releaseYear={item.releaseYear}
         posterUrl={item.posterUrl}
         rating={item.rating}
+        isWatched={item.isWatched}
         onPress={() => openSavedMovieModal(item)}
         onLongPress={handleDelete}
       />
@@ -333,15 +361,39 @@ export default function WatchlistScreen() {
        * React Native to unmount/remount the header element whenever its deps
        * change, killing focus and crashing the layout cycle.
        */}
-      <View
-        style={[
-          styles.screenHeader,
-          { paddingTop: insets.top },
-        ]}
-      >
-        <Text style={styles.screenTitle}>My Watchlist</Text>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{watchlistMovies.length}</Text>
+      <View style={[styles.screenHeader, { paddingTop: insets.top }]}>
+        {/*
+          Two tabs along the top, drawn the way a browser draws them: the
+          selected one joins the page below it, the other sits behind. That
+          is the whole affordance — it says these are two views of one place
+          rather than two places.
+        */}
+        <View style={styles.folderRow}>
+          {(['watchlist', 'watched'] as FilmsMode[]).map((m) => {
+            const active = mode === m;
+            return (
+              <TouchableOpacity
+                key={m}
+                style={[styles.folderTab, active && styles.folderTabActive]}
+                onPress={() => switchMode(m)}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={m === 'watched' ? 'checkmark-circle' : 'bookmark'}
+                  size={15}
+                  color={active ? colors.primary : colors.textFaint}
+                />
+                <Text style={[styles.folderText, active && styles.folderTextActive]}>
+                  {m === 'watched' ? 'Watched' : 'Watchlist'}
+                </Text>
+                <View style={[styles.folderCount, active && styles.folderCountActive]}>
+                  <Text style={[styles.folderCountText, active && styles.folderCountTextActive]}>
+                    {m === 'watched' ? watchedCount : watchlistCount}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -479,16 +531,24 @@ export default function WatchlistScreen() {
           ]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="bookmark-outline" size={48} color={colors.iconFaint} />
+              <Ionicons
+                name={mode === 'watched' ? 'checkmark-circle-outline' : 'bookmark-outline'}
+                size={48}
+                color={colors.iconFaint}
+              />
               <Text style={styles.emptyTitle}>
                 {Object.keys(filters).length > 0
                   ? 'No films match your filters'
-                  : 'Your Watchlist is empty'}
+                  : mode === 'watched'
+                    ? 'Nothing watched yet'
+                    : 'Your Watchlist is empty'}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {Object.keys(filters).length > 0
                   ? 'Try clearing your filters'
-                  : 'Search, paste a social link, or ask above for a recommendation'}
+                  : mode === 'watched'
+                    ? 'Open a film from your Watchlist and mark it watched to see it here'
+                    : 'Search, paste a social link, or ask above for a recommendation'}
               </Text>
             </View>
           }
@@ -540,29 +600,40 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   screenHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: HORIZONTAL_PADDING,
-    paddingBottom: 14,
+    paddingBottom: 0,
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,
   },
-  screenTitle: {
-    fontSize: 22,
-    fontFamily: 'Inter_700Bold',
-    color: c.text,
-    letterSpacing: 0.5,
-  },
-  countBadge: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: c.primary,
+  folderRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, flex: 1 },
+  folderTab: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 7,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    backgroundColor: c.surfaceAlt,
   },
-  countText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: c.background },
+  // The selected tab joins the page: it takes the page's own background and
+  // sits a pixel lower, so the line under the header reads as broken by it.
+  folderTabActive: { backgroundColor: c.background, marginBottom: -1, paddingBottom: 11 },
+  folderText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.textFaint },
+  folderTextActive: { color: c.text },
+  folderCount: {
+    minWidth: 20,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 9,
+    backgroundColor: c.surfaceSubtle,
+    alignItems: 'center',
+  },
+  folderCountActive: { backgroundColor: c.primarySoft },
+  folderCountText: { fontSize: 11, fontFamily: 'Inter_700Bold', color: c.textFaint },
+  folderCountTextActive: { color: c.primary },
 
   // Search / paste-link bar, plus the separate AI recommendation bar
   // Same shape as searchContainer but blue-tinted, so it reads as a distinct

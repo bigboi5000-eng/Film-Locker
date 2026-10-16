@@ -44,6 +44,7 @@ import {
   type FeedItem,
 } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { StarRating, formatStars } from '@/components/StarRating';
 import { ShareToFriendSheet } from '@/components/ShareToFriendSheet';
 import { useToast } from '@/components/ToastProvider';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -78,21 +79,6 @@ function verbFor(item: FeedItem): string {
   if (item.type === 'rated') return 'rated';
   if (item.type === 'playlist') return 'made a playlist';
   return 'reviewed';
-}
-
-function Stars({ rating, colors }: { rating: number; colors: Palette }) {
-  return (
-    <View style={{ flexDirection: 'row', gap: 1 }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Ionicons
-          key={n}
-          name={rating >= n ? 'star' : 'star-outline'}
-          size={15}
-          color={rating >= n ? colors.star : colors.iconFaint}
-        />
-      ))}
-    </View>
-  );
 }
 
 function FeedCard({
@@ -234,8 +220,8 @@ function FeedCard({
         </Text>
       ) : typeof item.rating === 'number' && item.rating > 0 ? (
         <View style={styles.ratingRow}>
-          <Stars rating={item.rating} colors={colors} />
-          <Text style={styles.ratingText}>{item.rating}/5</Text>
+          <StarRating value={item.rating} size={15} gap={1} />
+          <Text style={styles.ratingText}>{formatStars(item.rating)}/5</Text>
         </View>
       ) : null}
 

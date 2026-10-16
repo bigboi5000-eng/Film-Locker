@@ -259,6 +259,7 @@ router.post("/movies/enrich-all", requireAuth, async (req, res): Promise<void> =
           language: details.language,
           watchProviders: details.watchProviders,
           runtime: details.runtime,
+          tmdbRating: details.tmdbRating,
         })
         .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
       req.log.info({ tmdbId: movie.tmdbId, title: movie.title }, "enrich-all: enriched");
@@ -345,6 +346,7 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
           language: details.language,
           watchProviders: details.watchProviders,
           runtime: details.runtime,
+          tmdbRating: details.tmdbRating,
         })
         .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
     })

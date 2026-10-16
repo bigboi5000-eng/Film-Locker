@@ -232,6 +232,7 @@ export async function enrichAndSaveMatches(
         // distinguishes "not enriched yet" from a real length, and the
         // length filter treats null as unknown rather than very short.
         runtime: details?.runtime ?? null,
+        tmdbRating: details?.tmdbRating ?? null,
       };
 
       // Upsert:
@@ -255,6 +256,7 @@ export async function enrichAndSaveMatches(
               language: values.language,
               watchProviders: values.watchProviders,
               runtime: values.runtime,
+              tmdbRating: values.tmdbRating,
             },
           })
           .returning());

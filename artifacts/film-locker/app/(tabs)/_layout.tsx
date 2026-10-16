@@ -162,25 +162,27 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/*
+        Named Films, routed as "watchlist", and holding both lists behind a
+        toggle. The route keeps its name because the share handler and the
+        film modal both navigate to it by path, and a tab's label is not its
+        address.
+      */}
       <Tabs.Screen
         name="watchlist"
         options={{
-          title: 'Watchlist',
+          title: 'Films',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'bookmark' : 'bookmark-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'albums' : 'albums-outline'} size={22} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="watched"
+        name="feed"
         options={{
-          title: 'Watched',
+          title: 'Feed',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'}
-              size={22}
-              color={color}
-            />
+            <Ionicons name={focused ? 'newspaper' : 'newspaper-outline'} size={22} color={color} />
           ),
         }}
       />

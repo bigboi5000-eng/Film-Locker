@@ -360,7 +360,7 @@ paths:
     patch:
       operationId: patchRating
       tags: [movies]
-      summary: Set or clear the star rating (1–5) for a movie
+      summary: Set or clear the star rating (0.5–5, in halves) for a movie
       parameters:
         - name: id
           in: path
@@ -1535,11 +1535,25 @@ components:
             film, and also while a newly added film is still being enriched
             in the background — both mean "unknown length", and the app's
             length filter treats them the same way.
-        rating:
-          type: integer
+        tmdbRating:
+          type: number
           nullable: true
-          minimum: 1
+          minimum: 0
+          maximum: 10
+          description: >
+            TMDB's own average out of 10. Null when TMDB has no score and
+            also while a newly added film is still being enriched — both
+            mean "unknown", which is how the rating filter treats them.
+        rating:
+          type: number
+          nullable: true
+          minimum: 0.5
           maximum: 5
+          multipleOf: 0.5
+          description: >
+            The owner's own score out of 5, in half-star steps, so ten
+            positions rather than five. Null means unrated, which is
+            different from nought — there is no nought.
         isWatched:
           type: boolean
         watchedAt:
@@ -2004,10 +2018,12 @@ components:
       type: object
       properties:
         rating:
-          type: integer
+          type: number
           nullable: true
-          minimum: 1
+          minimum: 0.5
           maximum: 5
+          multipleOf: 0.5
+          description: Half-star steps. Null clears the rating.
       required:
         - rating
 

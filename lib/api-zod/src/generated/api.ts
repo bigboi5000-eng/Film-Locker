@@ -149,7 +149,12 @@ export const AiExtractBody = zod.object({
   "text": zod.string()
 })
 
+export const aiExtractResponseSavedItemTmdbRatingMin = 0;
+export const aiExtractResponseSavedItemTmdbRatingMax = 10;
+
+export const aiExtractResponseSavedItemRatingMin = 0.5;
 export const aiExtractResponseSavedItemRatingMax = 5;
+export const aiExtractResponseSavedItemRatingMultipleOf = 0.5;
 
 
 
@@ -185,7 +190,8 @@ export const AiExtractResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(aiExtractResponseSavedItemRatingMax).nullish(),
+  "tmdbRating": zod.number().min(aiExtractResponseSavedItemTmdbRatingMin).max(aiExtractResponseSavedItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(aiExtractResponseSavedItemRatingMin).max(aiExtractResponseSavedItemRatingMax).multipleOf(aiExtractResponseSavedItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -202,7 +208,12 @@ export const ProcessSocialLinkBody = zod.object({
   "dryRun": zod.boolean().optional().describe('When true, identify films from the URL but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film.\n')
 })
 
+export const processSocialLinkResponseSavedItemTmdbRatingMin = 0;
+export const processSocialLinkResponseSavedItemTmdbRatingMax = 10;
+
+export const processSocialLinkResponseSavedItemRatingMin = 0.5;
 export const processSocialLinkResponseSavedItemRatingMax = 5;
+export const processSocialLinkResponseSavedItemRatingMultipleOf = 0.5;
 
 
 
@@ -240,7 +251,8 @@ export const ProcessSocialLinkResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(processSocialLinkResponseSavedItemRatingMax).nullish(),
+  "tmdbRating": zod.number().min(processSocialLinkResponseSavedItemTmdbRatingMin).max(processSocialLinkResponseSavedItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(processSocialLinkResponseSavedItemRatingMin).max(processSocialLinkResponseSavedItemRatingMax).multipleOf(processSocialLinkResponseSavedItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -259,7 +271,12 @@ export const ExtractFromImageBody = zod.object({
   "dryRun": zod.boolean().optional().describe('When true, identify films from the image but do NOT save them to the locker — same confirmation-first behaviour as \/movies\/process-social-link.\n')
 })
 
+export const extractFromImageResponseSavedItemTmdbRatingMin = 0;
+export const extractFromImageResponseSavedItemTmdbRatingMax = 10;
+
+export const extractFromImageResponseSavedItemRatingMin = 0.5;
 export const extractFromImageResponseSavedItemRatingMax = 5;
+export const extractFromImageResponseSavedItemRatingMultipleOf = 0.5;
 
 
 
@@ -297,7 +314,8 @@ export const ExtractFromImageResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(extractFromImageResponseSavedItemRatingMax).nullish(),
+  "tmdbRating": zod.number().min(extractFromImageResponseSavedItemTmdbRatingMin).max(extractFromImageResponseSavedItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(extractFromImageResponseSavedItemRatingMin).max(extractFromImageResponseSavedItemRatingMax).multipleOf(extractFromImageResponseSavedItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -315,7 +333,12 @@ export const RecommendMoviesBody = zod.object({
   "dryRun": zod.boolean().optional().describe('When true, identify recommended films but do NOT save them to the locker. The response `matches` will include TMDB card data (poster_url, title, overview) so the UI can show a confirmation card before the user explicitly adds the film.\n')
 })
 
+export const recommendMoviesResponseSavedItemTmdbRatingMin = 0;
+export const recommendMoviesResponseSavedItemTmdbRatingMax = 10;
+
+export const recommendMoviesResponseSavedItemRatingMin = 0.5;
 export const recommendMoviesResponseSavedItemRatingMax = 5;
+export const recommendMoviesResponseSavedItemRatingMultipleOf = 0.5;
 
 
 
@@ -352,7 +375,8 @@ export const RecommendMoviesResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(recommendMoviesResponseSavedItemRatingMax).nullish(),
+  "tmdbRating": zod.number().min(recommendMoviesResponseSavedItemTmdbRatingMin).max(recommendMoviesResponseSavedItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(recommendMoviesResponseSavedItemRatingMin).max(recommendMoviesResponseSavedItemRatingMax).multipleOf(recommendMoviesResponseSavedItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -493,7 +517,12 @@ export const GetMovieDetailsResponse = zod.object({
 /**
  * @summary List all movies in the locker
  */
+export const listMoviesResponseMoviesItemTmdbRatingMin = 0;
+export const listMoviesResponseMoviesItemTmdbRatingMax = 10;
+
+export const listMoviesResponseMoviesItemRatingMin = 0.5;
 export const listMoviesResponseMoviesItemRatingMax = 5;
+export const listMoviesResponseMoviesItemRatingMultipleOf = 0.5;
 
 
 
@@ -517,7 +546,8 @@ export const ListMoviesResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(listMoviesResponseMoviesItemRatingMax).nullish(),
+  "tmdbRating": zod.number().min(listMoviesResponseMoviesItemTmdbRatingMin).max(listMoviesResponseMoviesItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(listMoviesResponseMoviesItemRatingMin).max(listMoviesResponseMoviesItemRatingMax).multipleOf(listMoviesResponseMoviesItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -537,7 +567,12 @@ export const AddMovieBody = zod.object({
   "isWatched": zod.boolean().optional().describe('Add the film straight to the watched list rather than the watchlist. Adding and then patching meant two round trips and a film that was briefly on the wrong one. A film already in the locker is promoted to watched rather than left alone.\n')
 })
 
+export const addMovieResponseTmdbRatingMin = 0;
+export const addMovieResponseTmdbRatingMax = 10;
+
+export const addMovieResponseRatingMin = 0.5;
 export const addMovieResponseRatingMax = 5;
+export const addMovieResponseRatingMultipleOf = 0.5;
 
 
 
@@ -560,7 +595,8 @@ export const AddMovieResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(addMovieResponseRatingMax).nullish(),
+  "tmdbRating": zod.number().min(addMovieResponseTmdbRatingMin).max(addMovieResponseTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(addMovieResponseRatingMin).max(addMovieResponseRatingMax).multipleOf(addMovieResponseRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -578,7 +614,12 @@ export const PatchWatchedBody = zod.object({
   "isWatched": zod.boolean()
 })
 
+export const patchWatchedResponseTmdbRatingMin = 0;
+export const patchWatchedResponseTmdbRatingMax = 10;
+
+export const patchWatchedResponseRatingMin = 0.5;
 export const patchWatchedResponseRatingMax = 5;
+export const patchWatchedResponseRatingMultipleOf = 0.5;
 
 
 
@@ -601,7 +642,8 @@ export const PatchWatchedResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(patchWatchedResponseRatingMax).nullish(),
+  "tmdbRating": zod.number().min(patchWatchedResponseTmdbRatingMin).max(patchWatchedResponseTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(patchWatchedResponseRatingMin).max(patchWatchedResponseRatingMax).multipleOf(patchWatchedResponseRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -609,21 +651,28 @@ export const PatchWatchedResponse = zod.object({
 
 
 /**
- * @summary Set or clear the star rating (1–5) for a movie
+ * @summary Set or clear the star rating (0.5–5, in halves) for a movie
  */
 export const PatchRatingParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const patchRatingBodyRatingMin = 0.5;
 export const patchRatingBodyRatingMax = 5;
+export const patchRatingBodyRatingMultipleOf = 0.5;
 
 
 
 export const PatchRatingBody = zod.object({
-  "rating": zod.number().min(1).max(patchRatingBodyRatingMax).nullable()
+  "rating": zod.number().min(patchRatingBodyRatingMin).max(patchRatingBodyRatingMax).multipleOf(patchRatingBodyRatingMultipleOf).nullable().describe('Half-star steps. Null clears the rating.')
 })
 
+export const patchRatingResponseTmdbRatingMin = 0;
+export const patchRatingResponseTmdbRatingMax = 10;
+
+export const patchRatingResponseRatingMin = 0.5;
 export const patchRatingResponseRatingMax = 5;
+export const patchRatingResponseRatingMultipleOf = 0.5;
 
 
 
@@ -646,7 +695,8 @@ export const PatchRatingResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(patchRatingResponseRatingMax).nullish(),
+  "tmdbRating": zod.number().min(patchRatingResponseTmdbRatingMin).max(patchRatingResponseTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(patchRatingResponseRatingMin).max(patchRatingResponseRatingMax).multipleOf(patchRatingResponseRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()
@@ -1239,7 +1289,12 @@ export const GetUserWatchedParams = zod.object({
   "id": zod.coerce.string().describe('Clerk user ID whose watched films to view')
 })
 
+export const getUserWatchedResponseMoviesItemTmdbRatingMin = 0;
+export const getUserWatchedResponseMoviesItemTmdbRatingMax = 10;
+
+export const getUserWatchedResponseMoviesItemRatingMin = 0.5;
 export const getUserWatchedResponseMoviesItemRatingMax = 5;
+export const getUserWatchedResponseMoviesItemRatingMultipleOf = 0.5;
 
 
 
@@ -1263,7 +1318,8 @@ export const GetUserWatchedResponse = zod.object({
   "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
 })),
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
-  "rating": zod.number().min(1).max(getUserWatchedResponseMoviesItemRatingMax).nullish(),
+  "tmdbRating": zod.number().min(getUserWatchedResponseMoviesItemTmdbRatingMin).max(getUserWatchedResponseMoviesItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(getUserWatchedResponseMoviesItemRatingMin).max(getUserWatchedResponseMoviesItemRatingMax).multipleOf(getUserWatchedResponseMoviesItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),
   "addedAt": zod.coerce.date()

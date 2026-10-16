@@ -24,6 +24,10 @@ export interface FilterState {
   streaming?: string;
   /** One of LENGTH_BUCKETS' labels — a band, not an exact runtime. */
   length?: string;
+  /** One of TMDB_BANDS' labels — a floor, not an exact score. */
+  tmdbRating?: string;
+  /** One of MY_BANDS' labels, or UNRATED. */
+  myRating?: string;
 }
 
 /** Minimal shape that both Movie and TmdbMovieCard satisfy after adding genres. */
@@ -35,6 +39,10 @@ export interface FilterableMovie {
   watchProviders?: Array<{ provider_name: string }>;
   /** Minutes; null/undefined when TMDB has no runtime or enrichment is pending. */
   runtime?: number | null;
+  /** TMDB's own average out of 10; null until the film has been enriched. */
+  tmdbRating?: number | null;
+  /** The owner's own score out of 5, in halves; null when unrated. */
+  rating?: number | null;
 }
 
 /**
@@ -52,6 +60,55 @@ export const LENGTH_BUCKETS: Array<{ label: string; min: number; max: number }> 
   { label: '2 – 2½ hr', min: 121, max: 150 },
   { label: 'Over 2½ hr', min: 151, max: Infinity },
 ];
+
+/**
+ * Rating bands are floors, not buckets: "7+" rather than "7 to 8".
+ *
+ * Nobody looks through their own library for films rated exactly four —
+ * they are looking for the good ones, and where the line falls is the only
+ * thing they are really choosing. Bands that did not overlap would make
+ * every answer a narrow slice and most of them empty.
+ */
+export const TMDB_BANDS: Array<{ label: string; min: number }> = [
+  { label: '9+', min: 9 },
+  { label: '8+', min: 8 },
+  { label: '7+', min: 7 },
+  { label: '6+', min: 6 },
+  { label: '5+', min: 5 },
+];
+
+/** Half-star floors, matching the ten positions a film can be given. */
+export const MY_BANDS: Array<{ label: string; min: number }> = [
+  { label: '5', min: 5 },
+  { label: '4½+', min: 4.5 },
+  { label: '4+', min: 4 },
+  { label: '3½+', min: 3.5 },
+  { label: '3+', min: 3 },
+  { label: '2½+', min: 2.5 },
+  { label: '2+', min: 2 },
+  { label: '1½+', min: 1.5 },
+  { label: '1+', min: 1 },
+];
+
+/**
+ * Its own answer rather than a band at the bottom of the list: "what have I
+ * watched and never scored" is a different question from "what did I score
+ * badly", and a floor of zero cannot ask it.
+ */
+export const UNRATED = 'Not rated';
+
+function matchesBand(
+  score: number | null | undefined,
+  bands: Array<{ label: string; min: number }>,
+  label: string
+): boolean {
+  // Unknown is excluded rather than treated as nought, for the same reason
+  // an unknown runtime is not evidence of a short film: a film nobody has
+  // scored is not a film that scored badly.
+  if (typeof score !== 'number') return false;
+  const band = bands.find((b) => b.label === label);
+  return band ? score >= band.min : false;
+}
 
 function matchesLengthBucket(runtime: number | null | undefined, label: string): boolean {
   // Unknown length is excluded rather than swept into the shortest band —
@@ -77,9 +134,20 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   language: 'Language',
   streaming: 'Streaming',
   length: 'Length',
+  tmdbRating: 'TMDB rating',
+  myRating: 'Your rating',
 };
 
+/**
+ * The simple chips. Rating is not among them because it is two questions
+ * behind one chip — TMDB's score and your own — and a chip that carried
+ * only one of them would leave the other unreachable.
+ */
 const FILTER_KEYS: FilterKey[] = ['genre', 'length', 'director', 'actor', 'language', 'streaming'];
+
+/** The two-section chip's own key, which is not a FilterState field. */
+const RATING_PICKER = 'rating' as const;
+type PickerKey = FilterKey | typeof RATING_PICKER;
 
 /** Apply all active filters to a movie list. */
 export function applyFilters<T extends FilterableMovie>(movies: T[], filters: FilterState): T[] {
@@ -94,6 +162,13 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     if (filters.streaming && !providers.some((p) => p.provider_name === filters.streaming))
       return false;
     if (filters.length && !matchesLengthBucket(m.runtime, filters.length)) return false;
+    if (filters.tmdbRating && !matchesBand(m.tmdbRating, TMDB_BANDS, filters.tmdbRating))
+      return false;
+    if (filters.myRating === UNRATED) {
+      if (typeof m.rating === 'number') return false;
+    } else if (filters.myRating && !matchesBand(m.rating, MY_BANDS, filters.myRating)) {
+      return false;
+    }
     return true;
   });
 }
@@ -114,12 +189,30 @@ function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
     else if (key === 'length') {
       const bucket = LENGTH_BUCKETS.find((b) => matchesLengthBucket(m.runtime, b.label));
       if (bucket) values.add(bucket.label);
+    } else if (key === 'tmdbRating') {
+      // Every band this film clears, not just the highest: the bands
+      // overlap, so offering only the top one would hide "7+" from a list
+      // whose best film scores 9.
+      TMDB_BANDS.forEach((b) => matchesBand(m.tmdbRating, TMDB_BANDS, b.label) && values.add(b.label));
+    } else if (key === 'myRating') {
+      if (typeof m.rating === 'number') {
+        MY_BANDS.forEach((b) => matchesBand(m.rating, MY_BANDS, b.label) && values.add(b.label));
+      } else {
+        values.add(UNRATED);
+      }
     }
   }
   // Bands have a natural order that alphabetical sorting would destroy
   // ("2 – 2½ hr" before "Under 90 min"), so keep them in the declared order.
   if (key === 'length') {
     return LENGTH_BUCKETS.filter((b) => values.has(b.label)).map((b) => b.label);
+  }
+  if (key === 'tmdbRating') {
+    return TMDB_BANDS.filter((b) => values.has(b.label)).map((b) => b.label);
+  }
+  if (key === 'myRating') {
+    const bands = MY_BANDS.filter((b) => values.has(b.label)).map((b) => b.label);
+    return values.has(UNRATED) ? [...bands, UNRATED] : bands;
   }
   return Array.from(values).sort();
 }
@@ -128,17 +221,30 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
   const wrapperRef = useRef<View>(null);
-  const [pickerKey, setPickerKey] = useState<FilterKey | null>(null);
+  const [pickerKey, setPickerKey] = useState<PickerKey | null>(null);
   const [dropdownTop, setDropdownTop] = useState(200);
 
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   const options = useMemo(
-    () => (pickerKey ? getOptions(movies, pickerKey) : []),
+    () => (pickerKey && pickerKey !== RATING_PICKER ? getOptions(movies, pickerKey) : []),
     [movies, pickerKey]
   );
 
-  const openPicker = useCallback((key: FilterKey) => {
+  // The two halves of the rating chip, each offering only the bands some
+  // film in the list actually clears.
+  const tmdbOptions = useMemo(() => getOptions(movies, 'tmdbRating'), [movies]);
+  const myOptions = useMemo(() => getOptions(movies, 'myRating'), [movies]);
+
+  const ratingActive = Boolean(filters.tmdbRating || filters.myRating);
+  const ratingLabel = [
+    filters.tmdbRating ? `TMDB ${filters.tmdbRating}` : null,
+    filters.myRating ? (filters.myRating === UNRATED ? UNRATED : `You ${filters.myRating}`) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const openPicker = useCallback((key: PickerKey) => {
     // Measure the chip row's bottom edge, then open the dropdown.
     // setPickerKey is only called inside the callback so the modal never
     // renders at a stale position.
@@ -154,9 +260,29 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
     }
   }, []);
 
+  /** Toggle one band inside the rating dropdown, leaving the other alone. */
+  const selectRating = useCallback(
+    (key: 'tmdbRating' | 'myRating', value: string) => {
+      const next = { ...filters };
+      if (next[key] === value) delete next[key];
+      else next[key] = value;
+      onChange(next);
+      // Deliberately left open: the two sections are one question with two
+      // halves, and closing on the first would make the second a second trip.
+    },
+    [filters, onChange]
+  );
+
+  const clearRating = useCallback(() => {
+    const next = { ...filters };
+    delete next.tmdbRating;
+    delete next.myRating;
+    onChange(next);
+  }, [filters, onChange]);
+
   const selectOption = useCallback(
     (value: string) => {
-      if (!pickerKey) return;
+      if (!pickerKey || pickerKey === RATING_PICKER) return;
       // Toggle: selecting the same value clears it
       const next = filters[pickerKey] === value
         ? (() => { const f = { ...filters }; delete f[pickerKey]; return f; })()
@@ -221,6 +347,26 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
               </TouchableOpacity>
             );
           })}
+
+          {/* Rating — one chip, two questions. */}
+          <TouchableOpacity
+            onPress={() => (ratingActive ? clearRating() : openPicker(RATING_PICKER))}
+            style={[styles.chip, ratingActive && styles.chipActive]}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={[styles.chipText, ratingActive && styles.chipTextActive]}
+              numberOfLines={1}
+            >
+              {ratingActive ? ratingLabel : 'Rating'}
+            </Text>
+            <Ionicons
+              name={ratingActive ? 'close' : 'chevron-down'}
+              size={12}
+              color={ratingActive ? colors.background : colors.textMuted}
+              style={{ marginLeft: 4 }}
+            />
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
@@ -240,14 +386,73 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
             {/* Card header */}
             <View style={styles.dropdownHeader}>
               <Text style={styles.dropdownTitle}>
-                {pickerKey ? FILTER_LABELS[pickerKey] : ''}
+                {pickerKey === RATING_PICKER ? 'Rating' : pickerKey ? FILTER_LABELS[pickerKey] : ''}
               </Text>
               <TouchableOpacity onPress={closeDropdown} hitSlop={8}>
                 <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
-            {options.length === 0 ? (
+            {pickerKey === RATING_PICKER ? (
+              <ScrollView
+                style={styles.optionScroll}
+                bounces={false}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+              >
+                <Text style={styles.sectionHeading}>TMDB rating</Text>
+                {tmdbOptions.length === 0 ? (
+                  <Text style={styles.sectionEmpty}>
+                    No scores yet — they arrive as films are enriched.
+                  </Text>
+                ) : (
+                  tmdbOptions.map((band) => {
+                    const isSelected = filters.tmdbRating === band;
+                    return (
+                      <TouchableOpacity
+                        key={`tmdb-${band}`}
+                        onPress={() => selectRating('tmdbRating', band)}
+                        style={[styles.optionRow, isSelected && styles.optionRowActive]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>
+                          {band}
+                        </Text>
+                        {isSelected ? (
+                          <Ionicons name="checkmark" size={16} color={colors.primary} />
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+
+                <Text style={[styles.sectionHeading, styles.sectionHeadingSecond]}>
+                  Your rating
+                </Text>
+                {myOptions.length === 0 ? (
+                  <Text style={styles.sectionEmpty}>Nothing rated yet.</Text>
+                ) : (
+                  myOptions.map((band) => {
+                    const isSelected = filters.myRating === band;
+                    return (
+                      <TouchableOpacity
+                        key={`mine-${band}`}
+                        onPress={() => selectRating('myRating', band)}
+                        style={[styles.optionRow, isSelected && styles.optionRowActive]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>
+                          {band}
+                        </Text>
+                        {isSelected ? (
+                          <Ionicons name="checkmark" size={16} color={colors.primary} />
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </ScrollView>
+            ) : options.length === 0 ? (
               <View style={styles.emptyDropdown}>
                 <Text style={styles.emptyDropdownText}>No data yet</Text>
               </View>
@@ -337,6 +542,29 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.text,
   },
   optionScroll: { maxHeight: 220 },
+  sectionHeading: {
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    color: c.textFaint,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  sectionHeadingSecond: {
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: c.borderSubtle,
+    paddingTop: 14,
+  },
+  sectionEmpty: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: c.textFaint,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+  },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',

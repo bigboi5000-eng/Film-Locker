@@ -46,7 +46,14 @@ export interface Movie {
   /** Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean "unknown length", and the app's length filter treats them the same way. */
   runtime?: number | null;
   /**
-     * @minimum 1
+     * TMDB's own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean "unknown", which is how the rating filter treats them.
+     * @minimum 0
+     * @maximum 10
+     */
+  tmdbRating?: number | null;
+  /**
+     * The owner's own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.
+     * @minimum 0.5
      * @maximum 5
      */
   rating?: number | null;
@@ -244,7 +251,8 @@ export interface PatchWatchedBody {
 
 export interface PatchRatingBody {
   /**
-     * @minimum 1
+     * Half-star steps. Null clears the rating.
+     * @minimum 0.5
      * @maximum 5
      */
   rating: number | null;

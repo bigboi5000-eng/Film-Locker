@@ -10,11 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { SocialFeedView } from '@/components/SocialFeed';
 import {
   useGetConversations,
-  useGetFeed,
-  getGetFeedQueryKey,
   useGetFollows,
   useAcceptFollowRequest,
   useDeclineFollowRequest,
@@ -375,28 +372,24 @@ function NotificationsScreenInner() {
   const router = useRouter();
   const { userId: myClerkId } = useAuth();
   /**
-   * Which of the three the tab opens on.
-   *
-   * The feed by default, not the messages. Messages are a thing you come
-   * looking for and know you have — the badge says so — whereas the feed is
-   * the thing nobody opens the app for and everybody wants once it is in
-   * front of them.
+   * Messages or Friends. The feed moved out to a tab of its own — it was
+   * the one thing here nobody arrived looking for, which is exactly why it
+   * should not have been two taps inside something else.
    *
    * Overridable by ?tab=, because a push notification about a follow
    * request sends people here to accept it and the controls for that are on
-   * Friends. Landing them on the feed instead would be a dead end at the
-   * end of a notification.
+   * Friends.
    */
   const { tab: requestedTab } = useLocalSearchParams<{ tab?: string }>();
-  const [activeTab, setActiveTab] = useState<'feed' | 'messages' | 'friends'>(() =>
-    requestedTab === 'friends' || requestedTab === 'messages' ? requestedTab : 'feed'
+  const [activeTab, setActiveTab] = useState<'messages' | 'friends'>(() =>
+    requestedTab === 'friends' ? 'friends' : 'messages'
   );
 
   // The initialiser above only covers a cold start. The tab screens stay
   // mounted, so a notification tapped while the app is already running
   // navigates to a screen whose state has long since been set — and would
-  // leave somebody on the feed when they came to accept a request. Keyed on
-  // the parameter, so choosing a different sub-tab afterwards sticks.
+  // leave somebody on Messages when they came to accept a request. Keyed on
+  // the parameter, so choosing the other sub-tab afterwards sticks.
   useEffect(() => {
     if (requestedTab === 'friends' || requestedTab === 'messages') setActiveTab(requestedTab);
   }, [requestedTab]);
@@ -404,10 +397,6 @@ function NotificationsScreenInner() {
   const { data: followsData } = useGetFollows();
   const incomingRequestCount = followsData?.incomingRequests?.length ?? 0;
 
-  // Fetched here as well as in the feed itself, for the count on its tab —
-  // React Query serves both from one request.
-  const { data: feedData } = useGetFeed(undefined, { query: { queryKey: getGetFeedQueryKey() } });
-  const newFeedCount = feedData?.newCount ?? 0;
 
   const conversations = data?.conversations ?? [];
   const unreadCount = data?.unreadCount ?? 0;
@@ -449,18 +438,6 @@ function NotificationsScreenInner() {
       {/* Tab switcher */}
       <View style={styles.tabBar}>
         <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'feed' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('feed')}
-          activeOpacity={0.75}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'feed' && styles.tabBtnTextActive]}>Feed</Text>
-          {newFeedCount > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{newFeedCount > 9 ? '9+' : newFeedCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'messages' && styles.tabBtnActive]}
           onPress={() => setActiveTab('messages')}
           activeOpacity={0.75}
@@ -486,9 +463,7 @@ function NotificationsScreenInner() {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'feed' ? (
-        <SocialFeedView />
-      ) : activeTab === 'friends' ? (
+      {activeTab === 'friends' ? (
         <FilmPalsView />
       ) : isLoading ? (
         <View style={styles.centered}>

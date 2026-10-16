@@ -59,6 +59,7 @@ import { useToast } from '@/components/ToastProvider';
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
+import { StarRating } from '@/components/StarRating';
 import type { Palette } from '@/constants/colors';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -79,36 +80,6 @@ interface FilmDetailModalProps {
   savedMovie?: Movie;
 }
 
-// ── Star rating component ──────────────────────────────────────────────────────
-
-function StarRating({
-  value,
-  onChange,
-}: {
-  value: number | null | undefined;
-  onChange: (n: number) => void;
-}) {
-  const colors = useColors();
-  const starStyles = useThemedStyles(makeStarStyles);
-  return (
-    <View style={starStyles.row}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <TouchableOpacity key={n} onPress={() => onChange(n)} hitSlop={8}>
-          <Ionicons
-            name={typeof value === 'number' && value >= n ? 'star' : 'star-outline'}
-            size={28}
-            color={colors.star}
-            style={{ marginHorizontal: 4 }}
-          />
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
-const makeStarStyles = (c: Palette) => StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center' },
-});
 
 // ── Watch Provider pill ────────────────────────────────────────────────────────
 
@@ -226,21 +197,10 @@ const makeTagStyles = (c: Palette) => StyleSheet.create({
 // ── Community Stars (read-only display) ───────────────────────────────────────
 
 function CommunityStars({ value }: { value: number | null | undefined }) {
-  const colors = useColors();
-  const filled = Math.round(value ?? 0);
-  return (
-    <View style={{ flexDirection: 'row' }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Ionicons
-          key={n}
-          name={filled >= n ? 'star' : 'star-outline'}
-          size={18}
-          color={colors.star}
-          style={{ marginRight: 2 }}
-        />
-      ))}
-    </View>
-  );
+  // Rounded to the nearest half now there is one. An average of 3.7 used to
+  // round to four whole stars, which overstated it by a bigger margin than
+  // the half it can now show.
+  return <StarRating value={value ? Math.round(value * 2) / 2 : null} size={18} gap={2} />;
 }
 
 // ── Comment row ────────────────────────────────────────────────────────────────
@@ -288,14 +248,7 @@ function CommentRow({
           </TouchableOpacity>
           {comment.rating != null && (
             <View style={commentStyles.ratingRow}>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <Ionicons
-                  key={n}
-                  name={comment.rating! >= n ? 'star' : 'star-outline'}
-                  size={11}
-                  color={colors.star}
-                />
-              ))}
+              <StarRating value={comment.rating} size={11} gap={1} />
             </View>
           )}
           <Text style={commentStyles.time}>{timeAgo}</Text>
@@ -1322,7 +1275,9 @@ export function FilmDetailModal({
       });
       handleClose();
       // Land on whichever list it went to, rather than always the watchlist.
-      router.push(asWatched ? '/(tabs)/watched' : '/(tabs)/watchlist');
+      // One tab now, with a toggle. Both lists live behind the same route,
+      // so there is no longer a second path to send anyone down.
+      router.push('/(tabs)/watchlist');
     } catch {
       showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
     }
