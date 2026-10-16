@@ -1180,17 +1180,25 @@ export function FilmDetailModal({
   const displayRuntime = formatRuntime(details?.runtime);
 
   const handleRating = useCallback(
-    async (n: number) => {
+    async (n: number, viaDrag: boolean) => {
       if (!savedMovie) return;
-      const newRating = currentRating === n ? null : n;
+      // Tapping the star you already have clears the rating — the only way
+      // to un-rate a film. Sliding onto it does not: landing on your own
+      // score while dragging is how you confirm it, not how you delete it.
+      const newRating = !viaDrag && currentRating === n ? null : n;
       setOptimisticRating(newRating);
       if (Platform.OS !== 'web') Haptics.selectionAsync();
       try {
         await patchRating({ id: savedMovie.id, data: { rating: newRating } });
         await invalidate();
-      } catch {
+      } catch (err) {
         setOptimisticRating(undefined);
-        Alert.alert('Error', 'Could not update rating.');
+        // The server's own words, not a generic line. A rating can fail for
+        // reasons worth reading — a half-star reaching a server that has
+        // not had the column widened yet says exactly that, and "Could not
+        // update rating" sends the reader nowhere.
+        const detail = err instanceof Error ? err.message : '';
+        Alert.alert('Could not update rating', detail || 'Please try again.');
       }
     },
     [savedMovie, currentRating, patchRating, invalidate]

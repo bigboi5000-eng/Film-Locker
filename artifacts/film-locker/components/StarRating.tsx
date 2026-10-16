@@ -1,31 +1,46 @@
 /**
- * Stars, in halves.
+ * Stars you can slide.
  *
- * Ten positions rather than five, which is the only reason this is its own
- * component: a half-star is not a different icon but a half-width window
- * onto a filled one, laid over an outline of the same size. Ionicons has no
- * half-star glyph, and the ones that exist in other sets lean the wrong way
- * against a left-to-right fill.
+ * Ten positions rather than five, which is why this is its own component:
+ * a half-star is not a different icon but a half-width window onto a filled
+ * one, laid over an outline of the same size. Ionicons has no half glyph,
+ * and the ones in other sets lean the wrong way against a left-to-right
+ * fill.
  *
- * Reading a tap is the other half of it. The control is not five buttons
- * but ten: each star is two targets, and which half was hit decides whether
- * the value lands on the half or the whole. That has to be measured rather
- * than guessed, so the touch is taken on the row and divided by its width.
+ * Two gestures, deliberately different:
+ *
+ *  - A tap gives a WHOLE star, always. Hitting the left edge of the fourth
+ *    star and getting 3½ is the kind of precision nobody asked a tap for,
+ *    and the commonest rating in any five-star system is a round number.
+ *  - A drag gives halves, following the finger, like a slider. Precision is
+ *    something you opt into by taking the time to slide.
+ *
+ * The value under the finger is shown as it moves and only committed on
+ * release, so a drag across the row does not fire five writes on its way to
+ * the one that was meant.
  */
-import React, { useCallback } from 'react';
-import { View, StyleSheet, type GestureResponderEvent } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { View, StyleSheet, Platform, type GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 
 export interface StarRatingProps {
   /** 0.5–5 in half steps, or null/undefined for unrated. */
   value: number | null | undefined;
-  /** Omit to render a read-only display. */
-  onChange?: (rating: number) => void;
+  /**
+   * Omit to render a read-only display. `viaDrag` says how the value was
+   * chosen, because tapping a star you already have should be able to mean
+   * "clear it" while sliding onto the same value should not.
+   */
+  onChange?: (rating: number, viaDrag: boolean) => void;
   size?: number;
-  /** Gap between stars. Also the width the touch maths has to account for. */
+  /** Gap between stars. The touch maths accounts for it via the row width. */
   gap?: number;
 }
+
+/** How far a finger may travel and still count as a tap. */
+const TAP_SLOP = 6;
 
 /** Round any score onto the nearest half, within 0.5–5. */
 export function toHalfStar(value: number): number {
@@ -45,31 +60,27 @@ function Star({
   index,
   value,
   size,
-  colors,
+  color,
 }: {
   index: number;
   value: number;
   size: number;
-  colors: ReturnType<typeof useColors>;
+  color: string;
 }) {
-  // How much of this star is filled: all of it, half, or none.
   const filled = value >= index;
   const halved = !filled && value >= index - 0.5;
 
   return (
     <View style={{ width: size, height: size }}>
-      <Ionicons name="star-outline" size={size} color={colors.star} />
+      <Ionicons name="star-outline" size={size} color={color} />
       {filled || halved ? (
         // Clipped to half the width for a half star. The filled glyph is
-        // drawn at full size inside a window that shows only the left of it,
-        // so the two always line up exactly.
+        // drawn at full size inside a window showing only its left, so the
+        // two always line up — they are the same glyph.
         <View
-          style={[
-            StyleSheet.absoluteFill,
-            halved ? { width: size / 2, overflow: 'hidden' } : null,
-          ]}
+          style={[StyleSheet.absoluteFill, halved ? { width: size / 2, overflow: 'hidden' } : null]}
         >
-          <Ionicons name="star" size={size} color={colors.star} />
+          <Ionicons name="star" size={size} color={color} />
         </View>
       ) : null}
     </View>
@@ -78,39 +89,80 @@ function Star({
 
 export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingProps) {
   const colors = useColors();
-  const current = typeof value === 'number' ? value : 0;
   const readOnly = !onChange;
 
+  const [width, setWidth] = useState(0);
+  /** What the finger is currently over, while it is down. */
+  const [preview, setPreview] = useState<number | null>(null);
+  const startX = useRef(0);
+  const movedRef = useRef(false);
+  const lastStepRef = useRef<number | null>(null);
+
+  const committed = typeof value === 'number' ? value : 0;
+  const shown = preview ?? committed;
+
   /**
-   * Which of the ten positions a touch landed on.
+   * Where along the row the finger is, as a rating.
    *
-   * Measured from the row's own width rather than from the stars': it is the
-   * only number available at the moment of the touch that accounts for the
-   * gaps, and dividing it by five gives the slot each star occupies whether
-   * or not the caller changed the size.
+   * Measured against the row's own width rather than the stars': it is the
+   * only figure available mid-gesture that already accounts for the gaps,
+   * and dividing by five gives the slot each star occupies whatever size
+   * the caller asked for.
    */
-  const handlePress = useCallback(
-    (event: GestureResponderEvent, width: number) => {
-      if (!onChange || width <= 0) return;
-      const x = event.nativeEvent.locationX;
+  const ratingAt = useCallback(
+    (x: number, halves: boolean): number => {
+      if (width <= 0) return 0.5;
       const slot = width / 5;
-      const starIndex = Math.min(Math.floor(x / slot), 4);
-      const withinStar = x - starIndex * slot;
-      const isLeftHalf = withinStar < slot / 2;
-      onChange(starIndex + (isLeftHalf ? 0.5 : 1));
+      const index = Math.min(Math.max(Math.floor(x / slot), 0), 4);
+      if (!halves) return index + 1;
+      const within = x - index * slot;
+      return index + (within < slot / 2 ? 0.5 : 1);
     },
-    [onChange]
+    [width]
   );
 
-  const [width, setWidth] = React.useState(0);
+  const onGrant = useCallback(
+    (e: GestureResponderEvent) => {
+      startX.current = e.nativeEvent.locationX;
+      movedRef.current = false;
+      // A press starts on the whole star under it; sliding refines it.
+      const next = ratingAt(e.nativeEvent.locationX, false);
+      lastStepRef.current = next;
+      setPreview(next);
+    },
+    [ratingAt]
+  );
+
+  const onMove = useCallback(
+    (e: GestureResponderEvent) => {
+      const x = e.nativeEvent.locationX;
+      if (!movedRef.current && Math.abs(x - startX.current) > TAP_SLOP) movedRef.current = true;
+      const next = ratingAt(x, movedRef.current);
+      if (next !== lastStepRef.current) {
+        lastStepRef.current = next;
+        setPreview(next);
+        // One tick per half-star crossed, which is what makes a slide feel
+        // like a dial rather than a drag over a picture of one.
+        if (Platform.OS !== 'web') void Haptics.selectionAsync();
+      }
+    },
+    [ratingAt]
+  );
+
+  const onRelease = useCallback(
+    (e: GestureResponderEvent) => {
+      const next = ratingAt(e.nativeEvent.locationX, movedRef.current);
+      const viaDrag = movedRef.current;
+      setPreview(null);
+      onChange?.(next, viaDrag);
+    },
+    [onChange, ratingAt]
+  );
 
   const row = (
-    <View
-      style={[styles.row, { gap }]}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-    >
+    <View style={[styles.row, { gap }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <Star key={n} index={n} value={current} size={size} colors={colors} />
+        <Star key={n} index={n} value={shown} size={size} color={colors.star} />
       ))}
     </View>
   );
@@ -120,10 +172,15 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
   return (
     <View
       onStartShouldSetResponder={() => true}
-      // Yielded on request, so a drag that starts on the stars still scrolls
-      // the sheet they sit in rather than being swallowed by them.
-      onResponderTerminationRequest={() => true}
-      onResponderRelease={(e) => handlePress(e, width)}
+      onMoveShouldSetResponder={() => true}
+      // Held once the finger is down, so a slide along the stars is not
+      // stolen by the sheet they sit in. Before that it yields freely, so a
+      // scroll that merely begins on them still scrolls.
+      onResponderTerminationRequest={() => !movedRef.current}
+      onResponderGrant={onGrant}
+      onResponderMove={onMove}
+      onResponderRelease={onRelease}
+      onResponderTerminate={() => setPreview(null)}
     >
       {row}
     </View>
