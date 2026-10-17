@@ -19,11 +19,23 @@
 # auto-deploy is off, fix that in the service's settings rather than
 # expecting this to pick up new commits.
 #
-# Setup, once: add a Railway PROJECT token as the RAILWAY_TOKEN repository
-# secret (Railway → project → Settings → Tokens). It must be a project
-# token, not a personal one — a project token is already scoped to one
-# project and environment, which is what lets the CLI work here without
-# linking to anything.
+# Setup, once, and there are two ways because Railway has two kinds of token
+# that go in two differently named variables. Mixing them up is the usual
+# cause of "Invalid token", and setting both at once is itself an error.
+#
+#   EITHER a PROJECT token, as the RAILWAY_TOKEN secret.
+#     Railway → the project → Settings → Tokens. Simplest: the token is
+#     already scoped to one project and environment, so nothing else needs
+#     naming. If that page is not where you are looking, try the URL
+#     directly — railway.com/project/<project-id>/settings/tokens — since
+#     the tab is easy to miss and is not always shown on a phone.
+#
+#   OR an ACCOUNT token, as the RAILWAY_API_TOKEN secret.
+#     Railway → Account Settings → Tokens, leaving the workspace dropdown
+#     on "No workspace": picking one makes it workspace-scoped, which the
+#     CLI has been known to reject. An account token is not tied to a
+#     project, so this path also needs the `project` input below, which is
+#     the id in the dashboard URL.
 #
 # Run it from the Actions tab: "Deploy API (Railway)" → Run workflow.
 name: Deploy API (Railway)
@@ -35,6 +47,14 @@ on:
         description: "Railway service to redeploy"
         type: string
         default: "@workspace/api-server"
+      project:
+        description: "Project id — only needed when using an account token"
+        type: string
+        default: ""
+      environment:
+        description: "Environment to deploy — only used with an account token"
+        type: string
+        default: "production"
 
 jobs:
   deploy:
@@ -47,11 +67,25 @@ jobs:
       # Said plainly and early. Without the secret the CLI fails several
       # steps later with an authentication error that reads like something
       # is wrong with Railway rather than with this repository's settings.
-      - name: Check the token is present
+      - name: Check a token is present
+        env:
+          PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          ACCOUNT_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
-            echo "::error::RAILWAY_TOKEN is not set. Add a Railway PROJECT token" \
-                 "as a repository secret — see the comment at the top of this file."
+          if [ -z "$PROJECT_TOKEN" ] && [ -z "$ACCOUNT_TOKEN" ]; then
+            echo "::error::Neither RAILWAY_TOKEN nor RAILWAY_API_TOKEN is set." \
+                 "Add one as a repository secret — see the comment at the top of this file."
+            exit 1
+          fi
+          if [ -n "$PROJECT_TOKEN" ] && [ -n "$ACCOUNT_TOKEN" ]; then
+            echo "::error::Both RAILWAY_TOKEN and RAILWAY_API_TOKEN are set." \
+                 "The CLI rejects that outright. Remove whichever one you are not using."
+            exit 1
+          fi
+          if [ -z "$PROJECT_TOKEN" ] && [ -z "${{ inputs.project }}" ]; then
+            echo "::error::An account token needs the project id too, since it is not" \
+                 "scoped to one. Re-run with the 'project' input set — it is the id in" \
+                 "the Railway dashboard URL."
             exit 1
           fi
 
@@ -64,9 +98,23 @@ jobs:
       - name: Install the Railway CLI
         run: npm install -g @railway/cli@4.5.3
 
+      # A project token already knows which project and environment it
+      # belongs to. An account token does not, so it has to be pointed at
+      # one before anything can be redeployed.
+      - name: Link the project
+        if: ${{ secrets.RAILWAY_TOKEN == '' }}
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          railway link \
+            --project "${{ inputs.project }}" \
+            --environment "${{ inputs.environment }}" \
+            --service "${{ inputs.service }}"
+
       - name: Redeploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: railway redeploy --service "${{ inputs.service }}" --yes
 
       # Best effort: the redeploy has already been accepted by this point,
@@ -76,6 +124,7 @@ jobs:
         if: always()
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         continue-on-error: true
         run: |
           {
