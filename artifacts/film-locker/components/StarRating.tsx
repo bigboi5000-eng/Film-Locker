@@ -19,7 +19,7 @@
  * release, so a drag across the row does not fire five writes on its way to
  * the one that was meant.
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Platform, type GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -91,7 +91,6 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
   const colors = useColors();
   const readOnly = !onChange;
 
-  const [width, setWidth] = useState(0);
   /** What the finger is currently over, while it is down. */
   const [preview, setPreview] = useState<number | null>(null);
   const startX = useRef(0);
@@ -102,23 +101,35 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
   const shown = preview ?? committed;
 
   /**
-   * Where along the row the finger is, as a rating.
+   * Exactly as wide as the five stars, and no wider.
    *
-   * Measured against the row's own width rather than the stars': it is the
-   * only figure available mid-gesture that already accounts for the gaps,
-   * and dividing by five gives the slot each star occupies whatever size
-   * the caller asked for.
+   * This is load-bearing rather than cosmetic. The row was measured with
+   * onLayout and the width divided by five, which is wrong whenever the row
+   * is wider than its contents — and it always was, because a plain View
+   * stretches to its parent. On a phone that made each "slot" about 68px
+   * against a star of 34, so tapping the third star gave two, the fifth
+   * gave three, and four and five could not be reached at all.
+   *
+   * Pinning the width to the stars' own geometry fixes it and removes the
+   * measurement entirely: the position of every star is known from `size`
+   * and `gap` before anything is laid out, so the first tap is as accurate
+   * as the hundredth and there is no frame where the row has no width yet.
    */
+  const contentWidth = useMemo(() => size * 5 + gap * 4, [size, gap]);
+
+  /** Where along the row the finger is, as a rating. */
   const ratingAt = useCallback(
     (x: number, halves: boolean): number => {
-      if (width <= 0) return 0.5;
-      const slot = width / 5;
-      const index = Math.min(Math.max(Math.floor(x / slot), 0), 4);
+      const stride = size + gap;
+      const index = Math.min(Math.max(Math.floor(x / stride), 0), 4);
       if (!halves) return index + 1;
-      const within = x - index * slot;
-      return index + (within < slot / 2 ? 0.5 : 1);
+      // Distance into this star. A touch landing in the gap after a star
+      // counts as its right half, which is the whole star — the gap is
+      // nearer the star behind it than the one ahead.
+      const within = x - index * stride;
+      return index + (within < size / 2 ? 0.5 : 1);
     },
-    [width]
+    [size, gap]
   );
 
   const onGrant = useCallback(
@@ -160,7 +171,7 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
   );
 
   const row = (
-    <View style={[styles.row, { gap }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={[styles.row, { gap, width: contentWidth }]}>
       {[1, 2, 3, 4, 5].map((n) => (
         <Star key={n} index={n} value={shown} size={size} color={colors.star} />
       ))}
@@ -171,6 +182,10 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
 
   return (
     <View
+      // Hugging the stars, so the touch coordinates this reports are
+      // relative to the first star rather than to whatever the parent's
+      // width happens to be.
+      style={{ width: contentWidth }}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
       // Held once the finger is down, so a slide along the stars is not
