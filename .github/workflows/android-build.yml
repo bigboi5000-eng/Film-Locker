@@ -134,6 +134,28 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The counterpart to the notice above, for when there is no build to
+      # point at. A failed step leaves its reason only in the job log, and
+      # the job log is on blob storage that the REST API does not serve — so
+      # "the build did not happen" has been arriving with no sign of why.
+      # eas says perfectly clearly what went wrong; it just said it somewhere
+      # nothing could read. This puts the tail of it on the check run.
+      - name: Why it failed
+        if: failure()
+        working-directory: artifacts/film-locker
+        run: |
+          if [ -s build.log ]; then
+            # Workflow commands are one line, so newlines become %0A and a
+            # literal % has to be escaped first or it eats what follows.
+            MSG="$(sed -e 's/\x1b\[[0-9;]*m//g' build.log \
+                   | tail -n 30 \
+                   | sed -e 's/%/%25/g' -e 's/\r//g' \
+                   | awk '{ printf "%s%%0A", $0 }')"
+            echo "::error title=eas build failed::${MSG}"
+          else
+            echo "::error title=eas build failed::eas wrote no output at all — it failed before it started."
+          fi
+
       # Written by the step above, and it holds nothing sensitive, but it sits
       # in the working tree and this keeps the checkout clean.
       - name: Tidy up
