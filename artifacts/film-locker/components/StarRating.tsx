@@ -51,6 +51,14 @@ export interface StarRatingProps {
 /** How far a finger may travel and still count as a tap. */
 const TAP_SLOP = 6;
 
+/**
+ * How far down a finger must travel before the gesture is read as a scroll
+ * rather than a rating. Higher than TAP_SLOP on purpose: a tap on a phone
+ * always drifts a little, and reading that drift as a scroll is what made
+ * tapping a star do nothing at all.
+ */
+const SCROLL_SLOP = 12;
+
 /** Round any score onto the nearest half, within 0.5–5. */
 export function toHalfStar(value: number): number {
   return Math.min(Math.max(Math.round(value * 2) / 2, 0.5), 5);
@@ -119,6 +127,9 @@ export function StarRating({
    */
   const [held, setHeld] = useState<number | null>(null);
   const startX = useRef(0);
+  const startPage = useRef({ x: 0, y: 0 });
+  /** Set once the gesture is clearly a scroll rather than a rating. */
+  const verticalRef = useRef(false);
   const movedRef = useRef(false);
   const lastStepRef = useRef<number | null>(null);
   const heldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -186,6 +197,10 @@ export function StarRating({
   const onGrant = useCallback(
     (e: GestureResponderEvent) => {
       startX.current = e.nativeEvent.locationX;
+      // Page coordinates, because these are only ever used as deltas and a
+      // delta does not care what it is measured from.
+      startPage.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+      verticalRef.current = false;
       movedRef.current = false;
       // A press starts on the whole star under it; sliding refines it.
       const next = ratingAt(e.nativeEvent.locationX, false);
@@ -198,6 +213,14 @@ export function StarRating({
   const onMove = useCallback(
     (e: GestureResponderEvent) => {
       const x = e.nativeEvent.locationX;
+      const dx = Math.abs(e.nativeEvent.pageX - startPage.current.x);
+      const dy = Math.abs(e.nativeEvent.pageY - startPage.current.y);
+      // Once, and it stays decided: a gesture that set off downwards is a
+      // scroll even if it wanders sideways later, and one that set off
+      // along the stars stays theirs even if the finger drifts off the row.
+      if (!verticalRef.current && !movedRef.current && dy > SCROLL_SLOP && dy > dx) {
+        verticalRef.current = true;
+      }
       if (!movedRef.current && Math.abs(x - startX.current) > TAP_SLOP) movedRef.current = true;
       const next = ratingAt(x, movedRef.current);
       if (next !== lastStepRef.current) {
@@ -270,10 +293,19 @@ export function StarRating({
       style={{ width: contentWidth }}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
-      // Held once the finger is down, so a slide along the stars is not
-      // stolen by the sheet they sit in. Before that it yields freely, so a
-      // scroll that merely begins on them still scrolls.
-      onResponderTerminationRequest={() => !movedRef.current}
+      // Answered by DIRECTION, not by whether the finger has moved yet.
+      //
+      // This used to yield whenever the gesture had not already travelled
+      // sideways — meaning a tap, which by definition has not — so the
+      // scroll view these stars sit in could ask for the gesture mid-tap,
+      // be given it, and the release would never arrive. Tapping a star in
+      // the film sheet did nothing whatever. The same control inside the
+      // filter worked perfectly, because nothing there competes for the
+      // gesture; that split is what gave it away.
+      //
+      // A tap and a sideways drag are the stars' own, and are kept. Only a
+      // clearly downward gesture is a scroll, and only that is handed over.
+      onResponderTerminationRequest={() => verticalRef.current}
       onResponderGrant={onGrant}
       onResponderMove={onMove}
       onResponderRelease={onRelease}
