@@ -122,6 +122,103 @@ function collectComments(node: unknown, out: string[]): void {
   if (replies && typeof replies === "object") collectComments(replies, out);
 }
 
+/** Whether this deployment has been given Reddit API credentials. */
+export function hasRedditCredentials(): boolean {
+  return Boolean(process.env["REDDIT_CLIENT_ID"] && process.env["REDDIT_CLIENT_SECRET"]);
+}
+
+/**
+ * An application-only token, kept until shortly before it expires.
+ *
+ * Reddit issues these for a day at a time, so fetching one per post would be
+ * a wasted round trip on every share — and the rate limit counts it.
+ */
+let token: { value: string; expiresAt: number } | null = null;
+
+async function getToken(warn?: WarnFn): Promise<string | null> {
+  if (token && token.expiresAt > Date.now()) return token.value;
+
+  const id = process.env["REDDIT_CLIENT_ID"];
+  const secret = process.env["REDDIT_CLIENT_SECRET"];
+  if (!id || !secret) return null;
+
+  try {
+    const res = await fetch("https://www.reddit.com/api/v1/access_token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": UA,
+      },
+      body: "grant_type=client_credentials",
+    });
+
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
+      // Said plainly: this is a configuration problem, not a Reddit outage,
+      // and the two are indistinguishable from a bare status.
+      warn?.({ status: res.status, detail }, `reddit: could not get a token (${res.status}) — check REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET`);
+      return null;
+    }
+
+    const data = (await res.json()) as { access_token?: string; expires_in?: number };
+    if (!data.access_token) {
+      warn?.({}, "reddit: token response carried no token");
+      return null;
+    }
+
+    // A minute of margin, so a request is never made with a token that
+    // expires while it is in flight.
+    const ttl = (data.expires_in ?? 3600) * 1000 - 60_000;
+    token = { value: data.access_token, expiresAt: Date.now() + Math.max(ttl, 0) };
+    warn?.({ expiresInSec: data.expires_in ?? null }, "reddit: got an application token");
+    return token.value;
+  } catch (err) {
+    warn?.({ err }, "reddit: token request failed outright");
+    return null;
+  }
+}
+
+/** The post's id out of a canonical URL: /r/<sub>/comments/<id>/<slug>. */
+function postIdFrom(url: string): string | null {
+  const m = /\/comments\/([A-Za-z0-9]+)/.exec(url);
+  return m?.[1] ?? null;
+}
+
+/**
+ * The sanctioned route, and the only one that works from here.
+ *
+ * www.reddit.com/....json answers a browser perfectly well and refuses this
+ * server with a 403: Reddit blocks unauthenticated reads from datacentre
+ * addresses, which is what any cloud host is. The OAuth endpoint is the same
+ * data through the front door — free, a hundred requests a minute, and
+ * indifferent to where the request comes from.
+ */
+async function tryOAuth(
+  postId: string,
+  warn?: WarnFn
+): Promise<{ ok: true; body: unknown } | { ok: false; status: number; detail: string }> {
+  const bearer = await getToken(warn);
+  if (!bearer) return { ok: false, status: 0, detail: "no token" };
+
+  const url = `https://oauth.reddit.com/comments/${postId}?raw_json=1&limit=${MAX_COMMENTS}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${bearer}`, "User-Agent": UA, Accept: "application/json" },
+    });
+    if (!res.ok) {
+      // A token can be revoked or expire early; drop it so the next attempt
+      // fetches a fresh one rather than reusing a dead one all day.
+      if (res.status === 401) token = null;
+      const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").trim().slice(0, 200);
+      return { ok: false, status: res.status, detail };
+    }
+    return { ok: true, body: await res.json() };
+  } catch (err) {
+    return { ok: false, status: 0, detail: String(err).slice(0, 200) };
+  }
+}
+
 /**
  * Ask one host for the post's JSON.
  *
@@ -181,26 +278,49 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
     return null;
   }
 
-  const attempts: Array<{ host: string; status: number; detail: string }> = [];
+  const attempts: Array<{ via: string; status: number; detail: string }> = [];
+
+  // The authenticated route first where it is available, rather than after
+  // two refusals. www.reddit.com answers a browser and 403s this server —
+  // Reddit blocks unauthenticated reads from datacentre addresses — so with
+  // credentials in hand the public hosts are two wasted round trips on the
+  // way to the one that works.
+  const postId = postIdFrom(base);
+  if (postId && hasRedditCredentials()) {
+    const result = await tryOAuth(postId, warn);
+    if (result.ok) return parsePost(result.body, url, warn);
+    attempts.push({ via: "oauth.reddit.com", status: result.status, detail: result.detail });
+  }
+
+  // Still tried, and not only as a fallback: with no credentials configured
+  // this is the whole mechanism, and it works perfectly from a machine
+  // Reddit is willing to talk to — a laptop, or anywhere not in a
+  // datacentre.
   for (const host of ["www.reddit.com", "old.reddit.com"]) {
     const result = await tryHost(path, host, warn);
     if (result.ok) {
-      if (attempts.length) {
-        warn?.({ url, host, attempts }, "reddit: a fallback host answered");
-      }
+      if (attempts.length) warn?.({ url, host, attempts }, "reddit: a later route answered");
       return parsePost(result.body, url, warn);
     }
-    attempts.push({ host, status: result.status, detail: result.detail });
+    attempts.push({ via: host, status: result.status, detail: result.detail });
   }
 
   const first = attempts[0]!;
+  // The status is in the message as well as the payload: a collapsed log
+  // line showing only "refused" cannot be acted on, and this one is read
+  // far from the machine that wrote it. The hint is there because a 403
+  // from a cloud host has one cause and one answer, and nobody should have
+  // to rediscover that.
+  const blocked = attempts.some((a) => a.status === 403);
+  const hint =
+    blocked && !hasRedditCredentials()
+      ? " — Reddit blocks unauthenticated reads from datacentre addresses; set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET to use the API instead"
+      : "";
   warn?.(
     { url, path, attempts },
-    // The status is in the message as well as the payload: a collapsed log
-    // line showing only "refused" cannot be acted on, and this one is read
-    // far from the machine that wrote it.
-    `reddit: json refused — ${attempts.map((a) => `${a.host} ${a.status}`).join(", ")}` +
-      (first.detail ? ` — ${first.detail}` : "")
+    `reddit: refused — ${attempts.map((a) => `${a.via} ${a.status}`).join(", ")}` +
+      (first.detail ? ` — ${first.detail}` : "") +
+      hint
   );
   return null;
 }
