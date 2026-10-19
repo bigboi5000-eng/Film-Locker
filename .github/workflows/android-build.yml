@@ -76,6 +76,26 @@ jobs:
         if: success()
         working-directory: artifacts/film-locker
         run: |
+          # The build page URL, as eas printed it. One grep, used twice.
+          URL="$(grep -Eo 'https://expo\.dev/[^ ]*builds/[0-9a-f-]+' build.log | head -1 || true)"
+
+          # An annotation as well as the summary, because the two are not
+          # readable by the same things. The step summary is only on the run's
+          # web page — it is not served by the REST API and the job log lives
+          # on blob storage — so anything working through the API, this repo's
+          # agent included, can see that a build was QUEUED and nothing about
+          # which build or how it went. An annotation is on the check run, and
+          # the check run is in the API.
+          #
+          # That gap is not academic: --no-wait means this job goes green the
+          # moment EAS accepts the upload, so a build that then fails to
+          # compile looks identical from here to one that shipped.
+          if [ -n "$URL" ]; then
+            echo "::notice title=Android build queued::${URL} (profile: ${{ inputs.profile }}, commit: ${GITHUB_SHA})"
+          else
+            echo "::notice title=Android build queued::eas printed no build URL — see this step's log."
+          fi
+
           {
             echo "### Android build queued"
             echo ""
@@ -83,11 +103,11 @@ jobs:
             echo "page below shows progress and carries the download when it is"
             echo "done; EAS also emails on completion."
             echo ""
-            # The build page URL, as eas printed it.
-            grep -Eo 'https://expo\.dev/[^ ]*builds/[0-9a-f-]+' build.log \
-              | head -1 \
-              | sed 's/^/- Build page: /' \
-              || echo "- See the Queue the build step's log for the build URL."
+            if [ -n "$URL" ]; then
+              echo "- Build page: ${URL}"
+            else
+              echo "- See the Queue the build step's log for the build URL."
+            fi
             echo ""
             if [ "${{ inputs.profile }}" = "preview" ]; then
               echo "This is the preview profile, so the artifact is an APK for"
