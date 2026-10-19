@@ -72,10 +72,22 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # The Android SDK is already on the runner image; this exports
-      # ANDROID_HOME and puts the command-line tools on PATH for Gradle,
-      # and accepts the licences, which an unattended build cannot do.
-      - uses: android-actions/setup-android@v3
+      # No setup-android action here. The runner image already ships the
+      # SDK, with ANDROID_HOME set and the licences accepted, and the action
+      # failed outright on this image — so it was buying nothing and costing
+      # the whole run. This checks what is actually present instead, and
+      # says so plainly rather than letting Gradle fail forty minutes later
+      # with something less obvious.
+      - name: Check the Android SDK is here
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
+            echo "::error title=No Android SDK::ANDROID_HOME is '${SDK:-unset}', which is not a directory. The runner image is expected to ship the SDK; if that has changed, this workflow needs a setup step adding back."
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "::notice title=Android SDK::$SDK — platforms: $(ls "$SDK/platforms" 2>/dev/null | tr '\n' ' ')| build-tools: $(ls "$SDK/build-tools" 2>/dev/null | tr '\n' ' ')| ndk: $(ls "$SDK/ndk" 2>/dev/null | tr '\n' ' ')"
 
       # A React Native build from cold wants several gigabytes for Gradle's
       # caches and the NDK on top of node_modules, and the runner starts
