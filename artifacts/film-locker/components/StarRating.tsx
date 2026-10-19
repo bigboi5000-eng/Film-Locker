@@ -46,6 +46,18 @@ export interface StarRatingProps {
    * beside the slider.
    */
   allowZero?: boolean;
+  /**
+   * Fired as a gesture begins and ends, so a scrolling parent can hold
+   * still while the finger is on the stars.
+   *
+   * Refusing the responder is not enough on Android: a native scroll view
+   * does not ASK for the gesture, it takes it and tells JS afterwards, so
+   * the only reliable way to keep a drag is for the scroll view not to be
+   * scrolling in the first place. The cost is that a scroll begun exactly
+   * on the stars does not scroll — which is how every slider behaves, and
+   * the row is barely thirty pixels tall.
+   */
+  onInteractionChange?: (active: boolean) => void;
 }
 
 /** How far a finger may travel and still count as a tap. */
@@ -110,6 +122,7 @@ export function StarRating({
   size = 28,
   gap = 6,
   allowZero = false,
+  onInteractionChange,
 }: StarRatingProps) {
   const colors = useColors();
   const readOnly = !onChange;
@@ -183,13 +196,25 @@ export function StarRating({
       // a threshold you can drag all the way off, which is the thing people
       // reach for first when a filter is too strict.
       if (allowZero && x < size / 4) return 0;
-      const index = Math.min(Math.max(Math.floor(x / stride), 0), 4);
+      // Shifted by half a gap, which makes every step the same width.
+      //
+      // Measured raw, a half occupied the left of the glyph (size / 2) and
+      // a whole occupied the right of the glyph PLUS the gap after it
+      // (size / 2 + gap) — so on a 28px star with a 6px gap, halves were
+      // 14px and wholes 20px, and a half was half again as hard to hit as
+      // a whole. That is most of what "cannot accurately select a half"
+      // feels like.
+      //
+      // With the shift, each of the ten steps is exactly stride / 2, and
+      // the boundary between a half and a whole falls precisely on the
+      // star's own midpoint rather than three pixels to its right. The gap
+      // is split between the stars either side of it instead of belonging
+      // entirely to the one behind.
+      const shifted = x + gap / 2;
+      const index = Math.min(Math.max(Math.floor(shifted / stride), 0), 4);
       if (!halves) return index + 1;
-      // Distance into this star. A touch landing in the gap after a star
-      // counts as its right half, which is the whole star — the gap is
-      // nearer the star behind it than the one ahead.
-      const within = x - index * stride;
-      return index + (within < size / 2 ? 0.5 : 1);
+      const within = shifted - index * stride;
+      return index + (within < stride / 2 ? 0.5 : 1);
     },
     [size, gap, allowZero]
   );
@@ -202,12 +227,13 @@ export function StarRating({
       startPage.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
       verticalRef.current = false;
       movedRef.current = false;
+      onInteractionChange?.(true);
       // A press starts on the whole star under it; sliding refines it.
       const next = ratingAt(e.nativeEvent.locationX, false);
       lastStepRef.current = next;
       setPreview(next);
     },
-    [ratingAt]
+    [ratingAt, onInteractionChange]
   );
 
   const onMove = useCallback(
@@ -238,13 +264,14 @@ export function StarRating({
     (e: GestureResponderEvent) => {
       const next = ratingAt(e.nativeEvent.locationX, movedRef.current);
       const viaDrag = movedRef.current;
+      onInteractionChange?.(false);
       setPreview(null);
       setHeld(next);
       if (heldTimer.current) clearTimeout(heldTimer.current);
       heldTimer.current = setTimeout(() => setHeld(null), 5000);
       onChange?.(next, viaDrag);
     },
-    [onChange, ratingAt]
+    [onChange, ratingAt, onInteractionChange]
   );
 
   const row = (
@@ -309,7 +336,10 @@ export function StarRating({
       onResponderGrant={onGrant}
       onResponderMove={onMove}
       onResponderRelease={onRelease}
-      onResponderTerminate={() => setPreview(null)}
+      onResponderTerminate={() => {
+        onInteractionChange?.(false);
+        setPreview(null);
+      }}
     >
       {row}
     </View>

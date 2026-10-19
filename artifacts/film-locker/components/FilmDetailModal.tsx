@@ -477,6 +477,7 @@ const makeCommentStyles = (c: Palette) => StyleSheet.create({
 // ── Community section ─────────────────────────────────────────────────────────
 
 function CommunitySection({
+  onStarInteraction,
   tmdbId,
   isLoggedIn,
   onRatingChanged,
@@ -493,6 +494,8 @@ function CommunitySection({
    * stars above it never move. Which is exactly how this looked broken.
    */
   onRatingChanged?: (rating: number | null) => void;
+  /** Passed straight to the stars, so the sheet can stop scrolling. */
+  onStarInteraction?: (active: boolean) => void;
 }) {
   const colors = useColors();
   const communityStyles = useThemedStyles(makeCommunityStyles);
@@ -674,6 +677,7 @@ function CommunitySection({
         <StarRating
           value={userRating}
           onChange={handleCommunityRating}
+          onInteractionChange={onStarInteraction}
         />
         {(ratingPending || ratingDeleting) && (
           <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 8 }} />
@@ -1210,6 +1214,18 @@ export function FilmDetailModal({
   const displayTmdbVoteCount = details?.tmdbVoteCount ?? 0;
   const displayRuntime = formatRuntime(details?.runtime);
 
+  /**
+   * True while a finger is on either set of stars.
+   *
+   * The sheet's body scrolls, and on Android a native scroll view does not
+   * ask for a gesture it wants — it takes it and tells JS afterwards. A
+   * drag along the stars was being swallowed by that the moment it moved,
+   * which is why a tap set a rating perfectly well and sliding for a half
+   * never worked. Holding the scroll still for the length of the gesture is
+   * the only reliable way to keep it.
+   */
+  const [starActive, setStarActive] = useState(false);
+
   const handleRating = useCallback(
     async (n: number, viaDrag: boolean) => {
       if (!savedMovie) return;
@@ -1362,6 +1378,7 @@ export function FilmDetailModal({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
             keyboardShouldPersistTaps="handled"
+            scrollEnabled={!starActive}
           >
             {/* Poster */}
             <View style={styles.posterContainer}>
@@ -1554,6 +1571,7 @@ export function FilmDetailModal({
                 // The optimistic value is what the private stars actually
                 // read from, and it survives a refetch — so refetching alone
                 // would leave them stale, which is how this looked broken.
+                onStarInteraction={setStarActive}
                 onRatingChanged={(n) => {
                   setOptimisticRating(n);
                   void invalidate();
@@ -1569,7 +1587,11 @@ export function FilmDetailModal({
                   {/* Star rating */}
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Your Rating</Text>
-                    <StarRating value={currentRating} onChange={handleRating} />
+                    <StarRating
+                      value={currentRating}
+                      onChange={handleRating}
+                      onInteractionChange={setStarActive}
+                    />
                     {isRatingPending && (
                       <Text style={styles.savingText}>Saving…</Text>
                     )}
