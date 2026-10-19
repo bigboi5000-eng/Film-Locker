@@ -95,7 +95,7 @@ function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRo
       </View>
       {isSaved && (
         <View style={styles.savedBadge}>
-          <Ionicons name="bookmark" size={14} color={colors.background} />
+          <Ionicons name="bookmark" size={14} color={colors.onColor} />
         </View>
       )}
     </TouchableOpacity>

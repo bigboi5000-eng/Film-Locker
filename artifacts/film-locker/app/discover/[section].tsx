@@ -317,7 +317,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: c.textStrong,
   },
-  sortChipTextActive: { color: c.background },
+  sortChipTextActive: { color: c.onColor },
 
   // Grid
   grid: { paddingHorizontal: H_PAD, paddingTop: 2 },

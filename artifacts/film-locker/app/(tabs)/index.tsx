@@ -311,7 +311,7 @@ export default function HomeScreen() {
               {displayInitials ? (
                 <Text style={styles.profileInitials}>{displayInitials.slice(0, 5).toUpperCase()}</Text>
               ) : (
-                <Ionicons name="person" size={18} color={colors.background} />
+                <Ionicons name="person" size={18} color={colors.onColor} />
               )}
             </TouchableOpacity>
           ) : (
@@ -564,14 +564,14 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.primary, borderRadius: 18,
     paddingHorizontal: 16, paddingVertical: 9,
   },
-  signInBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
+  signInBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   profileBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   profileAvatar: { width: 36, height: 36, borderRadius: 18 },
-  profileInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.background },
+  profileInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.onColor },
 
   section: { marginTop: 24 },
   sectionHeader: {

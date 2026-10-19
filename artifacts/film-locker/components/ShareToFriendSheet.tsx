@@ -124,7 +124,7 @@ export function ShareToFriendSheet({
             onPress={() => handleSend(user)}
             activeOpacity={0.8}
           >
-            <Ionicons name="paper-plane-outline" size={14} color={colors.background} style={{ marginRight: 4 }} />
+            <Ionicons name="paper-plane-outline" size={14} color={colors.onColor} style={{ marginRight: 4 }} />
             <Text style={styles.sendBtnText}>Send</Text>
           </TouchableOpacity>
         )}
@@ -253,7 +253,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  sendBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  sendBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   sentBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: c.successSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,

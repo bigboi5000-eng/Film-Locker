@@ -492,7 +492,7 @@ function NotificationsScreenInner() {
                 onPress={() => router.push('/people')}
                 activeOpacity={0.8}
               >
-                <Ionicons name="people-outline" size={16} color={colors.background} />
+                <Ionicons name="people-outline" size={16} color={colors.onColor} />
                 <Text style={styles.findBtnText}>Find People</Text>
               </TouchableOpacity>
             </View>
@@ -523,7 +523,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.primary, borderRadius: 10,
     paddingHorizontal: 7, paddingVertical: 2,
   },
-  headerBadgeText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: c.background },
+  headerBadgeText: { fontSize: 12, fontFamily: 'Inter_700Bold', color: c.onColor },
   peopleBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: c.primarySoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
@@ -548,7 +548,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.destructive, borderRadius: 9, minWidth: 18, height: 18,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
-  tabBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: c.background },
+  tabBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: c.onColor },
 
   section: { paddingHorizontal: 16, paddingTop: 20 },
   sectionHint: {
@@ -574,7 +574,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   acceptBtn: {
     backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  acceptBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  acceptBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   declineBtn: {
     backgroundColor: c.surfaceAlt, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
     borderWidth: 1, borderColor: c.border,
@@ -600,7 +600,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 4, borderWidth: 2, borderColor: c.background,
   },
-  unreadBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: c.background },
+  unreadBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: c.onColor },
 
   content: { flex: 1 },
   contentHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
@@ -624,7 +624,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: c.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 4,
   },
-  findBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
+  findBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.onColor },
 });
 
 

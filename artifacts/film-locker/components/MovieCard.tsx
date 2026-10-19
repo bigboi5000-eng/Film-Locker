@@ -124,7 +124,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.68)',
   },
   title: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 16,
@@ -151,6 +151,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  watchedBadgeText: { color: c.background, fontSize: 12, fontFamily: 'Inter_700Bold' },
+  watchedBadgeText: { color: c.onColor, fontSize: 12, fontFamily: 'Inter_700Bold' },
   skeleton: { alignItems: 'center', justifyContent: 'center' },
 });

@@ -225,7 +225,7 @@ function EditSheet({
               activeOpacity={0.8}
             >
               {saving ? (
-                <ActivityIndicator color={colors.background} />
+                <ActivityIndicator color={colors.onColor} />
               ) : (
                 <Text style={editStyles.saveBtnText}>Save Changes</Text>
               )}
@@ -272,7 +272,7 @@ const makeEditStyles = (c: Palette) => StyleSheet.create({
   toggleLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
   toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
   saveBtn: { backgroundColor: c.primary, padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 12 },
-  saveBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
+  saveBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     padding: 14, borderRadius: 10, backgroundColor: c.destructiveSoft,
@@ -619,7 +619,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
   },
   followingBtn: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   followingBtnText: { color: c.textStrong },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40 },

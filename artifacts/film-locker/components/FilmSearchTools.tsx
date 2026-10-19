@@ -157,7 +157,7 @@ export function AiResultRow({ match, isSaved, savedMovie, onPress }: AiResultRow
       </View>
       {isSaved && (
         <View style={styles.savedBadge}>
-          <Ionicons name="bookmark" size={14} color={colors.background} />
+          <Ionicons name="bookmark" size={14} color={colors.onColor} />
         </View>
       )}
     </TouchableOpacity>
@@ -495,7 +495,7 @@ export function FilmSearchBar({
         </View>
       )}
       <TouchableOpacity style={styles.aiToggleBtn} onPress={toggleAi} activeOpacity={0.8}>
-        <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color={colors.background} />
+        <Ionicons name={aiOpen ? 'close' : 'sparkles'} size={18} color={colors.onColor} />
       </TouchableOpacity>
 
       {/*

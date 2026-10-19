@@ -178,11 +178,11 @@ export default function AccountSetupScreen() {
           activeOpacity={0.85}
         >
           {saving ? (
-            <ActivityIndicator color={colors.background} />
+            <ActivityIndicator color={colors.onColor} />
           ) : (
             <>
               <Text style={styles.primaryBtnText}>Save and continue</Text>
-              <Ionicons name="arrow-forward" size={18} color={colors.background} style={{ marginLeft: 8 }} />
+              <Ionicons name="arrow-forward" size={18} color={colors.onColor} style={{ marginLeft: 8 }} />
             </>
           )}
         </TouchableOpacity>
@@ -229,7 +229,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingVertical: 16, marginTop: 24,
   },
   btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.background },
+  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   skipRow: { alignItems: 'center', paddingVertical: 16 },
   skipText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.textMuted },
 });

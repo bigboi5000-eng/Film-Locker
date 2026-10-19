@@ -294,7 +294,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   followBtn: {
     backgroundColor: c.primary, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
   },
-  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  followBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   unfollowBtn: {
     backgroundColor: c.surfaceAlt, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20,
     borderWidth: 1, borderColor: c.border,

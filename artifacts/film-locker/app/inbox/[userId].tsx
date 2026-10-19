@@ -371,7 +371,7 @@ function RecommendationCard({
               onPress={() => onAddToWatchlist(item)}
               activeOpacity={0.8}
             >
-              <Ionicons name="bookmark-outline" size={13} color={colors.background} style={{ marginRight: 4 }} />
+              <Ionicons name="bookmark-outline" size={13} color={colors.onColor} style={{ marginRight: 4 }} />
               <Text style={styles.addBtnText}>Add to Watchlist</Text>
             </TouchableOpacity>
           )}
@@ -717,7 +717,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: c.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
   },
-  addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.background },
+  addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.onColor },
 
   reactBtn: {
     flexDirection: 'row', alignItems: 'center',
@@ -740,7 +740,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   bubbleMine: { backgroundColor: c.primary, borderBottomRightRadius: 4 },
   bubbleTheirs: { backgroundColor: c.bubbleOther, borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
-  bubbleTextMine: { color: c.background },
+  bubbleTextMine: { color: c.onColor },
   bubbleTime: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 3, marginHorizontal: 4 },
 
   replyPreview: {

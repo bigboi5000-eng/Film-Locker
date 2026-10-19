@@ -62,7 +62,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   title: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 15,

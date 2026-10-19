@@ -149,7 +149,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                 disabled={!newName.trim() || creating || addingId !== null}
                 activeOpacity={0.8}
               >
-                {creating ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={styles.newCreateText}>Create</Text>}
+                {creating ? <ActivityIndicator size="small" color={colors.onColor} /> : <Text style={styles.newCreateText}>Create</Text>}
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -199,5 +199,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     ...webInputReset,
   },
   newCreate: { backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
-  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
 });

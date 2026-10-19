@@ -303,7 +303,7 @@ export default function PlaylistsScreen() {
 
       {tab === 'mine' && (
         <TouchableOpacity style={styles.fab} onPress={() => setCreateVisible(true)} activeOpacity={0.85}>
-          <Ionicons name="add" size={26} color={colors.background} />
+          <Ionicons name="add" size={26} color={colors.onColor} />
         </TouchableOpacity>
       )}
 

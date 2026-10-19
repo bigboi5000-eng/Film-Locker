@@ -223,7 +223,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color={colors.background} />
+              ? <ActivityIndicator color={colors.onColor} />
               : <Text style={styles.primaryBtnText}>Continue</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => signIn.resetPasswordEmailCode.sendCode()} style={styles.linkRow}>
@@ -272,7 +272,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color={colors.background} />
+              ? <ActivityIndicator color={colors.onColor} />
               : <Text style={styles.primaryBtnText}>Save and sign in</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={cancelReset} style={styles.linkRow}>
@@ -310,7 +310,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color={colors.background} />
+              ? <ActivityIndicator color={colors.onColor} />
               : <Text style={styles.primaryBtnText}>Verify</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => signIn.mfa.sendEmailCode()} style={styles.linkRow}>
@@ -393,7 +393,7 @@ export default function SignInScreen() {
             activeOpacity={0.85}
           >
             {fetchStatus === 'fetching'
-              ? <ActivityIndicator color={colors.background} />
+              ? <ActivityIndicator color={colors.onColor} />
               : <Text style={styles.primaryBtnText}>Sign In</Text>}
           </TouchableOpacity>
 
@@ -428,7 +428,7 @@ export default function SignInScreen() {
               activeOpacity={0.85}
             >
               {oauthLoading === 'apple'
-                ? <ActivityIndicator color={colors.background} size="small" />
+                ? <ActivityIndicator color={colors.onColor} size="small" />
                 : <>
                     <Ionicons name="logo-apple" size={18} color={colors.background} />
                     <Text style={[styles.oauthBtnText, styles.appleBtnText]}>Continue with Apple</Text>
@@ -483,7 +483,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: 20,
   },
   btnDisabled: { opacity: 0.5 },
-  primaryBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
+  primaryBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   dividerLine: { flex: 1, height: 1, backgroundColor: c.border },
   dividerText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint },

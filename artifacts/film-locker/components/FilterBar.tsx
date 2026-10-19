@@ -508,7 +508,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   chipActive: { backgroundColor: c.primary, borderColor: c.primary },
   chipText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: c.textStrong },
-  chipTextActive: { color: c.background },
+  chipTextActive: { color: c.onColor },
   // Dropdown
   backdrop: {
     flex: 1,

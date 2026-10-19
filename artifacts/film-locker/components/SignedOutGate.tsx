@@ -87,7 +87,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingVertical: 15, paddingHorizontal: 40,
     alignSelf: 'stretch', alignItems: 'center',
   },
-  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.background },
+  primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   secondaryBtn: { paddingVertical: 16 },
   secondaryBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.primary },
 });

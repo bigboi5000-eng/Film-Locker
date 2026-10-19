@@ -175,10 +175,10 @@ function FilmCard({
               activeOpacity={0.8}
             >
               {isPending ? (
-                <ActivityIndicator color={colors.background} size="small" />
+                <ActivityIndicator color={colors.onColor} size="small" />
               ) : (
                 <>
-                  <Ionicons name="bookmark-outline" size={16} color={colors.background} style={{ marginRight: 6 }} />
+                  <Ionicons name="bookmark-outline" size={16} color={colors.onColor} style={{ marginRight: 6 }} />
                   <Text style={cardStyles.addBtnText}>Add to Watchlist</Text>
                 </>
               )}
@@ -244,7 +244,7 @@ const makeCardStyles = (c: Palette) => StyleSheet.create({
     alignSelf: 'flex-start',
   },
   addBtnText: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -611,7 +611,7 @@ function BulkAddPanel({
           disabled={!newName.trim() || creating || addingTo !== null}
           activeOpacity={0.8}
         >
-          {creating ? <ActivityIndicator size="small" color={colors.background} /> : <Text style={ppStyles.newCreateText}>Create</Text>}
+          {creating ? <ActivityIndicator size="small" color={colors.onColor} /> : <Text style={ppStyles.newCreateText}>Create</Text>}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -642,7 +642,7 @@ const makePpStyles = (c: Palette) => StyleSheet.create({
     ...webInputReset,
   },
   newCreate: { backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
-  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   doneWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
   doneText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text },
 });
@@ -676,7 +676,7 @@ const makeCrashStyles = (c: Palette) => StyleSheet.create({
   title: { fontSize: 16, fontFamily: 'Inter_700Bold', color: c.text, textAlign: 'center' },
   message: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted, textAlign: 'center' },
   closeBtn: { marginTop: 8, backgroundColor: c.destructive, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
-  closeBtnText: { color: c.background, fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  closeBtnText: { color: c.onColor, fontSize: 14, fontFamily: 'Inter_600SemiBold' },
 });
 
 // ── Manual search ───────────────────────────────────────────────────────────
@@ -1279,7 +1279,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       onPress={handleReturn}
                       activeOpacity={0.85}
                     >
-                      <Ionicons name="arrow-back" size={18} color={colors.background} style={{ marginRight: 8 }} />
+                      <Ionicons name="arrow-back" size={18} color={colors.onColor} style={{ marginRight: 8 }} />
                       <Text style={styles.returnBtnText}>{doneLabel}</Text>
                     </TouchableOpacity>
                   ) : (
@@ -1420,7 +1420,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   returnBtnText: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: c.background,
+    color: c.onColor,
   },
   multiSelector: {
     gap: 10,

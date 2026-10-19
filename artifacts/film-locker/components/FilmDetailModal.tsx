@@ -347,7 +347,7 @@ function ReportSheet({
             disabled={!reason.trim() || submitting}
             activeOpacity={0.85}
           >
-            {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
+            {submitting ? <ActivityIndicator color={colors.onColor} /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={reportStyles.blockBtn} onPress={onBlock} activeOpacity={0.85}>
             <Text style={reportStyles.blockBtnText}>Block {targetUsername}</Text>
@@ -386,7 +386,7 @@ const makeReportStyles = (c: Palette) => StyleSheet.create({
     alignItems: 'center', marginBottom: 10,
   },
   btnDisabled: { opacity: 0.5 },
-  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
+  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   blockBtn: {
     borderRadius: 10, paddingVertical: 13, alignItems: 'center',
     borderWidth: 1, borderColor: '#FCA5A5', marginBottom: 10,
@@ -679,7 +679,7 @@ function CommunitySection({
               activeOpacity={0.8}
             >
               {commentPending ? (
-                <ActivityIndicator size="small" color={colors.background} />
+                <ActivityIndicator size="small" color={colors.onColor} />
               ) : (
                 <Text style={communityStyles.postBtnText}>Post</Text>
               )}
@@ -811,7 +811,7 @@ const makeCommunityStyles = (c: Palette) => StyleSheet.create({
   },
   postBtnDisabled: { backgroundColor: c.primaryMid },
   postBtnText: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -922,7 +922,7 @@ function RecommendSheet({
             activeOpacity={0.8}
           >
             {sent ? (
-              <Ionicons name="checkmark" size={15} color={colors.background} />
+              <Ionicons name="checkmark" size={15} color={colors.onColor} />
             ) : (
               <Text style={rsStyles.sendBtnText}>Send</Text>
             )}
@@ -1022,7 +1022,7 @@ const makeRsStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnSent: { backgroundColor: '#10B981' },
-  sendBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
+  sendBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   separator: { height: 1, backgroundColor: c.surfaceAlt, marginLeft: 72 },
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
   emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', paddingHorizontal: 32 },
@@ -1522,13 +1522,13 @@ export function FilmDetailModal({
                     activeOpacity={0.85}
                   >
                     {isWatchingPending ? (
-                      <ActivityIndicator color={colors.background} size="small" />
+                      <ActivityIndicator color={colors.onColor} size="small" />
                     ) : (
                       <>
                         <Ionicons
                           name={currentWatched ? 'bookmark-outline' : 'checkmark-circle-outline'}
                           size={20}
-                          color={colors.background}
+                          color={colors.onColor}
                           style={{ marginRight: 8 }}
                         />
                         <Text style={styles.actionButtonText}>
@@ -1551,13 +1551,13 @@ export function FilmDetailModal({
                     activeOpacity={0.85}
                   >
                     {isAddingPending ? (
-                      <ActivityIndicator color={colors.background} size="small" />
+                      <ActivityIndicator color={colors.onColor} size="small" />
                     ) : (
                       <>
                         <Ionicons
                           name="bookmark-outline"
                           size={20}
-                          color={colors.background}
+                          color={colors.onColor}
                           style={{ marginRight: 8 }}
                         />
                         <Text style={styles.actionButtonText}>Add to Watchlist</Text>
@@ -1669,7 +1669,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   posterTitle: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 24,
     fontFamily: 'Inter_700Bold',
     lineHeight: 30,
@@ -1765,7 +1765,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   actionButtonPrimary: { backgroundColor: c.primary },
   actionButtonSecondary: { backgroundColor: c.star },
   actionButtonText: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },

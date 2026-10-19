@@ -83,7 +83,7 @@ function WatchedFilmRow({ movie, onAdded }: { movie: Movie; onAdded: () => void 
       ) : (
         <TouchableOpacity style={styles.addBtn} onPress={handleAdd} disabled={isPending} activeOpacity={0.8}>
           {isPending ? (
-            <ActivityIndicator size="small" color={colors.background} />
+            <ActivityIndicator size="small" color={colors.onColor} />
           ) : (
             <Text style={styles.addBtnText}>Add to Watchlist</Text>
           )}
@@ -154,7 +154,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   year: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
 
   addBtn: { backgroundColor: c.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.background },
+  addBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   addedPill: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   addedText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.success },
 

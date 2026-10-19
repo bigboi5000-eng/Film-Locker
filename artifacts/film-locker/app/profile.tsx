@@ -334,7 +334,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color={colors.background} />
+                  <ActivityIndicator size="small" color={colors.onColor} />
                 ) : (
                   <Text style={styles.saveBtnText}>Save</Text>
                 )}
@@ -376,7 +376,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color={colors.background} />
+                  <ActivityIndicator size="small" color={colors.onColor} />
                 ) : (
                   <Text style={styles.saveBtnText}>Save</Text>
                 )}
@@ -503,7 +503,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {sendingFeedback ? (
-                  <ActivityIndicator size="small" color={colors.background} />
+                  <ActivityIndicator size="small" color={colors.onColor} />
                 ) : (
                   <Text style={styles.saveBtnText}>Send</Text>
                 )}
@@ -618,7 +618,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderRadius: 8, minWidth: 56, alignItems: 'center',
   },
   saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.background },
+  saveBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   cancelBtn: { padding: 8 },
 
   feedbackBody: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16 },

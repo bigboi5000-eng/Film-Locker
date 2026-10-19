@@ -75,6 +75,19 @@ const light = {
   /** Avatar fallbacks — a pair, not two independent colours. */
   avatarBg: '#E0E7FF',
   avatarFg: '#4F46E5',
+  /**
+   * Text and icons drawn ON something — a filled accent, a badge, artwork.
+   * White in both themes, because what it sits on is the same colour in
+   * both: a blue button is blue either way, and a poster is a poster.
+   *
+   * This exists because the conversion mapped every #FFFFFF to
+   * `background`, which is right for a page and wrong for a label. In
+   * light mode the two were the same colour so nothing looked amiss; in
+   * dark mode the page went near-black and took every one of those labels
+   * with it, including the film titles printed over posters.
+   */
+  onColor: '#FFFFFF',
+
   /** Success and danger, in two weights each. */
   success: '#16A34A',
   successStrong: '#059669',
@@ -126,6 +139,8 @@ const dark: typeof light = {
   overlayLine: 'rgba(255,255,255,0.08)',
 
   // ── accents ─────────────────────────────────────────────────────────────
+  onColor: '#FFFFFF',
+
   star: '#FFA93D',
   primarySoft: '#152336',
   primarySofter: '#1B2E4A',

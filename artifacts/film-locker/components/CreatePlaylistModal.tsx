@@ -82,7 +82,7 @@ export function CreatePlaylistModal({
             activeOpacity={0.8}
           >
             {creating ? (
-              <ActivityIndicator color={colors.background} />
+              <ActivityIndicator color={colors.onColor} />
             ) : (
               <Text style={styles.createBtnText}>Create Playlist</Text>
             )}
@@ -114,5 +114,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   toggleSub: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
   createBtn: { backgroundColor: c.primary, padding: 14, borderRadius: 10, alignItems: 'center' },
   createBtnDisabled: { opacity: 0.5 },
-  createBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.background },
+  createBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
 });

@@ -308,7 +308,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   youChipText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.avatarFg },
 
   btn: { backgroundColor: c.primary, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 },
-  btnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.background },
+  btnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   btnQuiet: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
   btnQuietText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textStrong },
 

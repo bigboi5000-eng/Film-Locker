@@ -49,7 +49,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     textAlign: 'center',
   },
   button: {
-    color: c.background,
+    color: c.onColor,
     fontSize: 15,
     fontWeight: '700',
     paddingVertical: 14,

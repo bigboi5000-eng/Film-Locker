@@ -411,7 +411,7 @@ export default function WelcomeScreen() {
 
         <TouchableOpacity style={styles.cta} onPress={handleGetStarted} activeOpacity={0.85}>
           <Text style={styles.ctaText}>Aim for the bushes!</Text>
-          <Ionicons name="arrow-forward" size={18} color={colors.background} style={{ marginLeft: 8 }} />
+          <Ionicons name="arrow-forward" size={18} color={colors.onColor} style={{ marginLeft: 8 }} />
         </TouchableOpacity>
       </View>
     </LinearGradient>
@@ -453,7 +453,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   title: {
     fontSize: 26,
     fontFamily: 'Inter_700Bold',
-    color: c.background,
+    color: c.onColor,
     textAlign: 'center',
   },
   subtitle: {
@@ -482,7 +482,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   featureTitle: {
     fontSize: 15,
     fontFamily: 'Inter_700Bold',
-    color: c.background,
+    color: c.onColor,
     marginBottom: 2,
   },
   featureBlurb: {
@@ -503,6 +503,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   ctaText: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: c.background,
+    color: c.onColor,
   },
 });
