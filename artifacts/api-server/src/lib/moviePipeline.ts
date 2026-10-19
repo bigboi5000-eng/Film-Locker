@@ -233,6 +233,11 @@ export async function enrichAndSaveMatches(
         // length filter treats null as unknown rather than very short.
         runtime: details?.runtime ?? null,
         tmdbRating: details?.tmdbRating ?? null,
+        // Stamped only when TMDB actually answered, so the background
+        // backfill picks up the rows where it did not and leaves alone the
+        // ones it did. A null tmdbRating from a real answer is a film with no
+        // votes, which is settled; a null from a failed fetch is not.
+        enrichedAt: details ? new Date() : null,
       };
 
       // Upsert:
@@ -257,6 +262,7 @@ export async function enrichAndSaveMatches(
               watchProviders: values.watchProviders,
               runtime: values.runtime,
               tmdbRating: values.tmdbRating,
+              enrichedAt: values.enrichedAt,
             },
           })
           .returning());

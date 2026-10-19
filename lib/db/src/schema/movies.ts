@@ -45,6 +45,12 @@ export const moviesTable = pgTable(
     // "not enriched yet" and "TMDB has no score for this film" both have to
     // stay distinguishable from a real one, and 0 is a real one.
     tmdbRating: real("tmdb_rating"),
+    // When TMDB was last successfully asked about this film. Distinguishes
+    // "we have never asked" from "we asked and TMDB has no score for it",
+    // which the nullable enrichment columns cannot do on their own — without
+    // it, the backfill would re-fetch every vote-less film on every boot,
+    // for ever.
+    enrichedAt: timestamp("enriched_at", { withTimezone: true }),
     watchProviders: jsonb("watch_providers")
       .$type<WatchProvider[]>()
       .notNull()

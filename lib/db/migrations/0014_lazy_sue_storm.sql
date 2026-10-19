@@ -1,0 +1,20 @@
+-- When TMDB was last successfully asked about a film.
+--
+-- The enrichment columns are all nullable so that "we have never asked" stays
+-- distinguishable from a real value, but between themselves they cannot tell
+-- "we have never asked" from "we asked and TMDB has no score for this film".
+-- A film with no votes gets a null tmdb_rating for ever, and a backfill keyed
+-- on null would re-fetch it on every container start, for ever.
+--
+-- This column is that distinction. The backfill sets it on any successful
+-- fetch, whatever came back, and skips any row that has it.
+--
+-- Starts null everywhere, including on rows that are already fully enriched:
+-- those rows do still need one more visit, because tmdb_rating was added in
+-- 0013 and has never been populated for them. The first boot after this
+-- migration collects them; later boots find nothing.
+--
+-- Re-runnable, which this repo's migrator requires (see
+-- lib/db/src/migrate.ts): a replay finds the column already present and
+-- skips the statement.
+ALTER TABLE "movies" ADD COLUMN "enriched_at" timestamp with time zone;

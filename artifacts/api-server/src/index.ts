@@ -4,6 +4,11 @@ import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import journal from "@workspace/db/journal";
 import app from "./app";
+import {
+  backfillOnBootEnabled,
+  backfillUntilDone,
+  countFilmsNeedingVisit,
+} from "./lib/enrichBackfill";
 import { logger } from "./lib/logger";
 
 const execFileAsync = promisify(execFile);
@@ -203,5 +208,42 @@ app.listen(port, (err) => {
   void logYtDlpDiagnostics();
   void checkSchemaVersion().then((schema) => {
     logger.info(schema, "database schema check");
+    // Only once the schema is known good: the backfill reads and writes
+    // enriched_at, which a database still behind migration 0014 has not got.
+    if (schema["schemaUpToDate"]) void runEnrichBackfill();
+    else logger.warn("skipping enrichment backfill — schema is behind the code");
   });
 });
+
+/**
+ * Fills in TMDB metadata for films saved before the columns holding it
+ * existed — `runtime`, and `tmdb_rating` as of migration 0013, which starts
+ * null on every pre-existing row and is what the rating filter reads.
+ *
+ * Deliberately after `listen` and never awaited: it makes a TMDB request
+ * every 300ms for as long as there is a queue, which is not something to do
+ * while the port is closed. Every successful visit stamps `enriched_at`, so
+ * the queue only ever shrinks and a settled database makes no requests at
+ * all — one count query per boot and nothing more.
+ */
+async function runEnrichBackfill(): Promise<void> {
+  if (!backfillOnBootEnabled()) {
+    logger.info("enrichment backfill disabled by ENRICH_ON_BOOT=0");
+    return;
+  }
+
+  try {
+    const waiting = await countFilmsNeedingVisit();
+    if (waiting === 0) {
+      logger.info("enrichment backfill: nothing to do");
+      return;
+    }
+    logger.info({ films: waiting }, "enrichment backfill: queue");
+    const result = await backfillUntilDone();
+    logger.info(result, "enrichment backfill: done");
+  } catch (err) {
+    // Never fatal: this is catch-up work on data the app already serves
+    // without, and a failure here must not take down a healthy server.
+    logger.warn({ err }, "enrichment backfill failed");
+  }
+}

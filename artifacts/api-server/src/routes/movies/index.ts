@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, desc } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
+import { backfillEnrichment, countFilmsNeedingVisit } from "../../lib/enrichBackfill";
 import {
   ListMoviesResponse,
   AddMovieBody,
@@ -226,49 +227,22 @@ router.get("/movies", requireAuth, async (req, res): Promise<void> => {
   res.json(ListMoviesResponse.parse({ movies }));
 });
 
-// POST /movies/enrich-all — backfill enrichment for user's movies missing metadata
+// POST /movies/enrich-all — backfill TMDB metadata for this user's films
+//
+// The same work the server does for everybody in the background after boot,
+// scoped to one locker and triggerable on demand. Kept for the case where a
+// locker needs filling in without waiting for a deploy.
 router.post("/movies/enrich-all", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
-  const { sql: drizzleSql } = await import("drizzle-orm");
-  const unenriched = await db
-    .select()
-    .from(moviesTable)
-    .where(
-      and(
-        eq(moviesTable.clerkUserId, clerkUserId),
-        // Rows enriched before the runtime column existed have genres but no
-        // runtime, so matching on genres alone would skip exactly the rows
-        // that need backfilling.
-        drizzleSql`(array_length(${moviesTable.genres}, 1) IS NULL OR ${moviesTable.runtime} IS NULL)`
-      )
-    );
+  const waiting = await countFilmsNeedingVisit(clerkUserId);
 
-  req.log.info({ count: unenriched.length }, "enrich-all: starting");
-  res.json({ started: unenriched.length, message: "Enrichment running in background" });
+  // Answered before the work starts: enrichment is a few hundred milliseconds
+  // per film and the client has nothing to do with the result.
+  res.json({ started: waiting, message: "Enrichment running in background" });
 
-  for (const movie of unenriched) {
-    try {
-      const details = await fetchMovieDetails(movie.tmdbId);
-      if (!details) continue;
-      await db
-        .update(moviesTable)
-        .set({
-          director: details.director,
-          cast: details.cast,
-          genres: details.genres,
-          language: details.language,
-          watchProviders: details.watchProviders,
-          runtime: details.runtime,
-          tmdbRating: details.tmdbRating,
-        })
-        .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
-      req.log.info({ tmdbId: movie.tmdbId, title: movie.title }, "enrich-all: enriched");
-    } catch (err) {
-      req.log.warn({ err, tmdbId: movie.tmdbId }, "enrich-all: failed");
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  req.log.info("enrich-all: complete");
+  backfillEnrichment({ clerkUserId, logger: req.log })
+    .then((result) => req.log.info(result, "enrich-all: complete"))
+    .catch((err) => req.log.warn({ err }, "enrich-all: failed"));
 });
 
 // POST /movies — add a movie to the authenticated user's locker
@@ -347,6 +321,7 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
           watchProviders: details.watchProviders,
           runtime: details.runtime,
           tmdbRating: details.tmdbRating,
+          enrichedAt: new Date(),
         })
         .where(and(eq(moviesTable.id, movie.id), eq(moviesTable.clerkUserId, clerkUserId)));
     })
