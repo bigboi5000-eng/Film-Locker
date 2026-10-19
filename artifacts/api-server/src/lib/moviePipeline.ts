@@ -8,7 +8,7 @@
  *   runMoviePipeline(text, warn?)            — Gemini + TMDB + DB
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
 import { searchTmdb, searchTmdbPreferringYear, searchTmdbTv, fetchMovieDetails } from "./tmdb";
@@ -106,12 +106,27 @@ async function mapWithConcurrency<T, R>(
  * @param dryRun  When true, look up TMDB data but skip all DB writes.
  *                Matches will include poster_url/title/overview for UI display.
  */
+/**
+ * Everything about the save that is not a match. An object rather than yet
+ * more positional arguments: this function already takes four, and the next
+ * one along would be the fifth thing nobody can read at a call site.
+ */
+export interface SaveOptions {
+  /**
+   * The social post the films were extracted from, kept so the app can
+   * offer a way back to it. Omitted by callers that have no post — the
+   * camera, a search, an AI extraction from typed text.
+   */
+  sourceUrl?: string | null;
+}
+
 export async function enrichAndSaveMatches(
   rawMatches: GeminiMovieMatch[],
   warn?: WarnFn,
   dryRun = false,
   clerkUserId = "",
-  listTitle: string | null = null
+  listTitle: string | null = null,
+  options: SaveOptions = {}
 ): Promise<PipelineResult> {
   const sanitised = rawMatches
     .map((m) => ({
@@ -238,6 +253,7 @@ export async function enrichAndSaveMatches(
         // ones it did. A null tmdbRating from a real answer is a film with no
         // votes, which is settled; a null from a failed fetch is not.
         enrichedAt: details ? new Date() : null,
+        sourceUrl: options.sourceUrl ?? null,
       };
 
       // Upsert:
@@ -263,6 +279,13 @@ export async function enrichAndSaveMatches(
               runtime: values.runtime,
               tmdbRating: values.tmdbRating,
               enrichedAt: values.enrichedAt,
+              // The FIRST post this film arrived from, not the latest. In
+              // an ON CONFLICT SET clause an unqualified column is the
+              // existing row, so this keeps whatever is already there and
+              // only fills in a null. "The original post" means the one
+              // that made you save it; seeing the same film again later
+              // does not rewrite that.
+              sourceUrl: sql`coalesce(${moviesTable.sourceUrl}, ${values.sourceUrl ?? null})`,
             },
           })
           .returning());
@@ -323,7 +346,8 @@ export async function runMoviePipeline(
   warn?: WarnFn,
   dryRun = false,
   clerkUserId = "",
-  treatAsLiteralTitle = false
+  treatAsLiteralTitle = false,
+  options: SaveOptions = {}
 ): Promise<PipelineResult> {
   const { movies: rawMatches, list_title: listTitle } = await extractMoviesWithGemini(text);
 
@@ -337,10 +361,11 @@ export async function runMoviePipeline(
         warn,
         dryRun,
         clerkUserId,
-        null
+        null,
+        options
       );
     }
   }
 
-  return enrichAndSaveMatches(rawMatches, warn, dryRun, clerkUserId, listTitle);
+  return enrichAndSaveMatches(rawMatches, warn, dryRun, clerkUserId, listTitle, options);
 }

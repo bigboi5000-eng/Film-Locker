@@ -51,6 +51,15 @@ export const moviesTable = pgTable(
     // it, the backfill would re-fetch every vote-less film on every boot,
     // for ever.
     enrichedAt: timestamp("enriched_at", { withTimezone: true }),
+    // The social post this film was added from, when it was added from one.
+    // Null for a film found by search, by camera, or added before this
+    // column existed — "where did this come from" has no answer for those,
+    // which is different from an empty answer.
+    //
+    // Owner-only. It says what this person was reading when they saved the
+    // film, which is more personal than the fact that they saved it, so it
+    // must not go out on any endpoint serving somebody else's locker.
+    sourceUrl: text("source_url"),
     watchProviders: jsonb("watch_providers")
       .$type<WatchProvider[]>()
       .notNull()

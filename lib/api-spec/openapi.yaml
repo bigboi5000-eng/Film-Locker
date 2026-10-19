@@ -1554,6 +1554,19 @@ components:
             The owner's own score out of 5, in half-star steps, so ten
             positions rather than five. Null means unrated, which is
             different from nought — there is no nought.
+        sourceUrl:
+          type: string
+          nullable: true
+          description: >
+            The social post this film was added from, so the app can offer a
+            way back to it. Null when the film came from a search, the
+            camera, or was added before this was recorded — all of which mean
+            "no answer" rather than "not loaded yet", so the app simply omits
+            the link.
+
+            Present only on the owner's own films. Another person's watched
+            list does not carry it: what somebody saved is social, what they
+            were reading when they saved it is not.
         isWatched:
           type: boolean
         watchedAt:

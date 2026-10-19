@@ -57,6 +57,11 @@ export interface Movie {
      * @maximum 5
      */
   rating?: number | null;
+  /**
+     * The social post this film was added from, so the app can offer a way back to it. Null when the film came from a search, the camera, or was added before this was recorded — all of which mean "no answer" rather than "not loaded yet", so the app simply omits the link.
+     * Present only on the owner's own films. Another person's watched list does not carry it: what somebody saved is social, what they were reading when they saved it is not.
+     */
+  sourceUrl?: string | null;
   isWatched: boolean;
   watchedAt?: string | null;
   addedAt: string;

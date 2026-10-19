@@ -1,0 +1,20 @@
+-- Where a film came from, when it came from a social post.
+--
+-- The link a film was extracted from used to be read and discarded, so a
+-- week later there was no way back to the reel that prompted it. Keeping it
+-- is the whole of "See the original post".
+--
+-- Null everywhere to begin with, and null for good on every film added
+-- before this: nothing can reconstruct a link that was never written down.
+-- Null is also the permanent answer for a film found by search or by
+-- camera, which did not come from a post at all — so the app treats null as
+-- "no answer", not as "not loaded yet", and simply omits the link.
+--
+-- Owner-only, which is a property of the ENDPOINTS rather than of this
+-- column: see routes/users.ts, where another person's watched list selects
+-- its columns explicitly so that this one cannot escape with them.
+--
+-- Re-runnable, which this repo's migrator requires (see
+-- lib/db/src/migrate.ts): a replay finds the column already present and
+-- skips the statement.
+ALTER TABLE "movies" ADD COLUMN "source_url" text;

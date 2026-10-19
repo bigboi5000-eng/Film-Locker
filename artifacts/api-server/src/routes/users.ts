@@ -656,8 +656,33 @@ router.get("/users/:id/watched", requireAuth, async (req, res): Promise<void> =>
     }
   }
 
+  // Columns listed rather than `select()`, because this is somebody ELSE'S
+  // locker. A whole-row select hands out every column the table ever gains,
+  // and the response schema is the only thing deciding what reaches the
+  // client — which is a quiet way to leak the next private column somebody
+  // adds. source_url is exactly that: the post this person was reading when
+  // they saved the film, which is theirs and not part of "what have you
+  // watched". Listing the columns makes including one a decision.
   const movies = await db
-    .select()
+    .select({
+      id: moviesTable.id,
+      tmdbId: moviesTable.tmdbId,
+      title: moviesTable.title,
+      releaseYear: moviesTable.releaseYear,
+      posterUrl: moviesTable.posterUrl,
+      overview: moviesTable.overview,
+      director: moviesTable.director,
+      cast: moviesTable.cast,
+      genres: moviesTable.genres,
+      language: moviesTable.language,
+      runtime: moviesTable.runtime,
+      tmdbRating: moviesTable.tmdbRating,
+      watchProviders: moviesTable.watchProviders,
+      rating: moviesTable.rating,
+      isWatched: moviesTable.isWatched,
+      watchedAt: moviesTable.watchedAt,
+      addedAt: moviesTable.addedAt,
+    })
     .from(moviesTable)
     .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true)))
     .orderBy(desc(moviesTable.watchedAt));

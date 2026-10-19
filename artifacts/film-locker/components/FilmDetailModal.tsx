@@ -97,6 +97,37 @@ const PROVIDER_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   buy:      { bg: '#FFF0DC', text: '#FF8C00' }, // theme-ignore orange — rent/buy
 };
 
+/**
+ * What to call the thing a film was saved from.
+ *
+ * The wording is the platform's own, because "See the original post" is
+ * wrong for half of them — a YouTube link is a video, and a Google link is
+ * not a post at all but the search that found the film. Anything
+ * unrecognised gets the neutral phrasing rather than a guess.
+ */
+function describeSource(rawUrl: string): { label: string; icon: keyof typeof Ionicons.glyphMap } {
+  let host = '';
+  try {
+    host = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return { label: 'See where this came from', icon: 'link-outline' };
+  }
+
+  if (host.endsWith('instagram.com')) return { label: 'See the original post', icon: 'logo-instagram' };
+  if (host.endsWith('tiktok.com')) return { label: 'See the original post', icon: 'musical-notes-outline' };
+  if (host.endsWith('facebook.com') || host.endsWith('fb.watch'))
+    return { label: 'See the original post', icon: 'logo-facebook' };
+  if (host.endsWith('threads.net')) return { label: 'See the original post', icon: 'at-outline' };
+  if (host.endsWith('x.com') || host.endsWith('twitter.com'))
+    return { label: 'See the original post', icon: 'logo-twitter' };
+  if (host.endsWith('reddit.com')) return { label: 'See the original post', icon: 'logo-reddit' };
+  if (host.endsWith('youtube.com') || host.endsWith('youtu.be'))
+    return { label: 'Watch the original video', icon: 'logo-youtube' };
+  if (host.endsWith('google.com') || host.endsWith('share.google') || host.endsWith('bing.com'))
+    return { label: 'See the search this came from', icon: 'search-outline' };
+  return { label: 'See where this came from', icon: 'link-outline' };
+}
+
 async function openProviderLink(provider: WatchProvider, movieTitle: string) {
   const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(
     `watch ${movieTitle} on ${provider.provider_name}`
@@ -1256,6 +1287,22 @@ export function FilmDetailModal({
     });
   }, [title, releaseYear]);
 
+  /**
+   * Back to the post the film was saved from.
+   *
+   * Opened with Linking rather than an in-app browser so the platform's own
+   * app takes it where one is installed — a reel is worth more in Instagram
+   * than in a web view that will ask you to log in.
+   */
+  const sourceUrl = savedMovie?.sourceUrl ?? null;
+  const source = useMemo(() => (sourceUrl ? describeSource(sourceUrl) : null), [sourceUrl]);
+  const openSource = useCallback(() => {
+    if (!sourceUrl) return;
+    Linking.openURL(sourceUrl).catch(() => {
+      Alert.alert('Unable to open link', 'That post could not be opened. It may have been taken down.');
+    });
+  }, [sourceUrl]);
+
   /** Open a director or actor's filmography, closing this sheet first. */
   const openPerson = useCallback((personId: number) => {
     handleClose();
@@ -1457,6 +1504,25 @@ export function FilmDetailModal({
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Synopsis</Text>
                   <Text style={styles.synopsisText}>{displayOverview}</Text>
+                </View>
+              ) : null}
+
+              {/* Back to where this film came from. Above the web search
+                  rather than below it: this one is specific to how THIS
+                  person found the film, and the search is the generic
+                  fallback. Absent entirely for a film that came from a
+                  search or the camera, which have no post behind them. */}
+              {source && sourceUrl ? (
+                <View style={styles.section}>
+                  <TouchableOpacity
+                    style={styles.webSearchRow}
+                    onPress={openSource}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name={source.icon} size={16} color={colors.primary} />
+                    <Text style={styles.webSearchText}>{source.label}</Text>
+                    <Ionicons name="open-outline" size={14} color={colors.primary} />
+                  </TouchableOpacity>
                 </View>
               ) : null}
 
