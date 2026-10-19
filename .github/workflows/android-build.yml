@@ -1,16 +1,33 @@
 # Builds the Android app, so testers on Android can be given a build
 # without anyone needing Android Studio or a Play Console upload.
 #
-# Everything happens on EAS's servers; this runner only resolves the config
-# plugins in app.json and hands the project over.
+# The compile happens HERE, on the runner, not on EAS. `eas build --local`
+# runs the same build EAS would run, with the same profile and the same
+# signing keystore fetched from the Expo servers, but on this machine — and
+# a local build does not spend an EAS build from the plan's monthly
+# allowance.
+#
+# That is the whole reason for it. On the Free plan the Android allowance
+# runs out, and when it does `eas build` refuses the upload outright:
+#
+#     This account has used its Android builds from the Free plan this
+#     month, which will reset in 12 days
+#
+# which left a fortnight a month with no way to put a build in a tester's
+# hands. This repository is public, so GitHub's runner minutes are free and
+# unlimited, which makes the runner the cheaper machine of the two.
+#
+# The trade is time and delivery. A local build takes twenty to forty
+# minutes rather than three, because the runner compiles from cold, and the
+# artifact arrives as a file attached to this run rather than as an EAS
+# install link — so it is downloaded and sideloaded rather than installed
+# from a URL.
 #
 # Deliberately separate from ios-build.yml rather than a platform input on
 # it. That workflow is most of the way Apple credential handling — writing
 # out a .p8, patching eas.json for submit, cleaning both up — and none of it
-# applies here. Android signing is a keystore EAS holds for the project, and
-# there is nothing to submit: the preview profile builds for internal
-# distribution, so EAS returns an install link that can be sent straight to
-# a tester.
+# applies here. It also still builds on EAS, since an iOS build needs macOS
+# and this runner is Linux.
 #
 # Run it from the Actions tab: "Build Android" → Run workflow.
 name: Build Android
@@ -27,9 +44,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Only the upload happens here — see --no-wait below — so this needs
-    # minutes, not hours.
-    timeout-minutes: 20
+    # The compile is on this runner now, so this is the real build time
+    # rather than the time to upload a tarball. Forty minutes of headroom on
+    # a build that takes twenty to thirty from cold.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -45,89 +63,106 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # eas build reads app.json's config plugins from disk before uploading
-      # anything, so a checkout with no node_modules fails on expo-router.
+      # Gradle and the Android Gradle Plugin want a JDK, and which one is
+      # not a detail: React Native's build fails on anything older than 17,
+      # and the runner's default has moved past it before now. Pinned so a
+      # change to the runner image cannot quietly break the build.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The Android SDK is already on the runner image; this exports
+      # ANDROID_HOME and puts the command-line tools on PATH for Gradle,
+      # and accepts the licences, which an unattended build cannot do.
+      - uses: android-actions/setup-android@v3
+
+      # A React Native build from cold wants several gigabytes for Gradle's
+      # caches and the NDK on top of node_modules, and the runner starts
+      # with less free than it looks. These are large, preinstalled, and
+      # nothing here uses them.
+      - name: Make room for the build
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /usr/local/lib/android/sdk/ndk-bundle \
+                      /opt/hostedtoolcache/CodeQL || true
+          df -h / | tail -1
+
+      # eas build reads app.json's config plugins from disk before anything
+      # else, so a checkout with no node_modules fails on expo-router.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The token still matters for a local build: the signing keystore and
+      # the version code both live on the Expo servers, and the build fetches
+      # them rather than keeping a keystore in this repository.
       - uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      # --no-wait because the build runs on EAS either way and this runner
-      # has nothing to do while it does.
-      #
-      # The first run of this workflow proved the point: it uploaded in three
-      # seconds, printed "Waiting for build to complete", sat in the Android
-      # queue for ninety minutes and was killed by the job timeout — while
-      # the build itself carried on on EAS, unaffected. All that produced was
-      # a cancelled run reporting a failure that had not happened.
-      #
-      # So the queue is not waited on. The build link is in the step summary
-      # below, and EAS emails when the build finishes.
-      - name: Queue the build
+      - name: Build it
+        id: build
         working-directory: artifacts/film-locker
         run: |
           # pipefail, because without it this step's status is TEE's, and
           # tee always succeeds. A run with no explicit `shell:` gets
-          # `bash -e` and not `-eo pipefail`, so an eas build that failed
-          # outright has been marking this step green.
+          # `bash -e` and not `-eo pipefail`, so a build that failed
+          # outright used to mark this step green.
           set -o pipefail
 
-          # 2>&1, because eas writes its progress — the build page link
-          # among it — to stderr. Piping stdout alone left build.log without
-          # the one line the next step exists to read, which is why the
-          # summary has been falling back to "see the log" every time.
-          eas build --profile ${{ inputs.profile }} --platform android \
-            --non-interactive --no-wait 2>&1 | tee build.log
+          SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          if [ "${{ inputs.profile }}" = "production" ]; then EXT=aab; else EXT=apk; fi
+          OUT="${GITHUB_WORKSPACE}/build-output/film-locker-${SHORT_SHA}.${EXT}"
+          mkdir -p "$(dirname "$OUT")"
+          echo "artifact=${OUT}" >> "$GITHUB_OUTPUT"
+          echo "name=film-locker-${SHORT_SHA}-${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
+
+          # 2>&1, because eas writes its progress and its errors to stderr.
+          # Piping stdout alone left the log without the one thing worth
+          # reading when something goes wrong.
+          eas build \
+            --profile ${{ inputs.profile }} \
+            --platform android \
+            --local \
+            --non-interactive \
+            --output "$OUT" 2>&1 | tee build.log
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: ${{ steps.build.outputs.artifact }}
+          # Long enough to install from at leisure, short enough not to
+          # accumulate hundreds of megabytes of superseded builds.
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Where to find it
         if: success()
-        working-directory: artifacts/film-locker
         run: |
-          # The build page URL, as eas printed it. One grep, used twice.
-          # Colour codes are stripped first: eas emits them even when it is
-          # not writing to a terminal, and an escape sequence landing in the
-          # middle of the URL would be carried into the link.
-          URL="$(sed -e 's/\x1b\[[0-9;]*m//g' build.log \
-                 | grep -Eo 'https://expo\.dev/[^ ]*builds/[0-9a-f-]+' \
-                 | head -1 || true)"
-
           # An annotation as well as the summary, because the two are not
-          # readable by the same things. The step summary is only on the run's
-          # web page — it is not served by the REST API and the job log lives
-          # on blob storage — so anything working through the API, this repo's
-          # agent included, can see that a build was QUEUED and nothing about
-          # which build or how it went. An annotation is on the check run, and
-          # the check run is in the API.
-          #
-          # That gap is not academic: --no-wait means this job goes green the
-          # moment EAS accepts the upload, so a build that then fails to
-          # compile looks identical from here to one that shipped.
-          if [ -n "$URL" ]; then
-            echo "::notice title=Android build queued::${URL} (profile: ${{ inputs.profile }}, commit: ${GITHUB_SHA})"
-          else
-            echo "::notice title=Android build queued::eas printed no build URL — see this step's log."
-          fi
+          # readable by the same things. The step summary is only on the
+          # run's web page — it is not served by the REST API and the job log
+          # lives on blob storage — so anything working through the API, this
+          # repo's agent included, could previously see that a build was
+          # attempted and nothing about how it went.
+          echo "::notice title=Android build finished::$(basename "${{ steps.build.outputs.artifact }}") is attached to this run (profile: ${{ inputs.profile }}, commit: ${GITHUB_SHA})"
 
           {
-            echo "### Android build queued"
+            echo "### Android build finished"
             echo ""
-            echo "It builds on EAS, not here — this run is finished. The build"
-            echo "page below shows progress and carries the download when it is"
-            echo "done; EAS also emails on completion."
+            echo "Built on the runner rather than on EAS, so it spent none of"
+            echo "the plan's monthly Android builds."
             echo ""
-            if [ -n "$URL" ]; then
-              echo "- Build page: ${URL}"
-            else
-              echo "- See the Queue the build step's log for the build URL."
-            fi
+            echo "Download it from the **Artifacts** section at the bottom of"
+            echo "this run's page: \`${{ steps.build.outputs.name }}\`."
             echo ""
             if [ "${{ inputs.profile }}" = "preview" ]; then
-              echo "This is the preview profile, so the artifact is an APK for"
-              echo "internal distribution: the build page's install link can go"
-              echo "straight to a tester."
+              echo "This is the preview profile, so the artifact is an APK."
+              echo "Copy it to the phone and open it — Android will ask once"
+              echo "for permission to install from this source."
             else
               echo "This is the production profile, so the artifact is an .aab"
               echo "for the Play Store rather than a sideloadable APK."
@@ -137,9 +172,9 @@ jobs:
       # The counterpart to the notice above, for when there is no build to
       # point at. A failed step leaves its reason only in the job log, and
       # the job log is on blob storage that the REST API does not serve — so
-      # "the build did not happen" has been arriving with no sign of why.
-      # eas says perfectly clearly what went wrong; it just said it somewhere
-      # nothing could read. This puts the tail of it on the check run.
+      # "the build did not happen" used to arrive with no sign of why. The
+      # build says perfectly clearly what went wrong; it just said it
+      # somewhere nothing could read.
       - name: Why it failed
         if: failure()
         working-directory: artifacts/film-locker
@@ -148,16 +183,16 @@ jobs:
             # Workflow commands are one line, so newlines become %0A and a
             # literal % has to be escaped first or it eats what follows.
             MSG="$(sed -e 's/\x1b\[[0-9;]*m//g' build.log \
-                   | tail -n 30 \
+                   | tail -n 40 \
                    | sed -e 's/%/%25/g' -e 's/\r//g' \
                    | awk '{ printf "%s%%0A", $0 }')"
-            echo "::error title=eas build failed::${MSG}"
+            echo "::error title=Android build failed::${MSG}"
           else
-            echo "::error title=eas build failed::eas wrote no output at all — it failed before it started."
+            echo "::error title=Android build failed::the build wrote no output at all — it failed before it started."
           fi
 
-      # Written by the step above, and it holds nothing sensitive, but it sits
-      # in the working tree and this keeps the checkout clean.
+      # Written by the build step, and it holds nothing sensitive, but it
+      # sits in the working tree and this keeps the checkout clean.
       - name: Tidy up
         if: always()
         working-directory: artifacts/film-locker
