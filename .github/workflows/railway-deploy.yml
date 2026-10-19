@@ -63,14 +63,22 @@ jobs:
     # runs on Railway. Minutes, not hours.
     timeout-minutes: 15
 
+    # Lifted to the job because a step's `if` cannot read `secrets` — that
+    # context is not available there, and a workflow that tries is not an
+    # erroring workflow but an UNPARSEABLE one. GitHub then fails a run on
+    # every push, named after this file and with no jobs in it, which is a
+    # much more confusing thing to be sent an email about than a missing
+    # token. `env` is available in a step's `if`, so the presence of a token
+    # is tested through these rather than through `secrets` directly.
+    env:
+      PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      ACCOUNT_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+
     steps:
       # Said plainly and early. Without the secret the CLI fails several
       # steps later with an authentication error that reads like something
       # is wrong with Railway rather than with this repository's settings.
       - name: Check a token is present
-        env:
-          PROJECT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          ACCOUNT_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           if [ -z "$PROJECT_TOKEN" ] && [ -z "$ACCOUNT_TOKEN" ]; then
             echo "::error::Neither RAILWAY_TOKEN nor RAILWAY_API_TOKEN is set." \
@@ -102,9 +110,9 @@ jobs:
       # belongs to. An account token does not, so it has to be pointed at
       # one before anything can be redeployed.
       - name: Link the project
-        if: ${{ secrets.RAILWAY_TOKEN == '' }}
+        if: ${{ env.PROJECT_TOKEN == '' }}
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ env.ACCOUNT_TOKEN }}
         run: |
           railway link \
             --project "${{ inputs.project }}" \
@@ -113,8 +121,8 @@ jobs:
 
       - name: Redeploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ env.PROJECT_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ env.ACCOUNT_TOKEN }}
         run: railway redeploy --service "${{ inputs.service }}" --yes
 
       # Best effort: the redeploy has already been accepted by this point,
@@ -123,8 +131,8 @@ jobs:
       - name: Report what is now deploying
         if: always()
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ env.PROJECT_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ env.ACCOUNT_TOKEN }}
         continue-on-error: true
         run: |
           {
