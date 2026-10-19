@@ -19,7 +19,7 @@
  * release, so a drag across the row does not fire five writes on its way to
  * the one that was meant.
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Platform, type GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -108,12 +108,43 @@ export function StarRating({
 
   /** What the finger is currently over, while it is down. */
   const [preview, setPreview] = useState<number | null>(null);
+  /**
+   * What was just chosen, held until the owner's `value` catches up.
+   *
+   * Saving a rating is a round trip, and `value` does not change until it
+   * comes back. Without this the stars empty the instant the finger lifts
+   * and refill a moment later, which reads as the rating being rejected and
+   * then reinstated — the single most alarming thing a control can do right
+   * after you have used it.
+   */
+  const [held, setHeld] = useState<number | null>(null);
   const startX = useRef(0);
   const movedRef = useRef(false);
   const lastStepRef = useRef<number | null>(null);
+  const heldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const committed = typeof value === 'number' ? value : 0;
-  const shown = preview ?? committed;
+  const shown = preview ?? held ?? committed;
+
+  /**
+   * Let go of the held value as soon as the owner reports anything new,
+   * whatever it is — the save landed, or it failed and the old value came
+   * back. Either way the owner is now the authority and this must not keep
+   * overriding it.
+   */
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (lastValue.current !== value) {
+      lastValue.current = value;
+      setHeld(null);
+    }
+  }, [value]);
+
+  // And a backstop, so a save that never resolves cannot leave the stars
+  // showing a rating that was never stored.
+  useEffect(() => () => {
+    if (heldTimer.current) clearTimeout(heldTimer.current);
+  }, []);
 
   /**
    * Exactly as wide as the five stars, and no wider.
@@ -185,13 +216,44 @@ export function StarRating({
       const next = ratingAt(e.nativeEvent.locationX, movedRef.current);
       const viaDrag = movedRef.current;
       setPreview(null);
+      setHeld(next);
+      if (heldTimer.current) clearTimeout(heldTimer.current);
+      heldTimer.current = setTimeout(() => setHeld(null), 5000);
       onChange?.(next, viaDrag);
     },
     [onChange, ratingAt]
   );
 
   const row = (
-    <View style={[styles.row, { gap, width: contentWidth }]}>
+    <View
+      style={[styles.row, { gap, width: contentWidth }]}
+      // Load-bearing, and the reason taps landed on the wrong star even
+      // after the row stopped measuring itself.
+      //
+      // locationX is relative to the TOUCH TARGET, and the target is the
+      // deepest view under the finger when it went down — a plain child
+      // View with no handlers is a perfectly good target. Each star is such
+      // a View, so pressing the fourth star reported an x of 0-28 measured
+      // from the FOURTH STAR'S left edge, which reads as a position inside
+      // the first one. Every tap on stars two to five came back as one star,
+      // and a drag could only ever reach a half or a whole, because the
+      // whole gesture was being measured against a single star's width.
+      //
+      // Android computes that origin once, on ACTION_DOWN, and reuses it for
+      // every move and the release (JSTouchDispatcher), so one wrong press
+      // skewed the entire gesture rather than just its first frame.
+      //
+      // `none` means "this view and its children can't be the target", so
+      // the responder below is, and x is measured from the row's own left
+      // edge — which is what the maths here has always assumed.
+      //
+      // Worth knowing before trying to reproduce this in a browser: you
+      // cannot. react-native-web measures locationX against currentTarget,
+      // the responder, so on web the old code was already correct and the
+      // stars behaved perfectly. Only the native platforms hand back a
+      // target-relative x, and that is where this was only ever visible.
+      pointerEvents="none"
+    >
       {[1, 2, 3, 4, 5].map((n) => (
         <Star key={n} index={n} value={shown} size={size} color={colors.star} />
       ))}
