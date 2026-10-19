@@ -128,6 +128,7 @@ import {
   enrichAndSaveMatches,
   type PipelineResult,
 } from "./moviePipeline";
+import { fetchRedditPost, isRedditUrl, redditPostText, redditCommentsText } from "./redditPost";
 
 export type SocialLinkSource = "caption" | "image" | "audio" | "video" | "none";
 
@@ -365,17 +366,31 @@ export async function processSocialLink(
   const isInstagram = detectPlatform(url) === "instagram";
   const apifyCoversInstagram = isInstagram && hasApifyToken();
 
+  // Reddit is excluded outright rather than backed off. It refuses yt-dlp
+  // without an account —
+  //
+  //     ERROR: [Reddit] Account authentication is required.
+  //
+  // — and no amount of retrying changes that, while the .json step above has
+  // already read the post's actual text, which is what a Reddit post about
+  // films consists of. The download was never going to answer the question
+  // and only ever produced that error.
+  const isReddit = isRedditUrl(url);
+
   const canDownloadMedia =
-    !isInstagram ||
-    hasYtDlpCookies() ||
-    (!apifyCoversInstagram && !instagramMediaBlocked());
+    !isReddit &&
+    (!isInstagram ||
+      hasYtDlpCookies() ||
+      (!apifyCoversInstagram && !instagramMediaBlocked()));
 
   if (!canDownloadMedia) {
     warn?.(
       { url },
-      apifyCoversInstagram
-        ? "processSocialLink: Instagram served by Apify — skipping the yt-dlp routes it supersedes"
-        : "processSocialLink: Instagram download refused recently — backing off, caption and preview image only",
+      isReddit
+        ? "processSocialLink: Reddit refuses yt-dlp without an account — the post was read as text instead"
+        : apifyCoversInstagram
+          ? "processSocialLink: Instagram served by Apify — skipping the yt-dlp routes it supersedes"
+          : "processSocialLink: Instagram download refused recently — backing off, caption and preview image only",
     );
   }
 
@@ -442,6 +457,49 @@ export async function processSocialLink(
     }
   } else {
     warn?.({ url }, "processSocialLink: page caption scrape found nothing — falling back");
+  }
+
+  // ── Step 0.6: Reddit, read as text ───────────────────────────────────────
+  // Before the downloads, because a Reddit post about films is text and not
+  // a video, and asking yt-dlp for it is both the most expensive attempt and
+  // the one Reddit now refuses outright ("Account authentication is
+  // required"). The .json endpoint needs no account at all.
+  //
+  // Post first, comments second, for the same reason Instagram's are split:
+  // the title and body are what the author wrote, and a comment section is
+  // equally full of jokes about other films. A post that already named
+  // something should not have a wrong film added beside it.
+  if (isRedditUrl(url)) {
+    try {
+      const post = await timed("reddit-json", warn, () => fetchRedditPost(url, warn));
+      if (post) {
+        const own = redditPostText(post);
+        if (own) {
+          const { matches, saved, listTitle } = await timed("reddit-post-pipeline", warn, () =>
+            runMoviePipeline(own, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+          if (matches.length > 0) {
+            warn?.({ url, matchCount: matches.length }, "processSocialLink: reddit post found films");
+            discardAudioDownload();
+            return { source: "caption", text: own, matches, saved, listTitle };
+          }
+          warn?.({ url }, "processSocialLink: reddit post named nothing — trying comments");
+        }
+
+        const comments = redditCommentsText(post);
+        if (comments) {
+          const { matches, saved, listTitle } = await timed("reddit-comments-pipeline", warn, () =>
+            runMoviePipeline(comments, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+          if (matches.length > 0) {
+            warn?.({ url, matchCount: matches.length }, "processSocialLink: reddit comments found films");
+            discardAudioDownload();
+            return { source: "caption", text: comments, matches, saved, listTitle };
+          }
+        }
+        warn?.({ url }, "processSocialLink: reddit found no films — falling back");
+      }
+    } catch (err) {
+      warn?.({ url, err }, "processSocialLink: reddit read failed — falling back");
+    }
   }
 
   // ── Step 0.75: the post's preview image ──────────────────────────────────
