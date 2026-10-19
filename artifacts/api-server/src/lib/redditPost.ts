@@ -64,7 +64,7 @@ export function isRedditUrl(url: string): boolean {
  * to one is not a thing — the canonical /comments/ URL has to be found
  * first. A plain GET follows it; the response's final URL is the real post.
  */
-async function resolveShareLink(url: string): Promise<string> {
+async function resolveShareLink(url: string, warn?: WarnFn): Promise<string> {
   if (!/\/s\/[A-Za-z0-9]+/.test(url)) return url;
   try {
     const res = await fetch(url, {
@@ -75,8 +75,14 @@ async function resolveShareLink(url: string): Promise<string> {
     // not a post, and following it into a fetch would be somebody else's
     // server answering for this one.
     const final = res.url || url;
-    return isRedditUrl(final) && isPubliclyFetchableUrl(final) ? final : url;
-  } catch {
+    const good = isRedditUrl(final) && isPubliclyFetchableUrl(final) && final !== url;
+    warn?.(
+      { url, final, status: res.status, resolved: good },
+      good ? "reddit: share link resolved" : `reddit: share link did not resolve (status ${res.status})`
+    );
+    return good ? final : url;
+  } catch (err) {
+    warn?.({ url, err }, "reddit: share link could not be followed");
     return url;
   }
 }
@@ -116,22 +122,90 @@ function collectComments(node: unknown, out: string[]): void {
   if (replies && typeof replies === "object") collectComments(replies, out);
 }
 
+/**
+ * Ask one host for the post's JSON.
+ *
+ * Two are worth trying. www.reddit.com is the canonical one; old.reddit.com
+ * is served by different infrastructure and frequently answers when the new
+ * one will not — which matters because this runs from a cloud host, and
+ * Reddit is markedly less willing to talk to datacentre addresses than to
+ * domestic ones.
+ */
+async function tryHost(
+  jsonPath: string,
+  host: string,
+  warn?: WarnFn
+): Promise<{ ok: true; body: unknown } | { ok: false; status: number; detail: string }> {
+  const jsonUrl = `https://${host}${jsonPath}`;
+  try {
+    const res = await fetch(jsonUrl, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      redirect: "follow",
+    });
+
+    if (!res.ok) {
+      // The first line of the body, because Reddit's refusals are not all
+      // the same refusal and the status alone does not separate them: a
+      // blocked address, a rate limit and a private subreddit are three
+      // different problems with three different answers.
+      const text = await res.text().catch(() => "");
+      const detail = text.replace(/\s+/g, " ").trim().slice(0, 200);
+      return { ok: false, status: res.status, detail };
+    }
+
+    return { ok: true, body: await res.json() };
+  } catch (err) {
+    warn?.({ jsonUrl, err }, "reddit: request failed outright");
+    return { ok: false, status: 0, detail: String(err).slice(0, 200) };
+  }
+}
+
 async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<RedditPost | null> {
-  const resolved = await resolveShareLink(url);
+  const resolved = await resolveShareLink(url, warn);
   const base = resolved.split("?")[0]!.replace(/\/$/, "");
-  const jsonUrl = `${base}.json?raw_json=1&limit=${MAX_COMMENTS}`;
 
-  const res = await fetch(jsonUrl, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-    redirect: "follow",
-  });
-
-  if (!res.ok) {
-    warn?.({ url, jsonUrl, status: res.status }, "reddit: json endpoint refused");
+  // A share link that did not resolve has no .json of its own, so say so
+  // rather than appending one and reporting the 404 that follows as though
+  // Reddit had refused the post.
+  if (/\/s\/[A-Za-z0-9]+$/.test(base)) {
+    warn?.({ url }, "reddit: share link did not resolve to a post — cannot read it");
     return null;
   }
 
-  const body = (await res.json()) as unknown;
+  let path: string;
+  try {
+    const u = new URL(base);
+    path = `${u.pathname}.json?raw_json=1&limit=${MAX_COMMENTS}`;
+  } catch {
+    warn?.({ url, base }, "reddit: resolved to something that is not a url");
+    return null;
+  }
+
+  const attempts: Array<{ host: string; status: number; detail: string }> = [];
+  for (const host of ["www.reddit.com", "old.reddit.com"]) {
+    const result = await tryHost(path, host, warn);
+    if (result.ok) {
+      if (attempts.length) {
+        warn?.({ url, host, attempts }, "reddit: a fallback host answered");
+      }
+      return parsePost(result.body, url, warn);
+    }
+    attempts.push({ host, status: result.status, detail: result.detail });
+  }
+
+  const first = attempts[0]!;
+  warn?.(
+    { url, path, attempts },
+    // The status is in the message as well as the payload: a collapsed log
+    // line showing only "refused" cannot be acted on, and this one is read
+    // far from the machine that wrote it.
+    `reddit: json refused — ${attempts.map((a) => `${a.host} ${a.status}`).join(", ")}` +
+      (first.detail ? ` — ${first.detail}` : "")
+  );
+  return null;
+}
+
+function parsePost(body: unknown, url: string, warn?: WarnFn): RedditPost | null {
   // A post's .json is [postListing, commentListing]. Anything else — a
   // subreddit, a user page, a search — is not a post and is left alone.
   if (!Array.isArray(body) || body.length === 0) {
