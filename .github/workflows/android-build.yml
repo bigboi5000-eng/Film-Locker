@@ -69,15 +69,30 @@ jobs:
       - name: Queue the build
         working-directory: artifacts/film-locker
         run: |
+          # pipefail, because without it this step's status is TEE's, and
+          # tee always succeeds. A run with no explicit `shell:` gets
+          # `bash -e` and not `-eo pipefail`, so an eas build that failed
+          # outright has been marking this step green.
+          set -o pipefail
+
+          # 2>&1, because eas writes its progress — the build page link
+          # among it — to stderr. Piping stdout alone left build.log without
+          # the one line the next step exists to read, which is why the
+          # summary has been falling back to "see the log" every time.
           eas build --profile ${{ inputs.profile }} --platform android \
-            --non-interactive --no-wait | tee build.log
+            --non-interactive --no-wait 2>&1 | tee build.log
 
       - name: Where to find it
         if: success()
         working-directory: artifacts/film-locker
         run: |
           # The build page URL, as eas printed it. One grep, used twice.
-          URL="$(grep -Eo 'https://expo\.dev/[^ ]*builds/[0-9a-f-]+' build.log | head -1 || true)"
+          # Colour codes are stripped first: eas emits them even when it is
+          # not writing to a terminal, and an escape sequence landing in the
+          # middle of the URL would be carried into the link.
+          URL="$(sed -e 's/\x1b\[[0-9;]*m//g' build.log \
+                 | grep -Eo 'https://expo\.dev/[^ ]*builds/[0-9a-f-]+' \
+                 | head -1 || true)"
 
           # An annotation as well as the summary, because the two are not
           # readable by the same things. The step summary is only on the run's
