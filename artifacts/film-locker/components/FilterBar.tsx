@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { StarRating, formatStars } from '@/components/StarRating';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
@@ -24,10 +25,21 @@ export interface FilterState {
   streaming?: string;
   /** One of LENGTH_BUCKETS' labels — a band, not an exact runtime. */
   length?: string;
-  /** One of TMDB_BANDS' labels — a floor, not an exact score. */
-  tmdbRating?: string;
-  /** One of MY_BANDS' labels, or UNRATED. */
-  myRating?: string;
+  /**
+   * Floor for TMDB's score, in STARS (0.5–5 in halves), not in TMDB's own
+   * 0–10. Both sliders read in the same units so one gesture means the same
+   * thing in both halves of the dropdown; the doubling happens at the
+   * comparison. Absent, or nought, means no floor.
+   */
+  tmdbMin?: number;
+  /** Floor for the owner's own score, 0.5–5 in halves. */
+  myMin?: number;
+  /**
+   * "What have I watched and never scored" — a different question from "what
+   * did I score badly", and no floor can ask it, since a floor of nought
+   * matches everything.
+   */
+  unratedOnly?: boolean;
 }
 
 /** Minimal shape that both Movie and TmdbMovieCard satisfy after adding genres. */
@@ -62,52 +74,28 @@ export const LENGTH_BUCKETS: Array<{ label: string; min: number; max: number }> 
 ];
 
 /**
- * Rating bands are floors, not buckets: "7+" rather than "7 to 8".
- *
- * Nobody looks through their own library for films rated exactly four —
- * they are looking for the good ones, and where the line falls is the only
- * thing they are really choosing. Bands that did not overlap would make
- * every answer a narrow slice and most of them empty.
+ * TMDB scores out of ten, we score out of five. The sliders both read in
+ * stars, so the TMDB floor is doubled on its way to the comparison: three
+ * stars asks for 6.0 and up.
  */
-export const TMDB_BANDS: Array<{ label: string; min: number }> = [
-  { label: '9+', min: 9 },
-  { label: '8+', min: 8 },
-  { label: '7+', min: 7 },
-  { label: '6+', min: 6 },
-  { label: '5+', min: 5 },
-];
+export const TMDB_PER_STAR = 2;
 
-/** Half-star floors, matching the ten positions a film can be given. */
-export const MY_BANDS: Array<{ label: string; min: number }> = [
-  { label: '5', min: 5 },
-  { label: '4½+', min: 4.5 },
-  { label: '4+', min: 4 },
-  { label: '3½+', min: 3.5 },
-  { label: '3+', min: 3 },
-  { label: '2½+', min: 2.5 },
-  { label: '2+', min: 2 },
-  { label: '1½+', min: 1.5 },
-  { label: '1+', min: 1 },
-];
+/** The TMDB score a star threshold is asking for, as TMDB writes it. */
+export function tmdbScoreFor(stars: number): number {
+  return stars * TMDB_PER_STAR;
+}
 
 /**
- * Its own answer rather than a band at the bottom of the list: "what have I
- * watched and never scored" is a different question from "what did I score
- * badly", and a floor of zero cannot ask it.
+ * A floor, applied to a score that may not exist.
+ *
+ * Unknown is excluded rather than treated as nought, for the same reason an
+ * unknown runtime is not evidence of a short film: a film nobody has scored
+ * is not a film that scored badly.
  */
-export const UNRATED = 'Not rated';
-
-function matchesBand(
-  score: number | null | undefined,
-  bands: Array<{ label: string; min: number }>,
-  label: string
-): boolean {
-  // Unknown is excluded rather than treated as nought, for the same reason
-  // an unknown runtime is not evidence of a short film: a film nobody has
-  // scored is not a film that scored badly.
+function clearsFloor(score: number | null | undefined, floor: number): boolean {
+  if (!floor) return true;
   if (typeof score !== 'number') return false;
-  const band = bands.find((b) => b.label === label);
-  return band ? score >= band.min : false;
+  return score >= floor;
 }
 
 function matchesLengthBucket(runtime: number | null | undefined, label: string): boolean {
@@ -125,29 +113,27 @@ interface FilterBarProps {
   onChange: (filters: FilterState) => void;
 }
 
-type FilterKey = keyof FilterState;
+/** The filters that pick a value from the films in front of them. */
+type ChipKey = 'genre' | 'director' | 'actor' | 'language' | 'streaming' | 'length';
 
-const FILTER_LABELS: Record<FilterKey, string> = {
+const FILTER_LABELS: Record<ChipKey, string> = {
   genre: 'Genre',
   director: 'Director',
   actor: 'Actor',
   language: 'Language',
   streaming: 'Streaming',
   length: 'Length',
-  tmdbRating: 'TMDB rating',
-  myRating: 'Your rating',
 };
 
-/**
- * The simple chips. Rating is not among them because it is two questions
- * behind one chip — TMDB's score and your own — and a chip that carried
- * only one of them would leave the other unreachable.
- */
-const FILTER_KEYS: FilterKey[] = ['genre', 'length', 'director', 'actor', 'language', 'streaming'];
+const FILTER_KEYS: ChipKey[] = ['genre', 'length', 'director', 'actor', 'language', 'streaming'];
 
-/** The two-section chip's own key, which is not a FilterState field. */
+/**
+ * Rating's own key, which is not a FilterState field: it is one chip over
+ * three controls — TMDB's floor, your floor, and unrated — and a chip that
+ * carried only one of them would leave the others unreachable.
+ */
 const RATING_PICKER = 'rating' as const;
-type PickerKey = FilterKey | typeof RATING_PICKER;
+type PickerKey = ChipKey | typeof RATING_PICKER;
 
 /** Apply all active filters to a movie list. */
 export function applyFilters<T extends FilterableMovie>(movies: T[], filters: FilterState): T[] {
@@ -162,11 +148,10 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     if (filters.streaming && !providers.some((p) => p.provider_name === filters.streaming))
       return false;
     if (filters.length && !matchesLengthBucket(m.runtime, filters.length)) return false;
-    if (filters.tmdbRating && !matchesBand(m.tmdbRating, TMDB_BANDS, filters.tmdbRating))
-      return false;
-    if (filters.myRating === UNRATED) {
+    if (!clearsFloor(m.tmdbRating, tmdbScoreFor(filters.tmdbMin ?? 0))) return false;
+    if (filters.unratedOnly) {
       if (typeof m.rating === 'number') return false;
-    } else if (filters.myRating && !matchesBand(m.rating, MY_BANDS, filters.myRating)) {
+    } else if (!clearsFloor(m.rating, filters.myMin ?? 0)) {
       return false;
     }
     return true;
@@ -174,7 +159,7 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
 }
 
 /** Extract unique, sorted option values for a given filter key. */
-function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
+function getOptions(movies: FilterableMovie[], key: ChipKey): string[] {
   const values = new Set<string>();
   for (const m of movies) {
     const genres = m.genres ?? [];
@@ -189,17 +174,6 @@ function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
     else if (key === 'length') {
       const bucket = LENGTH_BUCKETS.find((b) => matchesLengthBucket(m.runtime, b.label));
       if (bucket) values.add(bucket.label);
-    } else if (key === 'tmdbRating') {
-      // Every band this film clears, not just the highest: the bands
-      // overlap, so offering only the top one would hide "7+" from a list
-      // whose best film scores 9.
-      TMDB_BANDS.forEach((b) => matchesBand(m.tmdbRating, TMDB_BANDS, b.label) && values.add(b.label));
-    } else if (key === 'myRating') {
-      if (typeof m.rating === 'number') {
-        MY_BANDS.forEach((b) => matchesBand(m.rating, MY_BANDS, b.label) && values.add(b.label));
-      } else {
-        values.add(UNRATED);
-      }
     }
   }
   // Bands have a natural order that alphabetical sorting would destroy
@@ -207,14 +181,12 @@ function getOptions(movies: FilterableMovie[], key: FilterKey): string[] {
   if (key === 'length') {
     return LENGTH_BUCKETS.filter((b) => values.has(b.label)).map((b) => b.label);
   }
-  if (key === 'tmdbRating') {
-    return TMDB_BANDS.filter((b) => values.has(b.label)).map((b) => b.label);
-  }
-  if (key === 'myRating') {
-    const bands = MY_BANDS.filter((b) => values.has(b.label)).map((b) => b.label);
-    return values.has(UNRATED) ? [...bands, UNRATED] : bands;
-  }
   return Array.from(values).sort();
+}
+
+/** "3½+", or "Any" at nought — the slider's resting position. */
+function floorLabel(stars: number | undefined): string {
+  return stars ? `${formatStars(stars)}+` : 'Any';
 }
 
 export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
@@ -231,15 +203,10 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
     [movies, pickerKey]
   );
 
-  // The two halves of the rating chip, each offering only the bands some
-  // film in the list actually clears.
-  const tmdbOptions = useMemo(() => getOptions(movies, 'tmdbRating'), [movies]);
-  const myOptions = useMemo(() => getOptions(movies, 'myRating'), [movies]);
-
-  const ratingActive = Boolean(filters.tmdbRating || filters.myRating);
+  const ratingActive = Boolean(filters.tmdbMin || filters.myMin || filters.unratedOnly);
   const ratingLabel = [
-    filters.tmdbRating ? `TMDB ${filters.tmdbRating}` : null,
-    filters.myRating ? (filters.myRating === UNRATED ? UNRATED : `You ${filters.myRating}`) : null,
+    filters.tmdbMin ? `TMDB ${floorLabel(filters.tmdbMin)}` : null,
+    filters.unratedOnly ? 'Unrated' : filters.myMin ? `You ${floorLabel(filters.myMin)}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -260,23 +227,41 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
     }
   }, []);
 
-  /** Toggle one band inside the rating dropdown, leaving the other alone. */
-  const selectRating = useCallback(
-    (key: 'tmdbRating' | 'myRating', value: string) => {
+  /**
+   * Move one of the two floors. Nought removes the key outright rather than
+   * storing a nought, so "any" and "unset" are the same state and the active
+   * count does not have to know the difference.
+   */
+  const setFloor = useCallback(
+    (key: 'tmdbMin' | 'myMin', stars: number) => {
       const next = { ...filters };
-      if (next[key] === value) delete next[key];
-      else next[key] = value;
+      if (stars > 0) next[key] = stars;
+      else delete next[key];
+      // A floor on your own score and "unrated only" are contradictory
+      // questions, so asking one answers the other.
+      if (key === 'myMin' && stars > 0) delete next.unratedOnly;
       onChange(next);
-      // Deliberately left open: the two sections are one question with two
-      // halves, and closing on the first would make the second a second trip.
+      // Deliberately left open: three controls are one question, and closing
+      // on the first would make the rest a second trip.
     },
     [filters, onChange]
   );
 
+  const toggleUnrated = useCallback(() => {
+    const next = { ...filters };
+    if (next.unratedOnly) delete next.unratedOnly;
+    else {
+      next.unratedOnly = true;
+      delete next.myMin;
+    }
+    onChange(next);
+  }, [filters, onChange]);
+
   const clearRating = useCallback(() => {
     const next = { ...filters };
-    delete next.tmdbRating;
-    delete next.myRating;
+    delete next.tmdbMin;
+    delete next.myMin;
+    delete next.unratedOnly;
     onChange(next);
   }, [filters, onChange]);
 
@@ -294,7 +279,7 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
   );
 
   const clearFilter = useCallback(
-    (key: FilterKey) => {
+    (key: ChipKey) => {
       const next = { ...filters };
       delete next[key];
       onChange(next);
@@ -348,7 +333,7 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
             );
           })}
 
-          {/* Rating — one chip, two questions. */}
+          {/* Rating — one chip, two sliders. */}
           <TouchableOpacity
             onPress={() => (ratingActive ? clearRating() : openPicker(RATING_PICKER))}
             style={[styles.chip, ratingActive && styles.chipActive]}
@@ -394,64 +379,67 @@ export function FilterBar({ movies, filters, onChange }: FilterBarProps) {
             </View>
 
             {pickerKey === RATING_PICKER ? (
-              <ScrollView
-                style={styles.optionScroll}
-                bounces={false}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled
-              >
-                <Text style={styles.sectionHeading}>TMDB rating</Text>
-                {tmdbOptions.length === 0 ? (
-                  <Text style={styles.sectionEmpty}>
-                    No scores yet — they arrive as films are enriched.
+              // Two sliders and a toggle, all visible at once — no scrolling,
+              // which is the whole point of replacing the two lists of bands.
+              <View style={styles.ratingBody}>
+                <View style={styles.sliderBlock}>
+                  <View style={styles.sliderHeading}>
+                    <Text style={styles.sectionHeading}>TMDB rating</Text>
+                    <Text style={styles.floorValue}>
+                      {filters.tmdbMin
+                        ? `${floorLabel(filters.tmdbMin)}  ·  ${tmdbScoreFor(
+                            filters.tmdbMin
+                          ).toFixed(1)}/10`
+                        : 'Any'}
+                    </Text>
+                  </View>
+                  <StarRating
+                    value={filters.tmdbMin ?? 0}
+                    onChange={(stars) => setFloor('tmdbMin', stars)}
+                    size={30}
+                    gap={8}
+                    allowZero
+                  />
+                  <Text style={styles.sliderHint}>
+                    Tap for whole stars, slide for halves.
                   </Text>
-                ) : (
-                  tmdbOptions.map((band) => {
-                    const isSelected = filters.tmdbRating === band;
-                    return (
-                      <TouchableOpacity
-                        key={`tmdb-${band}`}
-                        onPress={() => selectRating('tmdbRating', band)}
-                        style={[styles.optionRow, isSelected && styles.optionRowActive]}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>
-                          {band}
-                        </Text>
-                        {isSelected ? (
-                          <Ionicons name="checkmark" size={16} color={colors.primary} />
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
+                </View>
 
-                <Text style={[styles.sectionHeading, styles.sectionHeadingSecond]}>
-                  Your rating
-                </Text>
-                {myOptions.length === 0 ? (
-                  <Text style={styles.sectionEmpty}>Nothing rated yet.</Text>
-                ) : (
-                  myOptions.map((band) => {
-                    const isSelected = filters.myRating === band;
-                    return (
-                      <TouchableOpacity
-                        key={`mine-${band}`}
-                        onPress={() => selectRating('myRating', band)}
-                        style={[styles.optionRow, isSelected && styles.optionRowActive]}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.optionText, isSelected && styles.optionTextActive]}>
-                          {band}
-                        </Text>
-                        {isSelected ? (
-                          <Ionicons name="checkmark" size={16} color={colors.primary} />
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </ScrollView>
+                <View style={[styles.sliderBlock, styles.sliderBlockSecond]}>
+                  <View style={styles.sliderHeading}>
+                    <Text style={styles.sectionHeading}>Your rating</Text>
+                    <Text style={styles.floorValue}>
+                      {filters.unratedOnly ? '—' : floorLabel(filters.myMin)}
+                    </Text>
+                  </View>
+                  <StarRating
+                    value={filters.unratedOnly ? 0 : filters.myMin ?? 0}
+                    onChange={(stars) => setFloor('myMin', stars)}
+                    size={30}
+                    gap={8}
+                    allowZero
+                  />
+                  <TouchableOpacity
+                    onPress={toggleUnrated}
+                    style={styles.unratedRow}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={filters.unratedOnly ? 'checkbox' : 'square-outline'}
+                      size={18}
+                      color={filters.unratedOnly ? colors.primary : colors.textFaint}
+                    />
+                    <Text
+                      style={[
+                        styles.unratedText,
+                        filters.unratedOnly && styles.unratedTextActive,
+                      ]}
+                    >
+                      Not rated yet
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             ) : options.length === 0 ? (
               <View style={styles.emptyDropdown}>
                 <Text style={styles.emptyDropdownText}>No data yet</Text>
@@ -525,7 +513,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     overflow: 'hidden',
-    maxHeight: 280,
+    maxHeight: 340,
   },
   dropdownHeader: {
     flexDirection: 'row',
@@ -542,29 +530,50 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.text,
   },
   optionScroll: { maxHeight: 220 },
+  ratingBody: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 14 },
+  sliderBlock: { paddingTop: 8 },
+  sliderBlockSecond: {
+    marginTop: 12,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: c.borderSubtle,
+  },
+  sliderHeading: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   sectionHeading: {
     fontSize: 11,
     fontFamily: 'Inter_700Bold',
     color: c.textFaint,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 6,
   },
-  sectionHeadingSecond: {
-    marginTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: c.borderSubtle,
-    paddingTop: 14,
-  },
-  sectionEmpty: {
+  floorValue: {
     fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: c.text,
+  },
+  sliderHint: {
+    fontSize: 11,
     fontFamily: 'Inter_400Regular',
     color: c.textFaint,
-    paddingHorizontal: 14,
-    paddingBottom: 8,
+    marginTop: 8,
   },
+  unratedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  unratedText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: c.textMuted,
+  },
+  unratedTextActive: { fontFamily: 'Inter_600SemiBold', color: c.primary },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',

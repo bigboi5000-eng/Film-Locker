@@ -37,6 +37,15 @@ export interface StarRatingProps {
   size?: number;
   /** Gap between stars. The touch maths accounts for it via the row width. */
   gap?: number;
+  /**
+   * Let the control reach nought, for a filter where nought means "any".
+   *
+   * A rating cannot be nought — a film is unrated or it is scored — so the
+   * rating control starts at a half. A threshold can be, and needs to be
+   * draggable back to it rather than only clearable by some control sitting
+   * beside the slider.
+   */
+  allowZero?: boolean;
 }
 
 /** How far a finger may travel and still count as a tap. */
@@ -87,7 +96,13 @@ function Star({
   );
 }
 
-export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingProps) {
+export function StarRating({
+  value,
+  onChange,
+  size = 28,
+  gap = 6,
+  allowZero = false,
+}: StarRatingProps) {
   const colors = useColors();
   const readOnly = !onChange;
 
@@ -121,6 +136,11 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
   const ratingAt = useCallback(
     (x: number, halves: boolean): number => {
       const stride = size + gap;
+      // The far left quarter of the first star is nought, where that is a
+      // value at all. It costs that star a little of its half-zone and buys
+      // a threshold you can drag all the way off, which is the thing people
+      // reach for first when a filter is too strict.
+      if (allowZero && x < size / 4) return 0;
       const index = Math.min(Math.max(Math.floor(x / stride), 0), 4);
       if (!halves) return index + 1;
       // Distance into this star. A touch landing in the gap after a star
@@ -129,7 +149,7 @@ export function StarRating({ value, onChange, size = 28, gap = 6 }: StarRatingPr
       const within = x - index * stride;
       return index + (within < size / 2 ? 0.5 : 1);
     },
-    [size, gap]
+    [size, gap, allowZero]
   );
 
   const onGrant = useCallback(
