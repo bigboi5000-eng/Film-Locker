@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, isNull } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { backfillEnrichment, countFilmsNeedingVisit } from "../../lib/enrichBackfill";
 import {
@@ -272,7 +272,26 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
     .returning();
 
   if (!movie) {
-    // Already in the locker. Adding it as watched should still mark it so,
+    // Already in the locker, so the insert above wrote nothing — including
+    // the source. Fill it in only where there is not one already: the same
+    // "first post wins" rule the extraction pipeline uses, since the
+    // original post is the one that made you save the film, and running
+    // into it again later does not rewrite that. A film first added by
+    // search does pick one up here, because that is a null being filled.
+    if (film.sourceUrl) {
+      await db
+        .update(moviesTable)
+        .set({ sourceUrl: film.sourceUrl })
+        .where(
+          and(
+            eq(moviesTable.tmdbId, parsed.data.tmdbId),
+            eq(moviesTable.clerkUserId, clerkUserId),
+            isNull(moviesTable.sourceUrl)
+          )
+        );
+    }
+
+    // Adding it as watched should still mark it so,
     // otherwise the button does nothing for a film already on the watchlist
     // — which is the common case for "I've finally seen this".
     if (isWatched) {

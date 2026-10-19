@@ -1,0 +1,18 @@
+-- Where a playlist's films came from.
+--
+-- movies.source_url (0015) only helps a film that is in somebody's locker,
+-- and a shared list usually is not: "save these ten as a playlist" puts rows
+-- in playlist_items and nothing in movies, so there was nowhere to record
+-- the post a whole list arrived from.
+--
+-- Deliberately not the same privacy as movies.source_url. That column is
+-- one person's reading and never leaves their own endpoints; this one
+-- belongs to the list, which may be public, and the post a list came from
+-- is part of the list. Whoever can see the playlist can see its source.
+--
+-- Null for every row that predates this, and for anything added by hand.
+--
+-- Re-runnable, which this repo's migrator requires (see
+-- lib/db/src/migrate.ts): a replay finds the column already present and
+-- skips the statement.
+ALTER TABLE "playlist_items" ADD COLUMN "source_url" text;

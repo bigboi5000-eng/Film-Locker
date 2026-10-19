@@ -78,6 +78,15 @@ interface FilmDetailModalProps {
   overview: string;
   /** If this movie is saved in the locker, pass the full DB record */
   savedMovie?: Movie;
+  /**
+   * Where this film came from, when the caller knows it from something
+   * other than the viewer's own locker row — a playlist item, say.
+   *
+   * A film can be in a playlist without being in the locker at all, and
+   * then savedMovie is undefined and there is nothing to read a source
+   * from. This is how a shared list keeps its link back to the post.
+   */
+  sourceUrl?: string | null;
 }
 
 
@@ -1128,6 +1137,7 @@ export function FilmDetailModal({
   releaseYear: releaseYearProp,
   overview: overviewProp,
   savedMovie: savedMovieProp,
+  sourceUrl: sourceUrlProp,
 }: FilmDetailModalProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -1310,7 +1320,11 @@ export function FilmDetailModal({
    * app takes it where one is installed — a reel is worth more in Instagram
    * than in a web view that will ask you to log in.
    */
-  const sourceUrl = savedMovie?.sourceUrl ?? null;
+  // The locker row first, since it is this viewer's own record of where
+  // the film came from; the caller's as a fallback, for a film they have
+  // not saved. A swapped film (tapped from "more like this") keeps neither,
+  // because the source belonged to the film that was open before it.
+  const sourceUrl = swapped ? null : savedMovie?.sourceUrl ?? sourceUrlProp ?? null;
   const source = useMemo(() => (sourceUrl ? describeSource(sourceUrl) : null), [sourceUrl]);
   const openSource = useCallback(() => {
     if (!sourceUrl) return;

@@ -569,6 +569,7 @@ export const AddMovieBody = zod.object({
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
   "overview": zod.string(),
+  "sourceUrl": zod.string().nullish().describe('The social post this film was identified from, so the film\'s page can offer a way back to it. Omit for a film added by search or by hand, which came from no post.\n'),
   "isWatched": zod.boolean().optional().describe('Add the film straight to the watched list rather than the watchlist. Adding and then patching meant two round trips and a film that was briefly on the wrong one. A film already in the locker is promoted to watched rather than left alone.\n')
 })
 
@@ -1709,6 +1710,7 @@ export const GetPlaylistResponse = zod.object({
   "tmdbId": zod.number(),
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
+  "sourceUrl": zod.string().nullish().describe('The social post this film was added to the playlist from. Unlike a locker film\'s sourceUrl this is not owner-private: a playlist may be public, and where a list came from is part of the list.\n'),
   "addedAt": zod.coerce.date()
 })),
   "isOwner": zod.boolean().describe('Whether the caller owns this playlist. Only the owner may edit it, add or remove films, or delete it.\n'),
@@ -1771,7 +1773,8 @@ export const AddPlaylistItemParams = zod.object({
 export const AddPlaylistItemBody = zod.object({
   "tmdbId": zod.number(),
   "filmTitle": zod.string(),
-  "posterUrl": zod.string()
+  "posterUrl": zod.string(),
+  "sourceUrl": zod.string().nullish().describe('The social post this film was identified from, so the film\'s page can offer a way back to it. Omit for a film added by search or by hand, which came from no post.\n')
 })
 
 export const AddPlaylistItemResponse = zod.void()

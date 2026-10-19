@@ -142,6 +142,8 @@ export default function HomeScreen() {
   // Films identified from a link or a photo, awaiting confirmation.
   const [resultMatches, setResultMatches] = useState<GeminiMovieMatch[]>([]);
   const [resultListTitle, setResultListTitle] = useState<string | null>(null);
+  /** The link these results came from, carried into whatever gets saved. */
+  const [resultSourceUrl, setResultSourceUrl] = useState<string | null>(null);
   const [showResultSheet, setShowResultSheet] = useState(false);
 
   /**
@@ -170,9 +172,10 @@ export default function HomeScreen() {
       Watchlist, which uses the same hook. */
   const tools = useFilmSearchTools({
     requireAccount,
-    onMatches: useCallback((matches: GeminiMovieMatch[], listTitle: string | null) => {
+    onMatches: useCallback((matches: GeminiMovieMatch[], listTitle: string | null, src: string | null) => {
       setResultMatches(matches);
       setResultListTitle(listTitle);
+      setResultSourceUrl(src);
       setShowResultSheet(true);
     }, []),
   });
@@ -526,6 +529,7 @@ export default function HomeScreen() {
         visible={showResultSheet}
         matches={resultMatches}
         listTitle={resultListTitle}
+        sourceUrl={resultSourceUrl}
         onClose={() => {
           setShowResultSheet(false);
           setResultMatches([]);

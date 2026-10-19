@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { and, eq, ilike, desc, count, sql, or } from "drizzle-orm";
+import { and, eq, ilike, desc, count, sql, or, isNull } from "drizzle-orm";
 import { db, playlistsTable, playlistItemsTable, playlistFollowsTable, usersTable, followsTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
@@ -20,10 +20,18 @@ const UpdatePlaylistBody = z.object({
   isPublic: z.boolean().optional(),
 });
 
+/**
+ * Hand-written rather than the generated AddPlaylistItemBody, and therefore
+ * able to drift from the spec without anything noticing — zod strips what it
+ * does not declare, so a field added to the spec and sent by the client is
+ * silently dropped here rather than rejected. sourceUrl was exactly that
+ * until this line was added. Worth collapsing into the generated schema.
+ */
 const AddItemBody = z.object({
   tmdbId: z.number().int(),
   filmTitle: z.string().min(1),
   posterUrl: z.string().min(1),
+  sourceUrl: z.string().nullish(),
 });
 
 // ── GET /playlists ─────────────────────────────────────────────────────────
@@ -456,6 +464,23 @@ router.post("/playlists/:id/items", requireAuth, async (req, res): Promise<void>
     .values({ playlistId: id, ...parsed.data })
     .onConflictDoNothing()
     .returning();
+
+  // Already in the playlist, so the insert wrote nothing — the source
+  // included. Fill it in only where there is not one already, matching how
+  // a locker film behaves: the first post a film arrived from is the one
+  // worth keeping, and adding the same film again does not rewrite it.
+  if (!item && parsed.data.sourceUrl) {
+    await db
+      .update(playlistItemsTable)
+      .set({ sourceUrl: parsed.data.sourceUrl })
+      .where(
+        and(
+          eq(playlistItemsTable.playlistId, id),
+          eq(playlistItemsTable.tmdbId, parsed.data.tmdbId),
+          isNull(playlistItemsTable.sourceUrl)
+        )
+      );
+  }
 
   // Bump updatedAt on the playlist
   await db

@@ -46,7 +46,7 @@ const IDENTIFY_DEADLINE_MS = 45_000;
 
 /** What identification produced, once it is done either way. */
 type Outcome =
-  | { ok: true; matches: GeminiMovieMatch[]; listTitle: string | null }
+  | { ok: true; matches: GeminiMovieMatch[]; listTitle: string | null; sourceUrl: string | null }
   | { ok: false; message: string };
 
 /**
@@ -83,6 +83,18 @@ export function ShareIntentHandler() {
 
   const [matches, setMatches] = useState<GeminiMovieMatch[]>([]);
   const [listTitle, setListTitle] = useState<string | null>(null);
+  /**
+   * The link that was shared, kept so whatever the sheet saves can record
+   * where it came from.
+   *
+   * Identification runs in dry-run mode — it names films without writing
+   * any — so the save happens later, from the sheet, through the ordinary
+   * add endpoints. Those know nothing about the share unless it is carried
+   * to them, which is why a shared film had no "original post" to show.
+   *
+   * Null for a shared IMAGE: a screenshot has no address to go back to.
+   */
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
 
   // Track the last handled URL so we don't re-process on AppState resume.
@@ -113,6 +125,7 @@ export function ShareIntentHandler() {
     if (outcome.ok) {
       setMatches(outcome.matches);
       setListTitle(outcome.listTitle);
+      setSourceUrl(outcome.sourceUrl);
       setShowSheet(true);
     } else {
       Alert.alert('Could not identify film', outcome.message, [{ text: 'OK' }]);
@@ -177,8 +190,8 @@ export function ShareIntentHandler() {
       settle(outcome);
     };
 
-    const finish = (m: GeminiMovieMatch[], title: string | null) =>
-      report({ ok: true, matches: m, listTitle: title });
+    const finish = (m: GeminiMovieMatch[], title: string | null, src: string | null) =>
+      report({ ok: true, matches: m, listTitle: title, sourceUrl: src });
 
     const fail = (message: string) => report({ ok: false, message });
 
@@ -215,14 +228,15 @@ export function ShareIntentHandler() {
           data: { imageBase64: base64, mimeType, dryRun: true },
         });
       })()
-        .then((data) => finish(data.matches ?? [], data.listTitle ?? null))
+        // No source for an image: a screenshot has no post to go back to.
+        .then((data) => finish(data.matches ?? [], data.listTitle ?? null, null))
         .catch(() => fail("Film Locker couldn't read films from that image. Try sharing again."));
       return;
     }
 
     // Call in dry-run mode: identify films without saving to DB.
     processLinkRef.current({ data: { url: url!, dryRun: true } })
-      .then((data) => finish(data.matches ?? [], data.listTitle ?? null))
+      .then((data) => finish(data.matches ?? [], data.listTitle ?? null, url!))
       .catch(() => fail("Film Locker couldn't read this link. Try sharing again."));
   }, [hasShareIntent, shareIntent]);
 
@@ -263,6 +277,7 @@ export function ShareIntentHandler() {
         visible={showSheet}
         matches={matches}
         listTitle={listTitle}
+        sourceUrl={sourceUrl}
         onClose={handleClose}
       />
     </>

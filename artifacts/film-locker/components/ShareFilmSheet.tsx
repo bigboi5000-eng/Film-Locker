@@ -53,6 +53,17 @@ interface ShareFilmSheetProps {
   matches: GeminiMovieMatch[];
   /** Suggested playlist name when the share was a curated/ranked list, e.g. "Top 10 Horror Films of All Time" */
   listTitle?: string | null;
+  /**
+   * The link these films were identified from, recorded against whatever is
+   * saved so the film's page can offer a way back to it.
+   *
+   * Identification runs in dry-run mode, so nothing is written until this
+   * sheet writes it — which means the ordinary add endpoints are the only
+   * place a share's origin can be recorded, and they only know it if it is
+   * handed to them. Null when the share was an image, or when the sheet was
+   * opened from somewhere with no link behind it.
+   */
+  sourceUrl?: string | null;
   onClose: () => void;
   /**
    * Exit the app after the user is done — correct for the Android share-intent
@@ -73,11 +84,13 @@ function FilmCard({
   onAdded,
   onNotAMatch,
   onOpenFilm,
+  sourceUrl,
 }: {
   match: GeminiMovieMatch;
   onAdded: () => void;
   onNotAMatch?: () => void;
   onOpenFilm?: (match: GeminiMovieMatch) => void;
+  sourceUrl?: string | null;
 }) {
   const cardStyles = useThemedStyles(makeCardStyles);
   const colors = useColors();
@@ -96,6 +109,7 @@ function FilmCard({
           releaseYear: match.release_year,
           posterUrl: match.poster_url ?? '',
           overview: match.overview ?? '',
+          sourceUrl,
         },
       });
       await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
@@ -397,6 +411,7 @@ function BulkAddPanel({
   candidates,
   mode,
   initialName,
+  sourceUrl,
   onDone,
 }: {
   /** Already the user-selected subset — not the full match list. */
@@ -404,6 +419,8 @@ function BulkAddPanel({
   mode: BulkAddMode;
   /** Prefills the "new playlist" name input, e.g. a detected list_title. */
   initialName?: string | null;
+  /** The link these films came from, recorded on whatever is saved. */
+  sourceUrl?: string | null;
   onDone: () => void;
 }) {
   const colors = useColors();
@@ -441,6 +458,7 @@ function BulkAddPanel({
             releaseYear: m.release_year,
             posterUrl: m.poster_url ?? '',
             overview: m.overview ?? '',
+            sourceUrl,
           },
         });
         return true;
@@ -480,6 +498,10 @@ function BulkAddPanel({
             tmdbId: m.tmdb_id!,
             filmTitle: m.title ?? m.movie_title,
             posterUrl: m.poster_url ?? '',
+            // On the item, not just on the locker film: a playlist is
+            // usually built WITHOUT adding the films to the watchlist, and
+            // then there is no locker row to carry it.
+            sourceUrl,
           },
         });
         addedToPlaylist = true;
@@ -494,6 +516,7 @@ function BulkAddPanel({
               releaseYear: m.release_year,
               posterUrl: m.poster_url ?? '',
               overview: m.overview ?? '',
+              sourceUrl,
             },
           });
         } catch { /* already in watchlist — skip */ }
@@ -899,7 +922,7 @@ const makeManualSearchStyles = (c: Palette) => StyleSheet.create({
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
-export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
+export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, onClose, exitAppOnReturn = true }: ShareFilmSheetProps) {
   const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const [addedCount, setAddedCount] = useState(0);
@@ -1106,6 +1129,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                 candidates={selectedCandidates}
                 mode={multiMode}
                 initialName={listTitle}
+                sourceUrl={sourceUrl}
                 onDone={handleReturn}
               />
             ) : candidates.length === 0 ? (
@@ -1268,6 +1292,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, onClose, exitAppOn
                       onAdded={handleAdded}
                       onNotAMatch={() => setCorrectingIndex(match.sourceIndex)}
                       onOpenFilm={setOpenFilm}
+                      sourceUrl={sourceUrl}
                     />
                   ))}
                 </ScrollView>

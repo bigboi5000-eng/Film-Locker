@@ -311,6 +311,7 @@ interface ModalTarget {
   releaseYear: string;
   overview: string;
   savedMovie?: Movie;
+  sourceUrl?: string | null;
 }
 
 export default function PlaylistScreen() {
@@ -425,6 +426,9 @@ export default function PlaylistScreen() {
       releaseYear: saved?.releaseYear ?? '',
       overview: saved?.overview ?? '',
       savedMovie: saved,
+      // From the playlist item, which is the only record of where a film
+      // came from when it was added to a list and not to the locker.
+      sourceUrl: item.sourceUrl ?? null,
     });
   }, [savedByTmdbId]);
 
@@ -587,6 +591,7 @@ export default function PlaylistScreen() {
           releaseYear={modalTarget.releaseYear}
           overview={modalTarget.overview}
           savedMovie={modalTarget.savedMovie}
+          sourceUrl={modalTarget.sourceUrl}
         />
       )}
     </View>

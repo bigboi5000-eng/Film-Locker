@@ -171,6 +171,8 @@ export interface AddMovieBody {
   releaseYear: string;
   posterUrl: string;
   overview: string;
+  /** The social post this film was identified from, so the film's page can offer a way back to it. Omit for a film added by search or by hand, which came from no post. */
+  sourceUrl?: string | null;
   /** Add the film straight to the watched list rather than the watchlist. Adding and then patching meant two round trips and a film that was briefly on the wrong one. A film already in the locker is promoted to watched rather than left alone. */
   isWatched?: boolean;
 }
@@ -747,6 +749,8 @@ export interface PlaylistItem {
   tmdbId: number;
   filmTitle: string;
   posterUrl: string;
+  /** The social post this film was added to the playlist from. Unlike a locker film's sourceUrl this is not owner-private: a playlist may be public, and where a list came from is part of the list. */
+  sourceUrl?: string | null;
   addedAt: string;
 }
 
@@ -793,6 +797,8 @@ export interface AddPlaylistItemBody {
   tmdbId: number;
   filmTitle: string;
   posterUrl: string;
+  /** The social post this film was identified from, so the film's page can offer a way back to it. Omit for a film added by search or by hand, which came from no post. */
+  sourceUrl?: string | null;
 }
 
 export type GetRecommendationsParams = {

@@ -1866,6 +1866,13 @@ components:
           type: string
         overview:
           type: string
+        sourceUrl:
+          type: string
+          nullable: true
+          description: >
+            The social post this film was identified from, so the film's page
+            can offer a way back to it. Omit for a film added by search or by
+            hand, which came from no post.
         isWatched:
           type: boolean
           description: >
@@ -2931,6 +2938,13 @@ components:
           type: string
         posterUrl:
           type: string
+        sourceUrl:
+          type: string
+          nullable: true
+          description: >
+            The social post this film was added to the playlist from. Unlike
+            a locker film's sourceUrl this is not owner-private: a playlist
+            may be public, and where a list came from is part of the list.
         addedAt:
           type: string
           format: date-time
@@ -3073,6 +3087,13 @@ components:
           type: string
         posterUrl:
           type: string
+        sourceUrl:
+          type: string
+          nullable: true
+          description: >
+            The social post this film was identified from, so the film's page
+            can offer a way back to it. Omit for a film added by search or by
+            hand, which came from no post.
       required:
         - tmdbId
         - filmTitle

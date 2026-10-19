@@ -175,7 +175,12 @@ export interface FilmSearchToolsOptions {
    */
   requireAccount: (action: string) => boolean;
   /** Films identified from a pasted link or an image, for a confirmation sheet. */
-  onMatches: (matches: GeminiMovieMatch[], listTitle: string | null) => void;
+  /**
+   * `sourceUrl` is the link the films were identified from, so whatever the
+   * confirmation sheet saves can record where it came from. Null for an
+   * image, which has no address to go back to.
+   */
+  onMatches: (matches: GeminiMovieMatch[], listTitle: string | null, sourceUrl: string | null) => void;
 }
 
 export type FilmSearchTools = ReturnType<typeof useFilmSearchTools>;
@@ -223,7 +228,7 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
         }
         // Zero matches still opens the sheet — its "No film identified" state
         // offers a manual search, so the flow is not a dead end.
-        onMatches(matches, result.listTitle ?? null);
+        onMatches(matches, result.listTitle ?? null, trimmed);
         return true;
       } catch (err) {
         Alert.alert('Error', identifyErrorMessage(err, 'link'));
@@ -288,7 +293,7 @@ export function useFilmSearchTools({ requireAccount, onMatches }: FilmSearchTool
         }
         // Zero matches still opens the sheet — its "No film identified" state
         // offers a manual search, the same as the link flow.
-        onMatches(matches, response.listTitle ?? null);
+        onMatches(matches, response.listTitle ?? null, null);
       } catch (err) {
         Alert.alert('Error', identifyErrorMessage(err, 'image'));
       }
