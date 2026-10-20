@@ -296,7 +296,11 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
   // this is the whole mechanism, and it works perfectly from a machine
   // Reddit is willing to talk to — a laptop, or anywhere not in a
   // datacentre.
-  for (const host of ["www.reddit.com", "old.reddit.com"]) {
+  // Three public hosts, because they are not all blocked identically.
+  // api.reddit.com is the JSON API's own alias and old.reddit.com is served
+  // by separate infrastructure; either occasionally answers where www does
+  // not. All three are free and a refusal costs one round trip.
+  for (const host of ["www.reddit.com", "api.reddit.com", "old.reddit.com"]) {
     const result = await tryHost(path, host, warn);
     if (result.ok) {
       if (attempts.length) warn?.({ url, host, attempts }, "reddit: a later route answered");
