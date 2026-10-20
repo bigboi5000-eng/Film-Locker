@@ -128,7 +128,7 @@ import {
   enrichAndSaveMatches,
   type PipelineResult,
 } from "./moviePipeline";
-import { fetchRedditPost, isRedditUrl, redditPostText, redditCommentsText } from "./redditPost";
+import { fetchRedditPost, isRedditUrl, redditThreadText } from "./redditPost";
 
 export type SocialLinkSource = "caption" | "image" | "audio" | "video" | "none";
 
@@ -462,40 +462,38 @@ export async function processSocialLink(
   // ── Step 0.6: Reddit, read as text ───────────────────────────────────────
   // Before the downloads, because a Reddit post about films is text and not
   // a video, and asking yt-dlp for it is both the most expensive attempt and
-  // the one Reddit now refuses outright ("Account authentication is
-  // required"). The .json endpoint needs no account at all.
+  // the one Reddit refuses outright ("Account authentication is required").
   //
-  // Post first, comments second, for the same reason Instagram's are split:
-  // the title and body are what the author wrote, and a comment section is
-  // equally full of jokes about other films. A post that already named
-  // something should not have a wrong film added beside it.
+  // The post and its comments go together, in one call. This used to read
+  // the post first and the comments only if it named nothing, which is
+  // Instagram's rule and wrong here: half the Reddit threads worth sharing
+  // are a QUESTION — "your no-skip spooky season films" — where the post
+  // names one film or none and the whole answer is underneath it. For
+  // exactly those, returning as soon as the post matched meant the thing
+  // the person shared it for was never read.
   if (isRedditUrl(url)) {
     try {
       const post = await timed("reddit-json", warn, () => fetchRedditPost(url, warn));
       if (post) {
-        const own = redditPostText(post);
-        if (own) {
-          const { matches, saved, listTitle } = await timed("reddit-post-pipeline", warn, () =>
-            runMoviePipeline(own, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+        const thread = redditThreadText(post);
+        if (thread) {
+          const { matches, saved, listTitle } = await timed("reddit-thread-pipeline", warn, () =>
+            runMoviePipeline(thread, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
           if (matches.length > 0) {
-            warn?.({ url, matchCount: matches.length }, "processSocialLink: reddit post found films");
+            warn?.(
+              { url, matchCount: matches.length, comments: post.comments.length },
+              "processSocialLink: reddit thread found films"
+            );
             discardAudioDownload();
-            return { source: "caption", text: own, matches, saved, listTitle };
-          }
-          warn?.({ url }, "processSocialLink: reddit post named nothing — trying comments");
-        }
-
-        const comments = redditCommentsText(post);
-        if (comments) {
-          const { matches, saved, listTitle } = await timed("reddit-comments-pipeline", warn, () =>
-            runMoviePipeline(comments, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
-          if (matches.length > 0) {
-            warn?.({ url, matchCount: matches.length }, "processSocialLink: reddit comments found films");
-            discardAudioDownload();
-            return { source: "caption", text: comments, matches, saved, listTitle };
+            return { source: "caption", text: thread, matches, saved, listTitle };
           }
         }
-        warn?.({ url }, "processSocialLink: reddit found no films — falling back");
+        warn?.(
+          { url, comments: post.comments.length },
+          post.comments.length === 0
+            ? "processSocialLink: reddit found no films, and the actor returned no comments — check whether it supports them"
+            : "processSocialLink: reddit found no films — falling back"
+        );
       }
     } catch (err) {
       warn?.({ url, err }, "processSocialLink: reddit read failed — falling back");

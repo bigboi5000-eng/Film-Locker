@@ -420,14 +420,35 @@ export function redditPostText(post: RedditPost): string {
   return [post.title, post.selfText].filter(Boolean).join("\n\n").trim();
 }
 
-/**
- * The comments, as one block, read only when the post itself named nothing.
- *
- * Separate from the post for the same reason Instagram's are: a comment
- * section is where a thread answers "what film is this", and it is equally
- * full of jokes about other films. Merging them into a post that already
- * worked would add a wrong film beside the right one.
- */
+/** The comments alone, as one block. */
 export function redditCommentsText(post: RedditPost): string {
   return post.comments.join("\n").trim();
+}
+
+/**
+ * The whole thread — post and comments together, in one piece.
+ *
+ * This started out as Instagram's rule, where the caption is read first and
+ * the comments only if it named nothing, because an Instagram comment
+ * section is an audience shouting at a post and merging it in adds wrong
+ * films beside right ones.
+ *
+ * A Reddit thread is not that. Half the posts worth sharing are a QUESTION
+ * — "your no-skip spooky season films" — where the post names one film or
+ * none and the entire answer is underneath it. Returning as soon as the
+ * post matched meant that for exactly those threads, the thing the person
+ * shared it for was never read.
+ *
+ * So both go to the extractor together, in one call rather than two, with
+ * the post first and the comments labelled. The order is what carries the
+ * distinction now: a list post's own films come before the thread's
+ * suggestions, which is the ranking anyone would expect.
+ */
+export function redditThreadText(post: RedditPost): string {
+  const own = redditPostText(post);
+  const comments = redditCommentsText(post);
+  if (!comments) return own;
+  // Labelled, so the extractor can tell an author's list from a reply to
+  // it rather than reading one run-on wall of text.
+  return [own, "Comments:", comments].filter(Boolean).join("\n\n");
 }
