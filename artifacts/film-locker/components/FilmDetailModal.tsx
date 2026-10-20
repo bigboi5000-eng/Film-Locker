@@ -28,6 +28,7 @@ import {
   usePatchWatched,
   usePatchRating,
   useAddMovie,
+  useListMovies,
   useGetFilmCommunityScore,
   useSetFilmCommunityRating,
   useDeleteFilmCommunityRating,
@@ -1160,7 +1161,32 @@ export function FilmDetailModal({
   // A film arrived at through the similar row is not the one the parent
   // knows about, so it has no saved-movie record to carry over — its own
   // state is fetched like any other unsaved film.
-  const savedMovie = swapped ? undefined : savedMovieProp;
+  const { isSignedIn } = useAuth();
+  const isLoggedIn = Boolean(isSignedIn);
+
+  /**
+   * This viewer's own row for this film, found rather than demanded.
+   *
+   * Five of the nine screens that open this sheet did not pass it — the
+   * feed, a person's filmography, somebody's profile, a thread, the share
+   * sheet — and savedMovie gates the whole owner's half of the screen. So a
+   * film you had watched and rated opened from the feed showed no stars, no
+   * "mark watched", and no link back to where it came from, and offered to
+   * add a film you already had.
+   *
+   * The list is the same query the Films tab uses, so this is a cache read
+   * on any screen that has already loaded it and one shared request where
+   * it has not — not nine call sites each remembering to pass a prop.
+   */
+  const { data: myMovies } = useListMovies({
+    query: { queryKey: getListMoviesQueryKey(), enabled: visible && isLoggedIn },
+  });
+
+  const savedMovie = useMemo(() => {
+    if (swapped) return undefined;
+    if (savedMovieProp) return savedMovieProp;
+    return myMovies?.movies?.find((m) => m.tmdbId === tmdbId);
+  }, [swapped, savedMovieProp, myMovies, tmdbId]);
 
   // Back to the film the parent opened whenever the sheet is dismissed, so
   // reopening does not resume somewhere the user did not leave off.
@@ -1182,8 +1208,6 @@ export function FilmDetailModal({
   const { data: details, isLoading } = useGetMovieDetails(tmdbId, { region });
 
   // Use Clerk auth state — works for both saved and unsaved films
-  const { isSignedIn } = useAuth();
-  const isLoggedIn = Boolean(isSignedIn);
 
   // Pre-fetch the followee list so we know whether to show the recommend button.
   // Only runs when the modal is open and the user is signed in.
