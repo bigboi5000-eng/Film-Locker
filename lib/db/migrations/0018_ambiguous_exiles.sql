@@ -1,0 +1,22 @@
+-- Half stars on a public rating too.
+--
+-- 0013 widened movies.rating from integer to real so a film could be given
+-- three and a half, and missed this column — which holds the same thing,
+-- written by the same control, one section up the same screen. So the
+-- private stars took a half and the public ones rejected it, which is a
+-- difference nobody looking at the screen could account for.
+--
+-- Lossless and needs no backfill: an integer 4 becomes a real 4, which is
+-- still four stars. Real rather than numeric for the reason given in 0013 —
+-- node-postgres returns numeric as a string to preserve precision that
+-- half-stars do not have, and every value this column will hold is exact in
+-- binary floating point.
+--
+-- The average over it is unaffected: avg() of a real is a double, which the
+-- route already parses as a float and the app already rounds to the nearest
+-- half for display.
+--
+-- Re-runnable, which this repo's migrator requires (see
+-- lib/db/src/migrate.ts): changing a column to the type it already has is a
+-- no-op rather than an error.
+ALTER TABLE "film_community_ratings" ALTER COLUMN "rating" SET DATA TYPE real;

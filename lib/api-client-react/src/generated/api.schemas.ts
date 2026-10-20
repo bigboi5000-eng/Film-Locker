@@ -272,8 +272,8 @@ export interface FilmCommunityScore {
   /** Total number of community ratings */
   count: number;
   /**
-     * The authenticated user's own community rating (null if not rated or not logged in)
-     * @minimum 1
+     * The authenticated user's own community rating, in half-star steps (null if not rated or not logged in).
+     * @minimum 0.5
      * @maximum 5
      */
   userRating?: number | null;
@@ -281,7 +281,8 @@ export interface FilmCommunityScore {
 
 export interface SetCommunityRatingBody {
   /**
-     * @minimum 1
+     * Half-star steps, so ten positions rather than five — the same scale as a private rating, written by the same control. This was an integer while movies.rating was already a real, so the stars in the community section rejected a half that the identical stars one section below accepted.
+     * @minimum 0.5
      * @maximum 5
      */
   rating: number;
@@ -300,7 +301,11 @@ export interface FilmComment {
   updatedAt: string;
   /** True when the authenticated user authored this comment */
   isOwn: boolean;
-  /** The author's own community star rating (1-5) for this film, if they've left one */
+  /**
+     * The author's own community star rating for this film, in half-star steps, if they've left one.
+     * @minimum 0.5
+     * @maximum 5
+     */
   rating: number | null;
 }
 
@@ -492,7 +497,11 @@ export interface FeedItem {
   title?: string | null;
   posterUrl?: string | null;
   releaseYear?: string | null;
-  /** Their community rating under "rated", and their own 1-5 score under "watched" where they gave one. */
+  /**
+     * Their community rating under "rated", and their own score under "watched" where they gave one. Half-star steps: both sources hold halves, so declaring this an integer rejected a feed item from anyone who had used them.
+     * @minimum 0.5
+     * @maximum 5
+     */
   rating?: number | null;
   /** The review body, under "commented". */
   comment?: string | null;
@@ -576,6 +585,11 @@ export interface ProfileFilmCard {
   title?: string | null;
   posterUrl?: string | null;
   releaseYear?: string | null;
+  /**
+     * Their own score, in half-star steps. This read movies.rating, which has been a real since 0013 — so a profile card for anyone who had given a half failed validation before this was widened.
+     * @minimum 0.5
+     * @maximum 5
+     */
   rating?: number | null;
   comment?: string | null;
   at: string;

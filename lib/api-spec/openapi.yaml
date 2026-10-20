@@ -2099,11 +2099,14 @@ components:
           type: integer
           description: Total number of community ratings
         userRating:
-          type: integer
+          type: number
           nullable: true
-          minimum: 1
+          minimum: 0.5
           maximum: 5
-          description: The authenticated user's own community rating (null if not rated or not logged in)
+          multipleOf: 0.5
+          description: >
+            The authenticated user's own community rating, in half-star
+            steps (null if not rated or not logged in).
       required:
         - tmdbId
         - average
@@ -2113,9 +2116,16 @@ components:
       type: object
       properties:
         rating:
-          type: integer
-          minimum: 1
+          type: number
+          minimum: 0.5
           maximum: 5
+          multipleOf: 0.5
+          description: >
+            Half-star steps, so ten positions rather than five — the same
+            scale as a private rating, written by the same control. This was
+            an integer while movies.rating was already a real, so the stars
+            in the community section rejected a half that the identical
+            stars one section below accepted.
       required:
         - rating
 
@@ -2148,9 +2158,14 @@ components:
           type: boolean
           description: True when the authenticated user authored this comment
         rating:
-          type: integer
+          type: number
           nullable: true
-          description: The author's own community star rating (1-5) for this film, if they've left one
+          minimum: 0.5
+          maximum: 5
+          multipleOf: 0.5
+          description: >
+            The author's own community star rating for this film, in
+            half-star steps, if they've left one.
       required:
         - id
         - tmdbId
@@ -2477,11 +2492,16 @@ components:
           type: string
           nullable: true
         rating:
-          type: integer
+          type: number
           nullable: true
+          minimum: 0.5
+          maximum: 5
+          multipleOf: 0.5
           description: >
-            Their community rating under "rated", and their own 1-5 score
-            under "watched" where they gave one.
+            Their community rating under "rated", and their own score under
+            "watched" where they gave one. Half-star steps: both sources
+            hold halves, so declaring this an integer rejected a feed item
+            from anyone who had used them.
         comment:
           type: string
           nullable: true
@@ -2676,8 +2696,15 @@ components:
           type: string
           nullable: true
         rating:
-          type: integer
+          type: number
           nullable: true
+          minimum: 0.5
+          maximum: 5
+          multipleOf: 0.5
+          description: >
+            Their own score, in half-star steps. This read movies.rating,
+            which has been a real since 0013 — so a profile card for anyone
+            who had given a half failed validation before this was widened.
         comment:
           type: string
           nullable: true

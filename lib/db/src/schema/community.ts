@@ -1,5 +1,6 @@
 import {
   pgTable,
+  real,
   text,
   serial,
   integer,
@@ -14,7 +15,12 @@ export const filmCommunityRatingsTable = pgTable(
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(), // Clerk user ID
     tmdbId: integer("tmdb_id").notNull(),
-    rating: integer("rating").notNull(), // 1–5
+    // Real, in half-star steps, for the same reason movies.rating is: the
+    // stars that write here offer ten positions, not five. This column was
+    // left behind when that one was widened in 0013, so a half-star public
+    // rating was rejected by the integer check while the identical control
+    // one section below accepted it.
+    rating: real("rating").notNull(), // 0.5–5, in steps of 0.5
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

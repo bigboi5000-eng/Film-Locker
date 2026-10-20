@@ -729,7 +729,9 @@ export const GetFilmCommunityScoreParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const getFilmCommunityScoreResponseUserRatingMin = 0.5;
 export const getFilmCommunityScoreResponseUserRatingMax = 5;
+export const getFilmCommunityScoreResponseUserRatingMultipleOf = 0.5;
 
 
 
@@ -737,7 +739,7 @@ export const GetFilmCommunityScoreResponse = zod.object({
   "tmdbId": zod.number(),
   "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
   "count": zod.number().describe('Total number of community ratings'),
-  "userRating": zod.number().min(1).max(getFilmCommunityScoreResponseUserRatingMax).nullish().describe('The authenticated user\'s own community rating (null if not rated or not logged in)')
+  "userRating": zod.number().min(getFilmCommunityScoreResponseUserRatingMin).max(getFilmCommunityScoreResponseUserRatingMax).multipleOf(getFilmCommunityScoreResponseUserRatingMultipleOf).nullish().describe('The authenticated user\'s own community rating, in half-star steps (null if not rated or not logged in).\n')
 })
 
 
@@ -748,15 +750,19 @@ export const SetFilmCommunityRatingParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const setFilmCommunityRatingBodyRatingMin = 0.5;
 export const setFilmCommunityRatingBodyRatingMax = 5;
+export const setFilmCommunityRatingBodyRatingMultipleOf = 0.5;
 
 
 
 export const SetFilmCommunityRatingBody = zod.object({
-  "rating": zod.number().min(1).max(setFilmCommunityRatingBodyRatingMax)
+  "rating": zod.number().min(setFilmCommunityRatingBodyRatingMin).max(setFilmCommunityRatingBodyRatingMax).multipleOf(setFilmCommunityRatingBodyRatingMultipleOf).describe('Half-star steps, so ten positions rather than five — the same scale as a private rating, written by the same control. This was an integer while movies.rating was already a real, so the stars in the community section rejected a half that the identical stars one section below accepted.\n')
 })
 
+export const setFilmCommunityRatingResponseUserRatingMin = 0.5;
 export const setFilmCommunityRatingResponseUserRatingMax = 5;
+export const setFilmCommunityRatingResponseUserRatingMultipleOf = 0.5;
 
 
 
@@ -764,7 +770,7 @@ export const SetFilmCommunityRatingResponse = zod.object({
   "tmdbId": zod.number(),
   "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
   "count": zod.number().describe('Total number of community ratings'),
-  "userRating": zod.number().min(1).max(setFilmCommunityRatingResponseUserRatingMax).nullish().describe('The authenticated user\'s own community rating (null if not rated or not logged in)')
+  "userRating": zod.number().min(setFilmCommunityRatingResponseUserRatingMin).max(setFilmCommunityRatingResponseUserRatingMax).multipleOf(setFilmCommunityRatingResponseUserRatingMultipleOf).nullish().describe('The authenticated user\'s own community rating, in half-star steps (null if not rated or not logged in).\n')
 })
 
 
@@ -776,7 +782,9 @@ export const DeleteFilmCommunityRatingParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const deleteFilmCommunityRatingResponseUserRatingMin = 0.5;
 export const deleteFilmCommunityRatingResponseUserRatingMax = 5;
+export const deleteFilmCommunityRatingResponseUserRatingMultipleOf = 0.5;
 
 
 
@@ -784,7 +792,7 @@ export const DeleteFilmCommunityRatingResponse = zod.object({
   "tmdbId": zod.number(),
   "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
   "count": zod.number().describe('Total number of community ratings'),
-  "userRating": zod.number().min(1).max(deleteFilmCommunityRatingResponseUserRatingMax).nullish().describe('The authenticated user\'s own community rating (null if not rated or not logged in)')
+  "userRating": zod.number().min(deleteFilmCommunityRatingResponseUserRatingMin).max(deleteFilmCommunityRatingResponseUserRatingMax).multipleOf(deleteFilmCommunityRatingResponseUserRatingMultipleOf).nullish().describe('The authenticated user\'s own community rating, in half-star steps (null if not rated or not logged in).\n')
 })
 
 
@@ -803,6 +811,12 @@ export const GetFilmCommentsQueryParams = zod.object({
   "page": zod.coerce.number().min(1).default(getFilmCommentsQueryPageDefault)
 })
 
+export const getFilmCommentsResponseCommentsItemRatingMin = 0.5;
+export const getFilmCommentsResponseCommentsItemRatingMax = 5;
+export const getFilmCommentsResponseCommentsItemRatingMultipleOf = 0.5;
+
+
+
 export const GetFilmCommentsResponse = zod.object({
   "comments": zod.array(zod.object({
   "id": zod.number(),
@@ -814,7 +828,7 @@ export const GetFilmCommentsResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "isOwn": zod.boolean().describe('True when the authenticated user authored this comment'),
-  "rating": zod.number().nullable().describe('The author\'s own community star rating (1-5) for this film, if they\'ve left one')
+  "rating": zod.number().min(getFilmCommentsResponseCommentsItemRatingMin).max(getFilmCommentsResponseCommentsItemRatingMax).multipleOf(getFilmCommentsResponseCommentsItemRatingMultipleOf).nullable().describe('The author\'s own community star rating for this film, in half-star steps, if they\'ve left one.\n')
 })),
   "page": zod.number(),
   "hasMore": zod.boolean()
@@ -836,6 +850,12 @@ export const PostFilmCommentBody = zod.object({
   "body": zod.string().min(1).max(postFilmCommentBodyBodyMax)
 })
 
+export const postFilmCommentResponseRatingMin = 0.5;
+export const postFilmCommentResponseRatingMax = 5;
+export const postFilmCommentResponseRatingMultipleOf = 0.5;
+
+
+
 export const PostFilmCommentResponse = zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
@@ -846,7 +866,7 @@ export const PostFilmCommentResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "isOwn": zod.boolean().describe('True when the authenticated user authored this comment'),
-  "rating": zod.number().nullable().describe('The author\'s own community star rating (1-5) for this film, if they\'ve left one')
+  "rating": zod.number().min(postFilmCommentResponseRatingMin).max(postFilmCommentResponseRatingMax).multipleOf(postFilmCommentResponseRatingMultipleOf).nullable().describe('The author\'s own community star rating for this film, in half-star steps, if they\'ve left one.\n')
 })
 
 
@@ -1080,6 +1100,12 @@ export const GetFeedQueryParams = zod.object({
   "limit": zod.coerce.number().min(1).max(getFeedQueryLimitMax).default(getFeedQueryLimitDefault)
 })
 
+export const getFeedResponseItemsItemRatingMin = 0.5;
+export const getFeedResponseItemsItemRatingMax = 5;
+export const getFeedResponseItemsItemRatingMultipleOf = 0.5;
+
+
+
 export const GetFeedResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string().describe('Stable within a response — the kind and the source row\'s id.'),
@@ -1097,7 +1123,7 @@ export const GetFeedResponse = zod.object({
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
-  "rating": zod.number().nullish().describe('Their community rating under \"rated\", and their own 1-5 score under \"watched\" where they gave one.\n'),
+  "rating": zod.number().min(getFeedResponseItemsItemRatingMin).max(getFeedResponseItemsItemRatingMax).multipleOf(getFeedResponseItemsItemRatingMultipleOf).nullish().describe('Their community rating under \"rated\", and their own score under \"watched\" where they gave one. Half-star steps: both sources hold halves, so declaring this an integer rejected a feed item from anyone who had used them.\n'),
   "comment": zod.string().nullish().describe('The review body, under \"commented\".'),
   "playlistId": zod.number().nullish().describe('Set under \"playlist\" — the public playlist they made.'),
   "playlistName": zod.string().nullish(),
@@ -1233,6 +1259,18 @@ export const GetUserProfileParams = zod.object({
 
 export const getUserProfileResponseUserDisplayInitialsMax = 5;
 
+export const getUserProfileResponseRecentRatingsItemRatingMin = 0.5;
+export const getUserProfileResponseRecentRatingsItemRatingMax = 5;
+export const getUserProfileResponseRecentRatingsItemRatingMultipleOf = 0.5;
+
+export const getUserProfileResponseRecentCommentsItemRatingMin = 0.5;
+export const getUserProfileResponseRecentCommentsItemRatingMax = 5;
+export const getUserProfileResponseRecentCommentsItemRatingMultipleOf = 0.5;
+
+export const getUserProfileResponseRecentWatchedItemRatingMin = 0.5;
+export const getUserProfileResponseRecentWatchedItemRatingMax = 5;
+export const getUserProfileResponseRecentWatchedItemRatingMultipleOf = 0.5;
+
 
 
 export const GetUserProfileResponse = zod.object({
@@ -1271,7 +1309,7 @@ export const GetUserProfileResponse = zod.object({
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
-  "rating": zod.number().nullish(),
+  "rating": zod.number().min(getUserProfileResponseRecentRatingsItemRatingMin).max(getUserProfileResponseRecentRatingsItemRatingMax).multipleOf(getUserProfileResponseRecentRatingsItemRatingMultipleOf).nullish().describe('Their own score, in half-star steps. This read movies.rating, which has been a real since 0013 — so a profile card for anyone who had given a half failed validation before this was widened.\n'),
   "comment": zod.string().nullish(),
   "at": zod.coerce.date()
 }).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has rated in the community, newest first, with `rating` set. Null under the same privacy rule as publicPlaylists.\n'),
@@ -1280,7 +1318,7 @@ export const GetUserProfileResponse = zod.object({
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
-  "rating": zod.number().nullish(),
+  "rating": zod.number().min(getUserProfileResponseRecentCommentsItemRatingMin).max(getUserProfileResponseRecentCommentsItemRatingMax).multipleOf(getUserProfileResponseRecentCommentsItemRatingMultipleOf).nullish().describe('Their own score, in half-star steps. This read movies.rating, which has been a real since 0013 — so a profile card for anyone who had given a half failed validation before this was widened.\n'),
   "comment": zod.string().nullish(),
   "at": zod.coerce.date()
 }).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has written about, newest first, with `comment` set. Null under the same privacy rule as publicPlaylists.\n'),
@@ -1289,7 +1327,7 @@ export const GetUserProfileResponse = zod.object({
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
-  "rating": zod.number().nullish(),
+  "rating": zod.number().min(getUserProfileResponseRecentWatchedItemRatingMin).max(getUserProfileResponseRecentWatchedItemRatingMax).multipleOf(getUserProfileResponseRecentWatchedItemRatingMultipleOf).nullish().describe('Their own score, in half-star steps. This read movies.rating, which has been a real since 0013 — so a profile card for anyone who had given a half failed validation before this was widened.\n'),
   "comment": zod.string().nullish(),
   "at": zod.coerce.date()
 }).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has watched, newest first, with `rating` set to their own private 1-5 score where they gave one.\n\nGated more tightly than the rest: watched films need a MUTUAL accepted follow, matching GET \/users\/{id}\/watched, so this is null for a public account the caller does not follow back even though the ratings above are visible. Do not build a profile\'s headline imagery from this — for most profiles it is empty.\n')
