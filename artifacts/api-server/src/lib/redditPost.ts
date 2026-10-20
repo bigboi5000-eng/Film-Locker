@@ -23,6 +23,7 @@
  */
 import { isPubliclyFetchableUrl } from "./safeUrl";
 import { cached } from "./cache";
+import { fetchRedditPostViaApify, hasApifyToken } from "./apifyReddit";
 /** Local, matching the other extractors in this directory. */
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
@@ -309,6 +310,27 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
     attempts.push({ via: host, status: result.status, detail: result.detail });
   }
 
+  // Last, because it is the only one that costs money. Reddit's own API is
+  // free and would have answered above; this is here because registering
+  // for it is not always possible, and a post nobody can read is worth a
+  // fraction of a penny.
+  if (hasApifyToken()) {
+    try {
+      const viaApify = await fetchRedditPostViaApify(url, warn);
+      if (viaApify) {
+        warn?.({ url, attempts }, "reddit: Apify answered where Reddit would not");
+        return {
+          title: viaApify.title,
+          selfText: viaApify.selfText,
+          comments: viaApify.comments,
+        };
+      }
+      attempts.push({ via: "apify", status: 0, detail: "returned nothing usable" });
+    } catch (err) {
+      attempts.push({ via: "apify", status: 0, detail: String(err).slice(0, 200) });
+    }
+  }
+
   const first = attempts[0]!;
   // The status is in the message as well as the payload: a collapsed log
   // line showing only "refused" cannot be acted on, and this one is read
@@ -317,9 +339,11 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
   // to rediscover that.
   const blocked = attempts.some((a) => a.status === 403);
   const hint =
-    blocked && !hasRedditCredentials()
-      ? " — Reddit blocks unauthenticated reads from datacentre addresses; set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET to use the API instead"
-      : "";
+    blocked && !hasRedditCredentials() && !hasApifyToken()
+      ? " — Reddit blocks unauthenticated reads from datacentre addresses; set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET, or APIFY_TOKEN, to get round it"
+      : blocked && !hasRedditCredentials()
+        ? " — Reddit blocks unauthenticated reads from datacentre addresses, and Apify did not cover it either; REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET is the free route"
+        : "";
   warn?.(
     { url, path, attempts },
     `reddit: refused — ${attempts.map((a) => `${a.via} ${a.status}`).join(", ")}` +
