@@ -22,15 +22,18 @@
  * actor's schema.
  */
 import { cached } from "./cache";
+import { hasApifyToken, normaliseActorId } from "./apify";
 
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
 /**
- * A commonly used Reddit actor, and only a default. If it is the wrong one
- * for this account — not on the plan, renamed, retired — APIFY_REDDIT_ACTOR
- * replaces it without a deploy.
+ * Only a default. An actor is a third party's program against a site that
+ * does not want to be read, so it gets deprecated, renamed and retired —
+ * this very default was already replaced once, by the lite edition, before
+ * it had run a single time. APIFY_REDDIT_ACTOR swaps it without a deploy,
+ * which is the point: a deprecation should cost a variable, not a release.
  */
-const DEFAULT_ACTOR = "trudax~reddit-scraper";
+const DEFAULT_ACTOR = "trudax~reddit-scraper-lite";
 
 const RUN_TIMEOUT_SECONDS = 90;
 const CACHE_TTL_MS = 30 * 60 * 1000;
@@ -47,13 +50,14 @@ export interface ApifyRedditPost {
   comments: string[];
 }
 
-export function hasApifyToken(): boolean {
-  return Boolean(process.env["APIFY_TOKEN"]);
-}
+// Re-exported so callers of this module need not know where it lives.
+export { hasApifyToken };
 
 function actorId(): string {
-  return process.env["APIFY_REDDIT_ACTOR"] ?? DEFAULT_ACTOR;
+  return normaliseActorId(process.env["APIFY_REDDIT_ACTOR"] ?? DEFAULT_ACTOR);
 }
+
+
 
 /**
  * The input the actor is sent.

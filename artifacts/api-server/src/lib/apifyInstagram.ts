@@ -40,6 +40,7 @@
 // moviePipeline.ts each declare their own copy of this one-line structural
 // type, so this follows the file-local convention already in place.
 import { cached } from "./cache";
+import { hasApifyToken, normaliseActorId } from "./apify";
 
 type WarnFn = (data: Record<string, unknown>, msg: string) => void;
 
@@ -96,12 +97,13 @@ export type ApifyInstagramPost = {
 };
 
 /** Whether this route is configured at all. */
-export function hasApifyToken(): boolean {
-  return Boolean(process.env["APIFY_TOKEN"]);
-}
+// Re-exported so callers of this module need not know where it lives.
+export { hasApifyToken };
 
 function actorId(): string {
-  return process.env["APIFY_INSTAGRAM_ACTOR"] ?? DEFAULT_ACTOR;
+  // owner/name is what Apify shows a person; owner~name is what its API
+  // takes. See normaliseActorId — the same trap applies here.
+  return normaliseActorId(process.env["APIFY_INSTAGRAM_ACTOR"] ?? DEFAULT_ACTOR);
 }
 
 /**
