@@ -316,7 +316,10 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
   // fraction of a penny.
   if (hasApifyToken()) {
     try {
-      const viaApify = await fetchRedditPostViaApify(url, warn);
+      // The resolved URL, not the share link. We went to the trouble of
+      // following that redirect; handing the actor the short form makes it
+      // repeat the work and gives it one more thing to get wrong.
+      const viaApify = await fetchRedditPostViaApify(base, warn);
       if (viaApify) {
         warn?.({ url, attempts }, "reddit: Apify answered where Reddit would not");
         return {
