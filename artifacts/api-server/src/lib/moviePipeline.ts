@@ -73,6 +73,21 @@ const TV_CHECK_FLOOR = 0.3;
 const TMDB_CONCURRENCY = 8;
 
 /**
+ * The most films one share will be worked through.
+ *
+ * Every film past this point is two TMDB round trips and a row, so an
+ * uncapped "top 2000" post is not a long wait but an open-ended one, and
+ * the whole request sits behind a deadline the client enforces. Fifteen
+ * hundred is comfortably past any real list — the biggest things people
+ * share are top-1000 countdowns — while still being a number rather than
+ * no number at all.
+ *
+ * Taken off the top of a confidence sort, so a cut keeps the films most
+ * likely to be right.
+ */
+const MAX_FILMS_PER_RUN = 1500;
+
+/**
  * Like `items.map(fn)` awaited in parallel, but with at most `limit` calls
  * in flight. Results stay in input order regardless of completion order.
  */
@@ -135,7 +150,17 @@ export async function enrichAndSaveMatches(
         ? Math.min(1, Math.max(0, m.confidence_score))
         : 0,
     }))
-    .sort((a, b) => b.confidence_score - a.confidence_score);
+    .sort((a, b) => b.confidence_score - a.confidence_score)
+    // Sorted before it is cut, so what survives a cut is the most confident
+    // rather than whatever happened to be listed first.
+    .slice(0, MAX_FILMS_PER_RUN);
+
+  if (rawMatches.length > MAX_FILMS_PER_RUN) {
+    warn?.(
+      { named: rawMatches.length, kept: MAX_FILMS_PER_RUN },
+      "pipeline: more films named than the cap allows — keeping the most confident",
+    );
+  }
 
   // ── Pass 1: TMDB lookups, in parallel ──────────────────────────────────
   // Index-aligned with `sanitised`; null means "no usable TMDB match", either

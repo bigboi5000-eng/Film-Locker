@@ -5,7 +5,7 @@
  * Displays each identified film with poster/title, lets the user tap
  * "Add to Watchlist", and offers a "Return to [app]" action once done.
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -677,6 +677,165 @@ const makePpStyles = (c: Palette) => StyleSheet.create({
 // on-screen so a report of this includes the real cause, not just a screenshot
 // of a blank overlay.
 
+/**
+ * Above this many films, the sheet stops asking you to confirm each one.
+ *
+ * A checklist is the right control for five films and the wrong one for
+ * nine hundred: nobody audits nine hundred checkboxes, and the list is a
+ * plain mapped ScrollView, so every row is mounted at once and the sheet
+ * stops responding long before anyone reaches the bottom.
+ *
+ * Forty-five is past any list somebody would actually read through and well
+ * short of where the rendering suffers.
+ */
+const LARGE_LIST_THRESHOLD = 45;
+
+/**
+ * What a big share offers instead of a checklist.
+ *
+ * Playlists only, deliberately. Nine hundred films in a watchlist is not a
+ * watchlist any more — the thing it is for, "what shall I watch next", does
+ * not survive being nine hundred items long. A list that size is a
+ * reference, and a playlist is where a reference belongs. It can still be
+ * pruned afterwards, on a screen built for it.
+ *
+ * The shortfall is stated rather than hidden. "900 films identified out of
+ * 1000" is the honest headline, and the hundred that were named but could
+ * not be matched are listed on request — otherwise they vanish with nothing
+ * to show they were ever there.
+ */
+function LargeListPanel({
+  identified,
+  unidentified,
+  listTitle,
+  sourceUrl,
+  onDone,
+}: {
+  identified: GeminiMovieMatch[];
+  unidentified: GeminiMovieMatch[];
+  listTitle?: string | null;
+  sourceUrl?: string | null;
+  onDone: () => void;
+}) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
+  const llStyles = useThemedStyles(makeLargeListStyles);
+  const [saving, setSaving] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
+
+  const total = identified.length + unidentified.length;
+  const posters = identified.filter((m) => m.poster_url).slice(0, 12);
+
+  if (saving) {
+    return (
+      <BulkAddPanel
+        candidates={identified}
+        mode="playlist"
+        initialName={listTitle}
+        sourceUrl={sourceUrl}
+        onDone={onDone}
+      />
+    );
+  }
+
+  return (
+    <>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.scrollContent}>
+        <Text style={llStyles.headline}>
+          {identified.length} film{identified.length === 1 ? '' : 's'} identified
+          {total > identified.length ? ` out of ${total}` : ''}
+        </Text>
+        {listTitle ? <Text style={llStyles.listName} numberOfLines={2}>{listTitle}</Text> : null}
+
+        {/* A wall rather than a list: at this size the point is "that looks
+            like the right set of films", which posters answer at a glance
+            and nine hundred titles do not. */}
+        <View style={llStyles.wall}>
+          {posters.map((m, i) => (
+            <Image
+              key={`${m.tmdb_id ?? m.movie_title}-${i}`}
+              source={{ uri: m.poster_url! }}
+              style={llStyles.wallPoster}
+              contentFit="cover"
+            />
+          ))}
+          {identified.length > posters.length ? (
+            <View style={[llStyles.wallPoster, llStyles.wallMore]}>
+              <Text style={llStyles.wallMoreText}>+{identified.length - posters.length}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <Text style={llStyles.explain}>
+          A list this long goes to a playlist rather than your watchlist — you
+          can prune it there.
+        </Text>
+
+        {unidentified.length > 0 ? (
+          <View style={llStyles.missingBlock}>
+            <TouchableOpacity
+              onPress={() => setShowMissing((v) => !v)}
+              style={llStyles.missingHeader}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={showMissing ? 'chevron-down' : 'chevron-forward'}
+                size={14}
+                color={colors.textMuted}
+              />
+              <Text style={llStyles.missingHeaderText}>
+                {unidentified.length} couldn&apos;t be matched
+              </Text>
+            </TouchableOpacity>
+            {showMissing ? (
+              <View style={llStyles.missingList}>
+                {unidentified.map((m, i) => (
+                  <Text key={`${m.movie_title}-${i}`} style={llStyles.missingItem} numberOfLines={1}>
+                    {m.movie_title}
+                    {m.release_year ? ` (${m.release_year})` : ''}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <TouchableOpacity
+          style={llStyles.saveBtn}
+          onPress={() => setSaving(true)}
+          disabled={identified.length === 0}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="albums-outline" size={16} color={colors.onColor} />
+          <Text style={llStyles.saveBtnText}>Save as a playlist</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+}
+
+const makeLargeListStyles = (c: Palette) => StyleSheet.create({
+  headline: { fontSize: 19, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 2 },
+  listName: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted, marginBottom: 14 },
+  wall: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+  wallPoster: { width: 54, height: 81, borderRadius: 5, backgroundColor: c.surfaceAlt },
+  wallMore: { alignItems: 'center', justifyContent: 'center' },
+  wallMoreText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: c.textMuted },
+  explain: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted, lineHeight: 19 },
+  missingBlock: { marginTop: 16, borderTopWidth: 1, borderTopColor: c.borderSubtle, paddingTop: 12 },
+  missingHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  missingHeaderText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: c.textMuted },
+  missingList: { marginTop: 8, gap: 4 },
+  missingItem: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textFaint },
+  saveBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: c.primary, borderRadius: 12, paddingVertical: 14,
+  },
+  saveBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
+});
+
 function SheetCrashFallback({ error, onClose }: { error: Error; onClose: () => void }) {
   const colors = useColors();
   const crashStyles = useThemedStyles(makeCrashStyles);
@@ -1017,6 +1176,21 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
   // 3+ films offer the playlist/watchlist/both picker; 1-2 use the simpler
   // per-card "Add to Watchlist" flow below instead.
   const isMultiFilm = candidates.length > 2;
+  /**
+   * A list too long to confirm film by film. Counted on what was
+   * identified, not on what was named: forty-six titles of which six
+   * matched is a handful of films, and should be offered as one.
+   */
+  const isLargeList = candidates.length > LARGE_LIST_THRESHOLD;
+  /**
+   * Named in the source but not matched to a film. Shown as a count, and
+   * on request as a list, so a hundred titles that fell out of a thousand
+   * do not disappear without trace.
+   */
+  const unidentified = useMemo(
+    () => matches.filter((m) => m.tmdb_id == null),
+    [matches]
+  );
   const selectedCandidates = candidates.filter((m) => selectedIds.has(String(m.tmdb_id)));
 
   // Reset state when sheet opens for a new share — default selection is "all".
@@ -1196,6 +1370,14 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
                   </TouchableOpacity>
                 </View>
               </>
+            ) : isLargeList ? (
+              <LargeListPanel
+                identified={candidates}
+                unidentified={unidentified}
+                listTitle={listTitle}
+                sourceUrl={sourceUrl}
+                onDone={handleReturn}
+              />
             ) : isMultiFilm ? (
               <>
                 {/* Selection checklist — every film defaults to selected */}
