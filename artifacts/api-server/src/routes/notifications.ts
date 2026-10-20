@@ -519,7 +519,7 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
     and(eq(conversationMessagesTable.fromUserId, clerkUserId), eq(conversationMessagesTable.toUserId, otherUserId))
   );
 
-  const [recRows, msgRows, [sender]] = await Promise.all([
+  const [recRows, msgRows, shareRows, [sender]] = await Promise.all([
     db
       .select({
         id: filmNotificationsTable.id,
@@ -551,6 +551,30 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       .where(messagesBetweenUs)
       .orderBy(desc(conversationMessagesTable.createdAt)),
 
+    // Playlists sent between these two. The conversation LIST already
+    // carried them; without them here the inbox showed "sent you a list"
+    // and opening it showed nothing — the row existed in the summary and
+    // not in the thread it summarised.
+    db
+      .select({
+        id: playlistSharesTable.id,
+        fromUserId: playlistSharesTable.fromUserId,
+        toUserId: playlistSharesTable.toUserId,
+        isRead: playlistSharesTable.isRead,
+        createdAt: playlistSharesTable.createdAt,
+        playlistId: playlistSharesTable.playlistId,
+        playlistName: playlistsTable.name,
+      })
+      .from(playlistSharesTable)
+      .innerJoin(playlistsTable, eq(playlistsTable.id, playlistSharesTable.playlistId))
+      .where(
+        or(
+          and(eq(playlistSharesTable.fromUserId, otherUserId), eq(playlistSharesTable.toUserId, clerkUserId)),
+          and(eq(playlistSharesTable.fromUserId, clerkUserId), eq(playlistSharesTable.toUserId, otherUserId))
+        )
+      )
+      .orderBy(desc(playlistSharesTable.createdAt)),
+
     db
       .select({ clerkId: usersTable.clerkId, username: usersTable.username, displayInitials: usersTable.displayInitials, avatarUrl: usersTable.avatarUrl })
       .from(usersTable)
@@ -571,6 +595,8 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       content: null,
       replyToNotificationId: null,
       replyToFilmTitle: null,
+      playlistId: null,
+      playlistName: null,
     })),
     ...msgRows.map((m) => ({
       type: "message" as const,
@@ -585,6 +611,24 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       content: m.content,
       replyToNotificationId: m.replyToNotificationId,
       replyToFilmTitle: m.replyToFilmTitle ?? null,
+      playlistId: null,
+      playlistName: null,
+    })),
+    ...shareRows.map((p) => ({
+      type: "playlist" as const,
+      id: p.id,
+      fromUserId: p.fromUserId,
+      toUserId: p.toUserId,
+      createdAt: p.createdAt,
+      tmdbId: null,
+      filmTitle: null,
+      posterUrl: null,
+      isRead: p.isRead,
+      content: null,
+      replyToNotificationId: null,
+      replyToFilmTitle: null,
+      playlistId: p.playlistId,
+      playlistName: p.playlistName,
     })),
   ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 

@@ -17,7 +17,21 @@ import type { Palette } from '@/constants/colors';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_GAP = 10;
 const HORIZONTAL_PADDING = 16;
-const CARD_WIDTH = (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - COLUMN_GAP) / 2;
+/**
+ * Three across, in both grids that use this card.
+ *
+ * A poster is recognisable long before it is legible, so the second column
+ * was spending width on a size nobody needed to identify a film they own.
+ * Three fits half again as many on screen and still leaves each poster
+ * wider than a thumbnail.
+ *
+ * Defined here rather than passed in because the card is only ever used in
+ * those two grids — a number in two places that must agree is a number that
+ * eventually will not.
+ */
+const COLUMNS = 3;
+const CARD_WIDTH =
+  (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - COLUMN_GAP * (COLUMNS - 1)) / COLUMNS;
 const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 poster ratio
 
 export interface MovieCardProps {
@@ -125,13 +139,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   title: {
     color: c.onColor,
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 16,
   },
   year: {
     color: c.star,
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Inter_400Regular',
     marginTop: 2,
   },

@@ -526,7 +526,7 @@ export default function WatchlistScreen() {
           data={filteredMovies}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderWatchlistMovie}
-          numColumns={2}
+          numColumns={3}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={[
             styles.contentContainer,

@@ -203,7 +203,11 @@ export function SharePlaylistSheet({
                 <ActivityIndicator color={colors.onColor} size="small" />
               ) : (
                 <>
-                  <Ionicons name="paper-plane" size={16} color={colors.onColor} />
+                  {/* Outline, matching the Send button in ShareToFriendSheet. The
+                      filled glyph is a heavier line than every other send in the
+                      app, which is noticeable when the two sheets sit a tap
+                      apart. */}
+                  <Ionicons name="paper-plane-outline" size={16} color={colors.onColor} />
                   <Text style={styles.sendBtnText}>
                     {picked.size === 0
                       ? 'Choose who to send it to'

@@ -562,7 +562,7 @@ export default function PlaylistScreen() {
 
           <FlatList
             data={filteredItems}
-            numColumns={2}
+            numColumns={3}
             keyExtractor={(item) => String(item.tmdbId)}
             renderItem={renderItem}
             columnWrapperStyle={styles.columnWrapper}
