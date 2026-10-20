@@ -974,7 +974,7 @@ export const GetConversationsResponse = zod.object({
   "avatarUrl": zod.string().nullish()
 }),
   "lastItem": zod.object({
-  "type": zod.enum(['recommendation', 'message']),
+  "type": zod.enum(['recommendation', 'message', 'playlist']),
   "id": zod.number(),
   "fromUserId": zod.string(),
   "toUserId": zod.string(),
@@ -985,8 +985,10 @@ export const GetConversationsResponse = zod.object({
   "isRead": zod.boolean().nullish(),
   "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
   "replyToNotificationId": zod.number().nullish(),
-  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
-}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n'),
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any'),
+  "playlistId": zod.number().nullish().describe('Present when type is \"playlist\" — the list that was sent.'),
+  "playlistName": zod.string().nullish().describe('Denormalized name of the sent playlist, so the thread reads without a second request. It is the name as it stands now, not as it was when sent — a renamed list shows its current name, which is what the recipient will find when they open it.\n')
+}).describe('One entry in a merged, chronological chat feed between two users — a film recommendation, a reaction\/message, or a playlist somebody sent, distinguished by \"type\".\n'),
   "unreadCount": zod.number().describe('Anything this person has sent the caller that is still unread — recommendations and reactions alike. Opening the thread reads all of it.\n'),
   "posters": zod.array(zod.string()).describe('Poster URLs from the most recent films in this conversation, either direction, for the preview strip on the row.\n')
 }).describe('One person the caller is in conversation with, plus enough of the latest activity to draw a row without opening the thread.\n')),
@@ -1010,7 +1012,7 @@ export const GetNotificationThreadResponse = zod.object({
   "avatarUrl": zod.string().nullish()
 }).nullish(),
   "feed": zod.array(zod.object({
-  "type": zod.enum(['recommendation', 'message']),
+  "type": zod.enum(['recommendation', 'message', 'playlist']),
   "id": zod.number(),
   "fromUserId": zod.string(),
   "toUserId": zod.string(),
@@ -1021,8 +1023,10 @@ export const GetNotificationThreadResponse = zod.object({
   "isRead": zod.boolean().nullish(),
   "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
   "replyToNotificationId": zod.number().nullish(),
-  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
-}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n'))
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any'),
+  "playlistId": zod.number().nullish().describe('Present when type is \"playlist\" — the list that was sent.'),
+  "playlistName": zod.string().nullish().describe('Denormalized name of the sent playlist, so the thread reads without a second request. It is the name as it stands now, not as it was when sent — a renamed list shows its current name, which is what the recipient will find when they open it.\n')
+}).describe('One entry in a merged, chronological chat feed between two users — a film recommendation, a reaction\/message, or a playlist somebody sent, distinguished by \"type\".\n'))
 })
 
 
@@ -1040,7 +1044,7 @@ export const SendConversationMessageBody = zod.object({
 })
 
 export const SendConversationMessageResponse = zod.object({
-  "type": zod.enum(['recommendation', 'message']),
+  "type": zod.enum(['recommendation', 'message', 'playlist']),
   "id": zod.number(),
   "fromUserId": zod.string(),
   "toUserId": zod.string(),
@@ -1051,8 +1055,10 @@ export const SendConversationMessageResponse = zod.object({
   "isRead": zod.boolean().nullish(),
   "content": zod.string().nullish().describe('Present when type is \"message\" — the canned phrase\/emoji sent'),
   "replyToNotificationId": zod.number().nullish(),
-  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any')
-}).describe('One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction\/message, distinguished by \"type\".\n')
+  "replyToFilmTitle": zod.string().nullish().describe('Denormalized title of the film this message replies to, if any'),
+  "playlistId": zod.number().nullish().describe('Present when type is \"playlist\" — the list that was sent.'),
+  "playlistName": zod.string().nullish().describe('Denormalized name of the sent playlist, so the thread reads without a second request. It is the name as it stands now, not as it was when sent — a renamed list shows its current name, which is what the recipient will find when they open it.\n')
+}).describe('One entry in a merged, chronological chat feed between two users — a film recommendation, a reaction\/message, or a playlist somebody sent, distinguished by \"type\".\n')
 
 
 /**
@@ -1778,6 +1784,27 @@ export const AddPlaylistItemBody = zod.object({
 })
 
 export const AddPlaylistItemResponse = zod.void()
+
+
+/**
+ * Owner only. Sharing somebody else's list would let a reader hand out access its owner never gave, since a share is a grant: a recipient can open the list whether or not it is public and whether or not the owner's account is. A block still hides it.
+ * @summary Send a playlist to one or more people (auth required, owner only)
+ */
+export const SharePlaylistParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const sharePlaylistBodyToUserIdsMax = 50;
+
+
+
+export const SharePlaylistBody = zod.object({
+  "toUserIds": zod.array(zod.string()).min(1).max(sharePlaylistBodyToUserIdsMax).describe('Clerk user ids to send the playlist to. A list rather than one at a time: picking several people is the normal case, and a request each would leave a half-sent list when one of them fails.\n')
+})
+
+export const SharePlaylistResponse = zod.object({
+  "sent": zod.number().describe('How many it actually went to, which can be fewer than asked for. Yourself and anyone blocked either way are dropped — silently, since naming them would disclose the block.\n')
+})
 
 
 /**

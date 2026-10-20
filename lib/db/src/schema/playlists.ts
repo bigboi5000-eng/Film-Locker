@@ -42,6 +42,41 @@ export const playlistFollowsTable = pgTable(
   })
 );
 
+/**
+ * A playlist sent to somebody.
+ *
+ * Separate from playlist_follows, which is a reader choosing to keep up with
+ * a list. This is the owner putting it in front of someone, and it carries
+ * the two things a follow does not: who sent it, and whether it has been
+ * seen.
+ *
+ * It is also a GRANT. A list you were sent is one you can open, whether or
+ * not it is public and whether or not its owner's account is — which is
+ * what sending something to somebody means, and is why the visibility gate
+ * on GET /playlists/:id consults this table. A block still hides it: being
+ * sent a thing before a falling-out does not outlast the falling-out.
+ */
+export const playlistSharesTable = pgTable(
+  "playlist_shares",
+  {
+    id: serial("id").primaryKey(),
+    playlistId: integer("playlist_id")
+      .notNull()
+      .references(() => playlistsTable.id, { onDelete: "cascade" }),
+    fromUserId: text("from_user_id").notNull(),
+    toUserId: text("to_user_id").notNull(),
+    isRead: boolean("is_read").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // One row per sender/recipient pair. Sending it again is a nudge, not a
+    // second entry in their inbox.
+    uniqueShare: unique().on(t.playlistId, t.fromUserId, t.toUserId),
+  })
+);
+
+export type PlaylistShare = typeof playlistSharesTable.$inferSelect;
+
 export const playlistItemsTable = pgTable(
   "playlist_items",
   {

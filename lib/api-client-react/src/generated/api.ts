@@ -75,6 +75,8 @@ import type {
   SendConversationMessageBody,
   SendNotificationBody,
   SetCommunityRatingBody,
+  SharePlaylistBody,
+  SharePlaylistResponse,
   SubmitFeedbackBody,
   SubmitFeedbackResponse,
   SubmitReportBody,
@@ -4785,6 +4787,78 @@ export const useAddPlaylistItem = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAddPlaylistItemMutationOptions(options));
+    }
+
+export const getSharePlaylistUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/share`
+}
+
+/**
+ * Owner only. Sharing somebody else's list would let a reader hand out access its owner never gave, since a share is a grant: a recipient can open the list whether or not it is public and whether or not the owner's account is. A block still hides it.
+ * @summary Send a playlist to one or more people (auth required, owner only)
+ */
+export const sharePlaylist = async (id: number,
+    sharePlaylistBody: SharePlaylistBody, options?: RequestInit): Promise<SharePlaylistResponse> => {
+
+  return customFetch<SharePlaylistResponse>(getSharePlaylistUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sharePlaylistBody)
+  }
+);}
+
+
+
+
+export const getSharePlaylistMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sharePlaylist>>, TError,{id: number;data: BodyType<SharePlaylistBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sharePlaylist>>, TError,{id: number;data: BodyType<SharePlaylistBody>}, TContext> => {
+
+const mutationKey = ['sharePlaylist'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sharePlaylist>>, {id: number;data: BodyType<SharePlaylistBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  sharePlaylist(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SharePlaylistMutationResult = NonNullable<Awaited<ReturnType<typeof sharePlaylist>>>
+    export type SharePlaylistMutationBody = BodyType<SharePlaylistBody>
+    export type SharePlaylistMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a playlist to one or more people (auth required, owner only)
+ */
+export const useSharePlaylist = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sharePlaylist>>, TError,{id: number;data: BodyType<SharePlaylistBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sharePlaylist>>,
+        TError,
+        {id: number;data: BodyType<SharePlaylistBody>},
+        TContext
+      > => {
+      return useMutation(getSharePlaylistMutationOptions(options));
     }
 
 export const getRemovePlaylistItemUrl = (id: number,

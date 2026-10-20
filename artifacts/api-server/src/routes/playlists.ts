@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { and, eq, ilike, desc, count, sql, or, isNull } from "drizzle-orm";
-import { db, playlistsTable, playlistItemsTable, playlistFollowsTable, usersTable, followsTable } from "@workspace/db";
+import { db, playlistsTable, playlistItemsTable, playlistFollowsTable, playlistSharesTable, usersTable, followsTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
 import { z } from "zod";
@@ -27,6 +27,10 @@ const UpdatePlaylistBody = z.object({
  * silently dropped here rather than rejected. sourceUrl was exactly that
  * until this line was added. Worth collapsing into the generated schema.
  */
+const SharePlaylistBody = z.object({
+  toUserIds: z.array(z.string().min(1)).min(1).max(50),
+});
+
 const AddItemBody = z.object({
   tmdbId: z.number().int(),
   filmTitle: z.string().min(1),
@@ -279,8 +283,35 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
   const clerkUserId = getAuth(req)?.userId ?? null;
   const isOwner = clerkUserId !== null && clerkUserId === playlist.userId;
 
+  /**
+   * A list sent straight to this person.
+   *
+   * The third way through the gates below, and deliberately so: being sent
+   * something is the owner saying "you, specifically, should see this", and
+   * a send that could not be opened would be no send at all. It covers a
+   * private list and a private owner alike, for that one recipient.
+   *
+   * It does NOT cover a block, which is checked on its own further down and
+   * wins over this — having been sent a list before a falling-out does not
+   * outlast the falling-out.
+   */
+  const sharedWithMe =
+    clerkUserId !== null &&
+    (
+      await db
+        .select({ id: playlistSharesTable.id })
+        .from(playlistSharesTable)
+        .where(
+          and(
+            eq(playlistSharesTable.playlistId, id),
+            eq(playlistSharesTable.toUserId, clerkUserId)
+          )
+        )
+        .limit(1)
+    ).length > 0;
+
   if (!isOwner) {
-    if (!playlist.isPublic) {
+    if (!playlist.isPublic && !sharedWithMe) {
       res.status(403).json({ error: "Private playlist" });
       return;
     }
@@ -304,7 +335,7 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
             )
         : [];
 
-      if (accepted.length === 0) {
+      if (accepted.length === 0 && !sharedWithMe) {
         res.status(403).json({ error: "This account is private." });
         return;
       }
@@ -489,6 +520,74 @@ router.post("/playlists/:id/items", requireAuth, async (req, res): Promise<void>
     .where(eq(playlistsTable.id, id));
 
   res.status(201).json(item ?? { message: "Already in playlist" });
+});
+
+// ── POST /playlists/:id/share ─────────────────────────────────────────────
+// Send a playlist to one or more people.
+//
+// Recipients are taken as a list rather than one at a time: picking several
+// friends is the normal case, and a request each would mean a half-sent
+// list when the third one fails.
+//
+// Only the owner may send their own list. Sharing somebody else's would let
+// a reader hand out access the owner never gave — the row is a grant, and
+// only the owner has anything to grant.
+
+router.post("/playlists/:id/share", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const parsed = SharePlaylistBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [playlist] = await db
+    .select({ userId: playlistsTable.userId, name: playlistsTable.name })
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+  if (playlist.userId !== clerkUserId) {
+    res.status(403).json({ error: "You can only send your own playlists." });
+    return;
+  }
+
+  // Duplicates in, one row out. Sending to yourself is dropped rather than
+  // rejected: it is a mis-tap, not an error worth failing the whole send.
+  const recipients = [...new Set(parsed.data.toUserIds)].filter((u) => u && u !== clerkUserId);
+  if (recipients.length === 0) {
+    res.status(400).json({ error: "No one to send it to." });
+    return;
+  }
+
+  // Blocked people are dropped silently rather than reported, for the same
+  // reason a block shows as 404 elsewhere: saying "that person blocked you"
+  // discloses the block.
+  const allowed: string[] = [];
+  for (const to of recipients) {
+    if (!(await isBlockedEitherWay(clerkUserId, to))) allowed.push(to);
+  }
+
+  if (allowed.length > 0) {
+    await db
+      .insert(playlistSharesTable)
+      .values(allowed.map((to) => ({ playlistId: id, fromUserId: clerkUserId, toUserId: to })))
+      // Sending the same list to the same person again is a nudge: the row
+      // is dated now and goes unread, rather than becoming a second entry
+      // in their inbox or being silently ignored.
+      .onConflictDoUpdate({
+        target: [playlistSharesTable.playlistId, playlistSharesTable.fromUserId, playlistSharesTable.toUserId],
+        set: { createdAt: new Date(), isRead: false },
+      });
+  }
+
+  await db.update(playlistsTable).set({ updatedAt: new Date() }).where(eq(playlistsTable.id, id));
+
+  req.log.info({ playlistId: id, sent: allowed.length, asked: recipients.length }, "playlist shared");
+  // The count is of what was actually sent. A caller that asked for three
+  // and is told three can say so; one told two knows something was dropped
+  // without being told which or why.
+  res.status(201).json({ sent: allowed.length });
 });
 
 // ── DELETE /playlists/:id/items/:tmdbId ──────────────────────────────────

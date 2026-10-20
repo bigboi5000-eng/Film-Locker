@@ -420,6 +420,50 @@ function MessageBubble({ item, isMine }: { item: ConversationFeedItem; isMine: b
   );
 }
 
+/**
+ * A playlist somebody sent, in the thread.
+ *
+ * Styled as a bubble rather than as a film card: it is a pointer to a list,
+ * not a film with a poster, and borrowing the recommendation card would
+ * promise artwork there is none of. Tapping opens the list — which works
+ * for the recipient even when it is private, because being sent it is what
+ * grants them access.
+ */
+function PlaylistCard({ item, isMine }: { item: ConversationFeedItem; isMine: boolean }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
+  const name = item.playlistName ?? 'a playlist';
+
+  return (
+    <View style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
+      <TouchableOpacity
+        style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs, styles.playlistBubble]}
+        onPress={() => item.playlistId && router.push(`/playlist/${item.playlistId}`)}
+        disabled={!item.playlistId}
+        activeOpacity={0.8}
+      >
+        <Ionicons
+          name="list-outline"
+          size={16}
+          color={isMine ? colors.onColor : colors.primary}
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.bubbleText, isMine && styles.bubbleTextMine]} numberOfLines={2}>
+            {name}
+          </Text>
+          <Text
+            style={[styles.playlistHint, isMine && styles.playlistHintMine]}
+          >
+            {isMine ? 'Playlist sent' : 'Tap to open the playlist'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      <Text style={styles.bubbleTime}>{formatRelative(new Date(item.createdAt))}</Text>
+    </View>
+  );
+}
+
 // ── Wraps a recommendation card so swiping it right opens the composer
 // pre-targeted at that film ("swipe to reply"). ──
 
@@ -611,6 +655,9 @@ export default function InboxThreadScreen() {
           keyExtractor={(item) => `${item.type}-${item.id}`}
           renderItem={({ item }) => {
             const isMine = item.fromUserId === myClerkId;
+            if (item.type === 'playlist') {
+              return <PlaylistCard item={item} isMine={isMine} />;
+            }
             if (item.type === 'recommendation') {
               return (
                 <SwipeToReplyRow onReply={() => openReplyTo(item)}>
@@ -741,6 +788,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   bubbleTheirs: { backgroundColor: c.bubbleOther, borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
   bubbleTextMine: { color: c.onColor },
+  playlistBubble: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  playlistHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textMuted, marginTop: 2 },
+  playlistHintMine: { color: c.primarySofter },
   bubbleTime: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 3, marginHorizontal: 4 },
 
   replyPreview: {

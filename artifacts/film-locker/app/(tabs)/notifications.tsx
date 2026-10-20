@@ -55,6 +55,9 @@ function describeLast(item: ConversationSummary['lastItem'], mine: boolean): str
       ? `${prefix}${body} · ${item.replyToFilmTitle}`
       : `${prefix}${body}`;
   }
+  if (item.type === 'playlist') {
+    return `${prefix}📁 ${item.playlistName ?? 'a playlist'}`;
+  }
   return `${prefix}🎬 ${item.filmTitle ?? 'a film'}`;
 }
 

@@ -1439,6 +1439,44 @@ paths:
         "404":
           description: Playlist not found
 
+  /playlists/{id}/share:
+    post:
+      operationId: sharePlaylist
+      tags: [playlists]
+      summary: Send a playlist to one or more people (auth required, owner only)
+      description: >
+        Owner only. Sharing somebody else's list would let a reader hand out
+        access its owner never gave, since a share is a grant: a recipient
+        can open the list whether or not it is public and whether or not the
+        owner's account is. A block still hides it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SharePlaylistBody"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePlaylistResponse"
+        "400":
+          description: Bad request, or nobody left to send it to
+        "401":
+          description: Unauthorized
+        "403":
+          description: Not your playlist
+        "404":
+          description: Playlist not found
+
   /playlists/{id}/items/{tmdbId}:
     delete:
       operationId: removePlaylistItem
@@ -2343,13 +2381,13 @@ components:
     ConversationFeedItem:
       type: object
       description: >
-        One entry in a merged, chronological chat feed between two users —
-        either a film recommendation or a reaction/message, distinguished by
-        "type".
+        One entry in a merged, chronological chat feed between two users — a
+        film recommendation, a reaction/message, or a playlist somebody sent,
+        distinguished by "type".
       properties:
         type:
           type: string
-          enum: [recommendation, message]
+          enum: [recommendation, message, playlist]
         id:
           type: integer
         fromUserId:
@@ -2382,6 +2420,18 @@ components:
           type: string
           nullable: true
           description: Denormalized title of the film this message replies to, if any
+        playlistId:
+          type: integer
+          nullable: true
+          description: Present when type is "playlist" — the list that was sent.
+        playlistName:
+          type: string
+          nullable: true
+          description: >
+            Denormalized name of the sent playlist, so the thread reads
+            without a second request. It is the name as it stands now, not as
+            it was when sent — a renamed list shows its current name, which
+            is what the recipient will find when they open it.
       required:
         - type
         - id
@@ -3077,6 +3127,34 @@ components:
           maxLength: 300
         isPublic:
           type: boolean
+
+    SharePlaylistBody:
+      type: object
+      properties:
+        toUserIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 50
+          description: >
+            Clerk user ids to send the playlist to. A list rather than one at
+            a time: picking several people is the normal case, and a request
+            each would leave a half-sent list when one of them fails.
+      required:
+        - toUserIds
+
+    SharePlaylistResponse:
+      type: object
+      properties:
+        sent:
+          type: integer
+          description: >
+            How many it actually went to, which can be fewer than asked for.
+            Yourself and anyone blocked either way are dropped — silently,
+            since naming them would disclose the block.
+      required:
+        - sent
 
     AddPlaylistItemBody:
       type: object

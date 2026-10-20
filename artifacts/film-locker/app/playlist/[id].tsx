@@ -32,6 +32,7 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
+import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -340,6 +341,7 @@ export default function PlaylistScreen() {
   // Trust the server's own verdict where it has one; fall back to comparing
   // ids while the response is still loading.
   const isOwner = playlist?.isOwner ?? Boolean(playlist && myClerkId && playlist.userId === myClerkId);
+  const [shareVisible, setShareVisible] = useState(false);
 
   const { mutateAsync: followPlaylist } = useFollowPlaylist();
   const { mutateAsync: unfollowPlaylist } = useUnfollowPlaylist();
@@ -494,9 +496,21 @@ export default function PlaylistScreen() {
           )}
         </View>
         {isOwner ? (
-          <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn} activeOpacity={0.7}>
-            <Ionicons name="pencil-outline" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
+          // Send sits before edit, because sending a list is the thing an
+          // owner does repeatedly and editing is the thing they did once.
+          <View style={styles.ownerActions}>
+            <TouchableOpacity
+              onPress={() => setShareVisible(true)}
+              style={styles.editBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Send this playlist to people"
+            >
+              <Ionicons name="paper-plane-outline" size={20} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn} activeOpacity={0.7}>
+              <Ionicons name="pencil-outline" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
         ) : playlist ? (
           <TouchableOpacity
             onPress={handleToggleFollow}
@@ -566,6 +580,15 @@ export default function PlaylistScreen() {
       )}
 
       {playlist && isOwner && (
+        <SharePlaylistSheet
+          visible={shareVisible}
+          onClose={() => setShareVisible(false)}
+          playlistId={playlist.id}
+          playlistName={playlist.name}
+        />
+      )}
+
+      {playlist && isOwner && (
         <EditSheet
           visible={editVisible}
           playlistId={numericId}
@@ -613,6 +636,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   headerTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold', color: c.text },
   headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   headerMetaText: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
+  ownerActions: { flexDirection: 'row', alignItems: 'center' },
   editBtn: { padding: 8 },
   followBtn: {
     backgroundColor: c.primary,

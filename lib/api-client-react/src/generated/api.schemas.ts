@@ -437,10 +437,11 @@ export type ConversationFeedItemType = typeof ConversationFeedItemType[keyof typ
 export const ConversationFeedItemType = {
   recommendation: 'recommendation',
   message: 'message',
+  playlist: 'playlist',
 } as const;
 
 /**
- * One entry in a merged, chronological chat feed between two users — either a film recommendation or a reaction/message, distinguished by "type".
+ * One entry in a merged, chronological chat feed between two users — a film recommendation, a reaction/message, or a playlist somebody sent, distinguished by "type".
  */
 export interface ConversationFeedItem {
   type: ConversationFeedItemType;
@@ -457,6 +458,10 @@ export interface ConversationFeedItem {
   replyToNotificationId?: number | null;
   /** Denormalized title of the film this message replies to, if any */
   replyToFilmTitle?: string | null;
+  /** Present when type is "playlist" — the list that was sent. */
+  playlistId?: number | null;
+  /** Denormalized name of the sent playlist, so the thread reads without a second request. It is the name as it stands now, not as it was when sent — a renamed list shows its current name, which is what the recipient will find when they open it. */
+  playlistName?: string | null;
 }
 
 export type FeedItemType = typeof FeedItemType[keyof typeof FeedItemType];
@@ -791,6 +796,20 @@ export interface UpdatePlaylistBody {
   /** @maxLength 300 */
   description?: string | null;
   isPublic?: boolean;
+}
+
+export interface SharePlaylistBody {
+  /**
+     * Clerk user ids to send the playlist to. A list rather than one at a time: picking several people is the normal case, and a request each would leave a half-sent list when one of them fails.
+     * @minItems 1
+     * @maxItems 50
+     */
+  toUserIds: string[];
+}
+
+export interface SharePlaylistResponse {
+  /** How many it actually went to, which can be fewer than asked for. Yourself and anyone blocked either way are dropped — silently, since naming them would disclose the block. */
+  sent: number;
 }
 
 export interface AddPlaylistItemBody {

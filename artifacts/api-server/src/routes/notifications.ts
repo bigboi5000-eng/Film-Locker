@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq, or, desc, inArray } from "drizzle-orm";
-import { db, filmNotificationsTable, conversationMessagesTable, usersTable, followsTable } from "@workspace/db";
+import { db, filmNotificationsTable, conversationMessagesTable, playlistSharesTable, playlistsTable, usersTable, followsTable } from "@workspace/db";
 import {
   SendNotificationBody,
   GetNotificationsResponse,
@@ -62,7 +62,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
    * then appeared nowhere: the thread it belonged to was not in the list at
    * all. Messages are a first-class half of a conversation here.
    */
-  const [blocked, recRows, msgRows] = await Promise.all([
+  const [blocked, recRows, msgRows, shareRows] = await Promise.all([
     // History survives a block — blocking clears the follow between two
     // people but leaves everything already sent in place — so the list has
     // to drop them itself or a blocked account keeps a row in the inbox.
@@ -111,6 +111,29 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
         )
       )
       .orderBy(desc(conversationMessagesTable.createdAt)),
+
+    // Playlists sent between these two, in either direction. A third kind
+    // of thing in a conversation rather than a separate inbox: "Jake sent
+    // you a list" belongs in the same thread as "Jake sent you a film".
+    db
+      .select({
+        id: playlistSharesTable.id,
+        fromUserId: playlistSharesTable.fromUserId,
+        toUserId: playlistSharesTable.toUserId,
+        isRead: playlistSharesTable.isRead,
+        createdAt: playlistSharesTable.createdAt,
+        playlistId: playlistSharesTable.playlistId,
+        playlistName: playlistsTable.name,
+      })
+      .from(playlistSharesTable)
+      .innerJoin(playlistsTable, eq(playlistsTable.id, playlistSharesTable.playlistId))
+      .where(
+        or(
+          eq(playlistSharesTable.toUserId, clerkUserId),
+          eq(playlistSharesTable.fromUserId, clerkUserId)
+        )
+      )
+      .orderBy(desc(playlistSharesTable.createdAt)),
   ]);
 
   /** The person on the other end, whichever way round the row is. */
@@ -118,7 +141,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
     row.fromUserId === clerkUserId ? row.toUserId : row.fromUserId;
 
   type Item = {
-    type: "recommendation" | "message";
+    type: "recommendation" | "message" | "playlist";
     id: number;
     fromUserId: string;
     toUserId: string;
@@ -130,6 +153,8 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
     content: string | null;
     replyToNotificationId: number | null;
     replyToFilmTitle: string | null;
+    playlistId: number | null;
+    playlistName: string | null;
   };
 
   const grouped = new Map<string, { items: Item[]; unreadCount: number; posters: string[] }>();
@@ -158,6 +183,8 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
       content: null,
       replyToNotificationId: null,
       replyToFilmTitle: null,
+      playlistId: null,
+      playlistName: null,
     });
     // Only what they sent me can be unread; my own sends are not news to me.
     if (r.toUserId === clerkUserId && !r.isRead) entry.unreadCount += 1;
@@ -180,8 +207,31 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
       content: m.content,
       replyToNotificationId: m.replyToNotificationId,
       replyToFilmTitle: m.replyToFilmTitle ?? null,
+      playlistId: null,
+      playlistName: null,
     });
     if (m.toUserId === clerkUserId && !m.isRead) entry.unreadCount += 1;
+  }
+
+  for (const p of shareRows) {
+    const entry = bucket(counterpart(p));
+    entry.items.push({
+      type: "playlist",
+      id: p.id,
+      fromUserId: p.fromUserId,
+      toUserId: p.toUserId,
+      createdAt: p.createdAt,
+      tmdbId: null,
+      filmTitle: null,
+      posterUrl: null,
+      isRead: p.isRead,
+      content: null,
+      replyToNotificationId: null,
+      replyToFilmTitle: null,
+      playlistId: p.playlistId,
+      playlistName: p.playlistName,
+    });
+    if (p.toUserId === clerkUserId && !p.isRead) entry.unreadCount += 1;
   }
 
   // A conversation with someone whose account has since gone is not a
@@ -577,6 +627,19 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
           eq(conversationMessagesTable.fromUserId, otherUserId),
           eq(conversationMessagesTable.toUserId, clerkUserId),
           eq(conversationMessagesTable.isRead, false)
+        )
+      ),
+    // The third kind of unread thing in a thread. Left out, a sent playlist
+    // would light the badge and nothing could ever clear it — the same
+    // shape as the bug where opening a thread marked nothing read at all.
+    db
+      .update(playlistSharesTable)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(playlistSharesTable.fromUserId, otherUserId),
+          eq(playlistSharesTable.toUserId, clerkUserId),
+          eq(playlistSharesTable.isRead, false)
         )
       ),
   ]).catch((err) => {
