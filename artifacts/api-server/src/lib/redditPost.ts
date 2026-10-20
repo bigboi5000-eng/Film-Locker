@@ -180,6 +180,20 @@ async function getToken(warn?: WarnFn): Promise<string | null> {
   }
 }
 
+/**
+ * One attempt's reason, short enough to sit beside three others.
+ *
+ * A served page is collapsed to a word: a block page is hundreds of
+ * characters of markup that say nothing the status has not, and printing
+ * one buried the attempt that actually needed reading.
+ */
+function summarise(detail: string): string {
+  const d = detail.trim();
+  if (!d) return "";
+  if (d.startsWith("<") || d.includes("<body") || d.includes("<html")) return " (html page)";
+  return ` (${d.slice(0, 120)})`;
+}
+
 /** The post's id out of a canonical URL: /r/<sub>/comments/<id>/<slug>. */
 function postIdFrom(url: string): string | null {
   const m = /\/comments\/([A-Za-z0-9]+)/.exec(url);
@@ -334,12 +348,15 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
     }
   }
 
-  const first = attempts[0]!;
-  // The status is in the message as well as the payload: a collapsed log
-  // line showing only "refused" cannot be acted on, and this one is read
-  // far from the machine that wrote it. The hint is there because a 403
-  // from a cloud host has one cause and one answer, and nobody should have
-  // to rediscover that.
+  // Every attempt's reason, in the message itself. The payload has them too,
+  // but a structured array is truncated where it is read, and the one entry
+  // that mattered — why the paid route declined — sat at the end of it
+  // behind three that did not.
+  //
+  // The HTML is collapsed rather than printed. Reddit's block page is six
+  // hundred characters of CSS custom properties and says nothing that the
+  // status has not already said, and quoting it pushed everything useful
+  // out of the line.
   const blocked = attempts.some((a) => a.status === 403);
   const hint =
     blocked && !hasRedditCredentials() && !hasApifyToken()
@@ -349,8 +366,7 @@ async function fetchRedditPostUncached(url: string, warn?: WarnFn): Promise<Redd
         : "";
   warn?.(
     { url, path, attempts },
-    `reddit: refused — ${attempts.map((a) => `${a.via} ${a.status}`).join(", ")}` +
-      (first.detail ? ` — ${first.detail}` : "") +
+    `reddit: refused — ${attempts.map((a) => `${a.via} ${a.status}${summarise(a.detail)}`).join(", ")}` +
       hint
   );
   return null;
