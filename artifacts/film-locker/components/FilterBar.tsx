@@ -68,13 +68,35 @@ export interface FilterState {
   unratedOnly?: boolean;
 }
 
+/**
+ * Included with a subscription, as against rentable or buyable.
+ *
+ * TMDB returns all three under one list and the filter matched on the
+ * provider's NAME alone, so "Prime Video" caught a film that Prime will
+ * rent you for three pounds exactly as it caught one the subscription
+ * covers — and a service that has only ever rented to you still appeared in
+ * the list as somewhere you could watch. That is the one mistake this
+ * filter must not make: somebody picks a service they pay for, sits down,
+ * and is asked for money.
+ *
+ * Rent and buy are still shown on the film's own page, where the price is
+ * visible and the choice is being made deliberately. They are only excluded
+ * from "what can I watch tonight".
+ */
+function isIncluded(p: { provider_name: string; type?: string }): boolean {
+  // Undefined type means a row written before the type was recorded. Those
+  // are treated as not-included rather than assumed: a wrong "yes" here
+  // costs somebody an evening, a wrong "no" costs them one line in a list.
+  return p.type === 'flatrate';
+}
+
 /** Minimal shape that both Movie and TmdbMovieCard satisfy after adding genres. */
 export interface FilterableMovie {
   genres?: string[];
   director?: string;
   cast?: string[];
   language?: string;
-  watchProviders?: Array<{ provider_name: string }>;
+  watchProviders?: Array<{ provider_name: string; type?: string }>;
   /** Minutes; null/undefined when TMDB has no runtime or enrichment is pending. */
   runtime?: number | null;
   /** TMDB's own average out of 10; null until the film has been enriched. */
@@ -98,6 +120,81 @@ export interface FilterableMovie {
 export const RUNTIME_MAX = 240;
 export const RUNTIME_STEPS = 24;
 
+/** The slider never collapses below this, or it has nothing to travel. */
+const MIN_RUNTIME_SPAN = 60;
+
+export interface RuntimeBounds {
+  min: number;
+  max: number;
+  steps: number;
+  tickEvery: number;
+}
+
+/**
+ * The runtime slider's ends, taken from the films in front of it.
+ *
+ * A fixed nought-to-four-hours spent most of its travel on lengths nobody
+ * owns: a locker of ordinary features is all between ninety minutes and two
+ * and a half hours, and on a fixed scale that is a third of the track, with
+ * single steps shunting the result by dozens of films.
+ *
+ * Derived, the whole width is the range you actually have. The ends are
+ * rounded outwards to a round ten minutes so they read as numbers rather
+ * than as whichever film happens to be shortest, and the span is held to at
+ * least an hour so a locker of near-identical lengths still has a slider
+ * rather than a dot.
+ *
+ * The cost is that the ends move as the locker does. That is the right
+ * trade for a control you look at while using it — what it cannot do is
+ * change under a filter already set, which is why the caller clamps.
+ */
+/**
+ * A stored span, brought inside bounds that may have moved since it was set.
+ *
+ * Clamping each end on its own is not enough: a span of five to seven hours
+ * against a locker whose longest film is now under three gives a lower end
+ * above its upper one — a range that matches nothing, reads as nonsense,
+ * and cannot be dragged back because both handles are off the track.
+ *
+ * A span with nothing left inside the bounds is no longer a question the
+ * list can answer, so it opens out rather than quietly excluding
+ * everything.
+ */
+export function clampRuntime(
+  filters: FilterState,
+  bounds: RuntimeBounds
+): { lo: number; hi: number } {
+  const lo = Math.max(filters.runtimeMin ?? bounds.min, bounds.min);
+  const hi = Math.min(filters.runtimeMax ?? bounds.max, bounds.max);
+  if (lo > hi) return { lo: bounds.min, hi: bounds.max };
+  return { lo, hi };
+}
+
+export function runtimeBounds(movies: FilterableMovie[]): RuntimeBounds {
+  const known = movies
+    .map((m) => m.runtime)
+    .filter((r): r is number => typeof r === 'number' && r > 0);
+
+  if (known.length === 0) {
+    return { min: 0, max: RUNTIME_MAX, steps: RUNTIME_STEPS, tickEvery: 60 };
+  }
+
+  let min = Math.floor(Math.min(...known) / 10) * 10;
+  let max = Math.ceil(Math.max(...known) / 10) * 10;
+
+  if (max - min < MIN_RUNTIME_SPAN) {
+    const grow = MIN_RUNTIME_SPAN - (max - min);
+    min = Math.max(0, min - Math.floor(grow / 2));
+    max = min + MIN_RUNTIME_SPAN;
+  }
+
+  // Ten-minute steps across whatever the span turned out to be, and a tick
+  // every half hour unless that would crowd the track.
+  const steps = Math.max(1, Math.round((max - min) / 10));
+  const tickEvery = max - min > 180 ? 60 : 30;
+  return { min, max, steps, tickEvery };
+}
+
 /** "1h 30m", "2h", "45m" — the way anybody says a running time. */
 export function formatRuntime(mins: number): string {
   const h = Math.floor(mins / 60);
@@ -108,9 +205,9 @@ export function formatRuntime(mins: number): string {
 }
 
 /** The span in words, or "Any" when both ends are home. */
-export function formatRuntimeRange(min: number, max: number): string {
-  const open = min <= 0;
-  const full = max >= RUNTIME_MAX;
+export function formatRuntimeRange(min: number, max: number, bounds: RuntimeBounds): string {
+  const open = min <= bounds.min;
+  const full = max >= bounds.max;
   if (open && full) return 'Any';
   if (open) return `up to ${formatRuntime(max)}`;
   if (full) return `${formatRuntime(min)}+`;
@@ -153,11 +250,19 @@ function inSpan(
  * short film. A film LONGER than the top of the scale counts as being at
  * the top, so the upper end genuinely means "and up".
  */
-function inRuntimeSpan(runtime: number | null | undefined, min: number, max: number): boolean {
-  const open = min <= 0 && max >= RUNTIME_MAX;
+function inRuntimeSpan(
+  runtime: number | null | undefined,
+  min: number,
+  max: number,
+  bounds: RuntimeBounds
+): boolean {
+  const open = min <= bounds.min && max >= bounds.max;
   if (open) return true;
   if (typeof runtime !== 'number' || runtime <= 0) return false;
-  const clamped = Math.min(runtime, RUNTIME_MAX);
+  // A film at or past either end counts as being at it, so the ends mean
+  // "and shorter" and "and longer" rather than excluding the very films
+  // that set them.
+  const clamped = Math.min(Math.max(runtime, bounds.min), bounds.max);
   return clamped >= min && clamped <= max;
 }
 
@@ -187,7 +292,7 @@ const FILTER_LABELS: Record<ChipKey, string> = {
   director: 'Director',
   actor: 'Actor',
   language: 'Language',
-  streaming: 'Streaming',
+  streaming: 'Included with',
 };
 
 const FILTER_KEYS: ChipKey[] = ['genre', 'director', 'actor', 'language', 'streaming'];
@@ -202,6 +307,10 @@ type PickerKey = ChipKey | typeof RATING_PICKER;
 
 /** Apply all active filters to a movie list. */
 export function applyFilters<T extends FilterableMovie>(movies: T[], filters: FilterState): T[] {
+  // Derived from the same list being filtered, so "both ends home" means
+  // the same thing here as it does on the slider the user is looking at.
+  const bounds = runtimeBounds(movies);
+  const runtime = clampRuntime(filters, bounds);
   return movies.filter((m) => {
     const genres = m.genres ?? [];
     const cast = m.cast ?? [];
@@ -210,10 +319,12 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     if (filters.director && m.director !== filters.director) return false;
     if (filters.actor && !cast.includes(filters.actor)) return false;
     if (filters.language && m.language !== filters.language) return false;
-    if (filters.streaming && !providers.some((p) => p.provider_name === filters.streaming))
+    if (
+      filters.streaming &&
+      !providers.some((p) => isIncluded(p) && p.provider_name === filters.streaming)
+    )
       return false;
-    if (!inRuntimeSpan(m.runtime, filters.runtimeMin ?? 0, filters.runtimeMax ?? RUNTIME_MAX))
-      return false;
+    if (!inRuntimeSpan(m.runtime, runtime.lo, runtime.hi, bounds)) return false;
     if (!inSpan(m.tmdbRating, filters.tmdbMin ?? 0, filters.tmdbMax ?? MAX_VALUE, TMDB_PER_STAR))
       return false;
     if (filters.unratedOnly) {
@@ -237,7 +348,7 @@ function getOptions(movies: FilterableMovie[], key: ChipKey): string[] {
     else if (key === 'actor') cast.forEach((a) => a && values.add(a));
     else if (key === 'language') m.language && values.add(m.language);
     else if (key === 'streaming')
-      providers.forEach((p) => p.provider_name && values.add(p.provider_name));
+      providers.forEach((p) => isIncluded(p) && p.provider_name && values.add(p.provider_name));
   }
   return Array.from(values).sort();
 }
@@ -271,8 +382,16 @@ export function FilterBar({
    * at nought stores a nought, which is falsy, so counting values would
    * report "no filters" while a filter was plainly narrowing the list.
    */
-  const runtimeActive =
-    (filters.runtimeMin ?? 0) > 0 || (filters.runtimeMax ?? RUNTIME_MAX) < RUNTIME_MAX;
+  /**
+   * The slider's ends, from the films on this screen.
+   *
+   * Clamped on the way out, because the ends move as the locker does: a
+   * span set when the longest film was three hours must not sit outside the
+   * track after that film is removed, where it cannot be dragged back.
+   */
+  const bounds = useMemo(() => runtimeBounds(movies), [movies]);
+  const { lo: runtimeLo, hi: runtimeHi } = clampRuntime(filters, bounds);
+  const runtimeActive = runtimeLo > bounds.min || runtimeHi < bounds.max;
 
   const activeCount =
     FILTER_KEYS.filter((k) => filters[k]).length +
@@ -282,11 +401,14 @@ export function FilterBar({
   const setRuntime = useCallback(
     (min: number, max: number) => {
       const next = { ...filters };
-      if (min > 0) next.runtimeMin = min; else delete next.runtimeMin;
-      if (max < RUNTIME_MAX) next.runtimeMax = max; else delete next.runtimeMax;
+      // An end sitting at its limit is deleted rather than stored, so "the
+      // whole range" and "no filter" are one state — which matters more
+      // here than for the ratings, since the limits themselves move.
+      if (min > bounds.min) next.runtimeMin = min; else delete next.runtimeMin;
+      if (max < bounds.max) next.runtimeMax = max; else delete next.runtimeMax;
       onChange(next);
     },
-    [filters, onChange]
+    [filters, onChange, bounds]
   );
 
   const setSpan = useCallback(
@@ -458,21 +580,25 @@ export function FilterBar({
                 <View style={styles.blockHead}>
                   <Text style={styles.blockTitle}>Runtime</Text>
                   <Text style={styles.blockValue}>
-                    {formatRuntimeRange(
-                      filters.runtimeMin ?? 0,
-                      filters.runtimeMax ?? RUNTIME_MAX
-                    )}
+                    {formatRuntimeRange(runtimeLo, runtimeHi, bounds)}
                   </Text>
                 </View>
+                {/* Offset by the lower bound, because the slider measures
+                    from nought and the scale starts wherever the shortest
+                    film does. */}
                 <RangeSlider
-                  min={filters.runtimeMin ?? 0}
-                  max={filters.runtimeMax ?? RUNTIME_MAX}
-                  onChange={setRuntime}
+                  min={runtimeLo - bounds.min}
+                  max={runtimeHi - bounds.min}
+                  onChange={(lo, hi) => setRuntime(lo + bounds.min, hi + bounds.min)}
                   width={SLIDER_W}
-                  maxValue={RUNTIME_MAX}
-                  steps={RUNTIME_STEPS}
-                  tickEvery={60}
+                  maxValue={bounds.max - bounds.min}
+                  steps={bounds.steps}
+                  tickEvery={bounds.tickEvery}
                 />
+                <View style={styles.scaleRow}>
+                  <Text style={styles.scaleEnd}>{formatRuntime(bounds.min)}</Text>
+                  <Text style={styles.scaleEnd}>{formatRuntime(bounds.max)}</Text>
+                </View>
               </View>
 
               {/* The categorical ones, as rows that open in place. One at a
@@ -611,6 +737,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   blockValue: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.text, flexShrink: 1 },
   blockValueEmpty: { fontFamily: 'Inter_400Regular', color: c.textFaint },
+  scaleRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  scaleEnd: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
   unratedRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   unratedText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted },
   unratedTextActive: { fontFamily: 'Inter_600SemiBold', color: c.primary },
