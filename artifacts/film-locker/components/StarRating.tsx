@@ -276,7 +276,7 @@ export function StarRating({
 
   const row = (
     <View
-      style={[styles.row, { gap, width: contentWidth }]}
+      style={[styles.row, { gap, width: contentWidth, flexShrink: 0 }]}
       // Load-bearing, and the reason taps landed on the wrong star even
       // after the row stopped measuring itself.
       //
@@ -317,7 +317,22 @@ export function StarRating({
       // Hugging the stars, so the touch coordinates this reports are
       // relative to the first star rather than to whatever the parent's
       // width happens to be.
-      style={{ width: contentWidth }}
+      //
+      // flexShrink: 0 is the load-bearing half of that. A flex child
+      // shrinks by default, so a parent ROW — a label beside the stars, say
+      // — squeezes this container below contentWidth whenever the two do
+      // not both fit, while the touch maths goes on computing against the
+      // full width. The stars then sit closer together than the maths
+      // believes and every tap lands short: on a 320dp screen the second
+      // star reads as one and a half, the third as two and a half, the
+      // fifth as four.
+      //
+      // That is why the community rating "glitched at every half" while the
+      // private one, which sits in a block and is never squeezed, behaved.
+      // The control was identical; its container was not. Refusing to
+      // shrink makes the geometry true wherever this is used, and the
+      // caller's label can be the thing that gives way instead.
+      style={{ width: contentWidth, flexShrink: 0 }}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
       // Answered by DIRECTION, not by whether the finger has moved yet.

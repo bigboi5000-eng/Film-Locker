@@ -31,12 +31,24 @@ const DROPDOWN_W = SCREEN_W - 32;
  */
 const SLIDER_W = DROPDOWN_W - 32;
 
+/**
+ * Each categorical filter holds a SET of accepted values, matched as "any
+ * of these".
+ *
+ * One value each could only ask "is it on Netflix", when the question
+ * people actually have is "is it on anything I pay for" — and answering it
+ * meant running the filter three times and remembering the three answers.
+ * Within a category the values are alternatives, so they are an OR;
+ * across categories they still narrow, so those stay an AND.
+ */
+export type FilterValues = string[];
+
 export interface FilterState {
-  genre?: string;
-  director?: string;
-  actor?: string;
-  language?: string;
-  streaming?: string;
+  genre?: FilterValues;
+  director?: FilterValues;
+  actor?: FilterValues;
+  language?: FilterValues;
+  streaming?: FilterValues;
   /**
    * The span of runtimes to keep, in MINUTES.
    *
@@ -322,15 +334,16 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     const genres = m.genres ?? [];
     const cast = m.cast ?? [];
     const providers = m.watchProviders ?? [];
-    if (filters.genre && !genres.includes(filters.genre)) return false;
-    if (filters.director && m.director !== filters.director) return false;
-    if (filters.actor && !cast.includes(filters.actor)) return false;
-    if (filters.language && m.language !== filters.language) return false;
-    if (
-      filters.streaming &&
-      !providers.some((p) => isIncluded(p) && p.provider_name === filters.streaming)
-    )
-      return false;
+    // Any of the chosen values matches; an empty or absent set asks nothing.
+    const anyOf = (chosen: FilterValues | undefined, has: (v: string) => boolean) =>
+      !chosen || chosen.length === 0 || chosen.some(has);
+
+    if (!anyOf(filters.genre, (g) => genres.includes(g))) return false;
+    if (!anyOf(filters.director, (d) => m.director === d)) return false;
+    if (!anyOf(filters.actor, (a) => cast.includes(a))) return false;
+    if (!anyOf(filters.language, (l) => m.language === l)) return false;
+    if (!anyOf(filters.streaming, (svc) =>
+      providers.some((p) => isIncluded(p) && p.provider_name === svc))) return false;
     if (!inRuntimeSpan(m.runtime, runtime.lo, runtime.hi, bounds)) return false;
     if (!inSpan(m.tmdbRating, filters.tmdbMin ?? 0, filters.tmdbMax ?? MAX_VALUE, TMDB_PER_STAR))
       return false;
@@ -403,7 +416,7 @@ export function FilterBar({
   const runtimeActive = runtimeLo > bounds.min || runtimeHi < bounds.max;
 
   const activeCount =
-    FILTER_KEYS.filter((k) => filters[k]).length +
+    FILTER_KEYS.filter((k) => (filters[k]?.length ?? 0) > 0).length +
     (ratingActive ? 1 : 0) +
     (runtimeActive ? 1 : 0);
 
@@ -444,12 +457,18 @@ export function FilterBar({
     onChange(next);
   }, [filters, onChange]);
 
-  /** Pick a value for one category, or clear it by picking it again. */
+  /** Add or remove one value from a category's set. */
   const selectValue = useCallback(
     (key: ChipKey, value: string) => {
+      const chosen = filters[key] ?? [];
       const next = { ...filters };
-      if (next[key] === value) delete next[key];
-      else next[key] = value;
+      const without = chosen.filter((v) => v !== value);
+      // The last value removed deletes the key, so "nothing chosen" and
+      // "not filtering" stay one state and the active count needs no
+      // special case for an empty array.
+      if (without.length === chosen.length) next[key] = [...chosen, value];
+      else if (without.length === 0) delete next[key];
+      else next[key] = without;
       onChange(next);
     },
     [filters, onChange]
@@ -615,7 +634,7 @@ export function FilterBar({
                   open sections is a scroll nobody can navigate. */}
               {FILTER_KEYS.map((key) => {
                 const options = getOptions(movies, key);
-                const value = filters[key];
+                const chosen = filters[key] ?? [];
                 const isOpen = expanded === key;
                 return (
                   <View key={key} style={[styles.block, styles.blockDivided]}>
@@ -628,10 +647,19 @@ export function FilterBar({
                       <Text style={styles.blockTitle}>{FILTER_LABELS[key]}</Text>
                       <View style={styles.blockHeadRight}>
                         <Text
-                          style={[styles.blockValue, !value && styles.blockValueEmpty]}
+                          style={[styles.blockValue, chosen.length === 0 && styles.blockValueEmpty]}
                           numberOfLines={1}
                         >
-                          {value ?? (options.length === 0 ? 'None yet' : 'Any')}
+                          {/* Named while they fit, counted once they do
+                              not: "Netflix, Prime" reads at a glance and
+                              seven service names do not. */}
+                          {chosen.length === 0
+                            ? options.length === 0
+                              ? 'None yet'
+                              : 'Any'
+                            : chosen.length <= 2
+                              ? chosen.join(', ')
+                              : `${chosen.length} chosen`}
                         </Text>
                         {options.length > 0 ? (
                           <Ionicons
@@ -646,7 +674,7 @@ export function FilterBar({
                     {isOpen ? (
                       <View style={styles.optionWrap}>
                         {options.map((opt) => {
-                          const picked = value === opt;
+                          const picked = chosen.includes(opt);
                           return (
                             <TouchableOpacity
                               key={opt}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { SignedOutGate } from '@/components/SignedOutGate';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
@@ -12,6 +12,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useToast } from '@/components/ToastProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -128,6 +129,13 @@ interface ModalTarget {
  */
 type FilmsMode = 'watchlist' | 'watched';
 
+/** The collapsing row's height, so its hidden state is a real zero. */
+const BAR_HEIGHT = 56;
+/** Matches MovieCard's own corner, so the two shapes agree. */
+const CARD_RADIUS = 10;
+/** Above this much scroll the bar may hide; below it, never. */
+const BAR_HIDE_AFTER = 80;
+
 export default function WatchlistScreen() {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -173,6 +181,46 @@ export default function WatchlistScreen() {
     // other tab's across would sort by a value every film here is missing.
     setSort(defaultSortFor(next === 'watched'));
   }, []);
+  /**
+   * The filter and sort row slides away as you scroll down and comes back
+   * the moment you scroll up — the pattern a browser's address bar uses,
+   * for the same reason: on a phone the grid is the screen, and a row of
+   * controls you are not currently using is three films you cannot see.
+   *
+   * Driven by the DIRECTION of travel rather than by absolute position, so
+   * it returns from anywhere in the list instead of only from the top.
+   */
+  const barAnim = useRef(new Animated.Value(1)).current;
+  const barShown = useRef(true);
+  const lastY = useRef(0);
+
+  const onScroll = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const dy = y - lastY.current;
+      lastY.current = y;
+
+      // A dead zone, or the bar flickers on the small reversals every
+      // finger makes while scrolling. Near the top it is always shown, so
+      // a short list never hides its own controls.
+      if (Math.abs(dy) < 6) return;
+      const next = y < BAR_HIDE_AFTER ? true : dy < 0;
+      if (next === barShown.current) return;
+
+      barShown.current = next;
+      Animated.timing(barAnim, {
+        toValue: next ? 1 : 0,
+        duration: 160,
+        // Height and opacity are not transform properties, so this cannot
+        // run on the UI thread. 160ms of a two-property interpolation is
+        // cheap enough to drive from JS; a transform would slide the row
+        // out while leaving its gap behind.
+        useNativeDriver: false,
+      }).start();
+    },
+    [barAnim]
+  );
+
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
   const [resultMatches, setResultMatches] = useState<GeminiMovieMatch[]>([]);
   const [resultListTitle, setResultListTitle] = useState<string | null>(null);
@@ -422,8 +470,16 @@ export default function WatchlistScreen() {
         </Text>
       )}
 
-      {/* Filter bar — hidden while searching or asking the AI */}
+      {/* Filter bar — hidden while searching or asking the AI, and
+          collapsed while scrolling down. */}
       {!isSearchActive && !tools.aiOpen && (
+        <Animated.View
+          style={{
+            opacity: barAnim,
+            maxHeight: barAnim.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_HEIGHT] }),
+            overflow: 'hidden',
+          }}
+        >
         <FilterBar
           movies={watchlistMovies}
           filters={filters}
@@ -438,6 +494,7 @@ export default function WatchlistScreen() {
           }
           sortDefault={defaultSortFor(mode === 'watched')}
         />
+        </Animated.View>
       )}
 
       {/* Context label row */}
@@ -553,6 +610,9 @@ export default function WatchlistScreen() {
             styles.contentContainer,
             { paddingBottom: insets.bottom + 16 },
           ]}
+          style={styles.listClip}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons
@@ -734,6 +794,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
 
   // Grid
+  /**
+   * The grid scrolls up into a rounded edge rather than a straight cut.
+   *
+   * A poster has a 10px radius, so a film sliding out of view under a hard
+   * horizontal line is the one moment its own shape is contradicted — the
+   * corner it has everywhere else vanishes into a straight chop. Clipping
+   * the list with the same radius means the top of the scroll area is the
+   * same shape as the top of the thing scrolling through it.
+   */
+  listClip: {
+    borderTopLeftRadius: CARD_RADIUS,
+    borderTopRightRadius: CARD_RADIUS,
+    overflow: 'hidden',
+  },
   columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
   skeletonGrid: {
     flexDirection: 'row',

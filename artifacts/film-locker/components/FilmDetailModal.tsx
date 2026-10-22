@@ -697,7 +697,9 @@ function CommunitySection({
 
       {/* User's community rating */}
       <View style={communityStyles.userRatingRow}>
-        <Text style={communityStyles.userRatingLabel}>Your community rating:</Text>
+        <Text style={communityStyles.userRatingLabel} numberOfLines={2}>
+          Your community rating:
+        </Text>
         <StarRating
           value={userRating}
           onChange={handleCommunityRating}
@@ -828,6 +830,9 @@ const makeCommunityStyles = (c: Palette) => StyleSheet.create({
     marginBottom: 16,
   },
   userRatingLabel: {
+    // Shrinks so the stars do not. See the note on StarRating's container:
+    // squeezing that control breaks where its taps land.
+    flexShrink: 1,
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
     color: c.textMuted,
