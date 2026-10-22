@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Animated,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { useToast } from '@/components/ToastProvider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,7 @@ import {
   type GeminiMovieMatch,
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
+import { GridTopCaps } from '@/components/GridTopCaps';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { applySort, defaultSortFor, type SortState } from '@/components/SortSheet';
@@ -129,10 +131,6 @@ interface ModalTarget {
  */
 type FilmsMode = 'watchlist' | 'watched';
 
-/** The collapsing row's height, so its hidden state is a real zero. */
-const BAR_HEIGHT = 56;
-/** Matches MovieCard's own corner, so the two shapes agree. */
-const CARD_RADIUS = 10;
 /** Above this much scroll the bar may hide; below it, never. */
 const BAR_HIDE_AFTER = 80;
 
@@ -193,6 +191,21 @@ export default function WatchlistScreen() {
   const barAnim = useRef(new Animated.Value(1)).current;
   const barShown = useRef(true);
   const lastY = useRef(0);
+  /**
+   * How tall the row actually is, taken from its own layout.
+   *
+   * A guessed height is a clipped row at any text size but the one it was
+   * guessed at, and the collapse is driven by maxHeight, so being short by
+   * four pixels cuts the bottom off the labels. Only ever grown: while the
+   * row is collapsing its child measures smaller and smaller, and feeding
+   * that back would pin maxHeight at zero.
+   */
+  const [barHeight, setBarHeight] = useState<number | null>(null);
+  const onBarLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height;
+    if (h <= 0) return;
+    setBarHeight((prev) => (prev == null || h > prev ? h : prev));
+  }, []);
 
   const onScroll = useCallback(
     (e: { nativeEvent: { contentOffset: { y: number } } }) => {
@@ -476,10 +489,16 @@ export default function WatchlistScreen() {
         <Animated.View
           style={{
             opacity: barAnim,
-            maxHeight: barAnim.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_HEIGHT] }),
+            // Unconstrained until it has been measured once, so the first
+            // frame is never the clipped one.
+            maxHeight:
+              barHeight == null
+                ? undefined
+                : barAnim.interpolate({ inputRange: [0, 1], outputRange: [0, barHeight] }),
             overflow: 'hidden',
           }}
         >
+        <View onLayout={onBarLayout}>
         <FilterBar
           movies={watchlistMovies}
           filters={filters}
@@ -494,6 +513,7 @@ export default function WatchlistScreen() {
           }
           sortDefault={defaultSortFor(mode === 'watched')}
         />
+        </View>
         </Animated.View>
       )}
 
@@ -599,6 +619,7 @@ export default function WatchlistScreen() {
           />
         ) : (
         /* WATCHLIST GRID */
+        <View style={styles.gridArea}>
         <FlatList<Movie>
           key="watchlist-grid"
           data={filteredMovies}
@@ -647,6 +668,8 @@ export default function WatchlistScreen() {
             />
           }
         />
+        <GridTopCaps />
+        </View>
         )
       )}
 
@@ -794,20 +817,11 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
 
   // Grid
-  /**
-   * The grid scrolls up into a rounded edge rather than a straight cut.
-   *
-   * A poster has a 10px radius, so a film sliding out of view under a hard
-   * horizontal line is the one moment its own shape is contradicted — the
-   * corner it has everywhere else vanishes into a straight chop. Clipping
-   * the list with the same radius means the top of the scroll area is the
-   * same shape as the top of the thing scrolling through it.
-   */
-  listClip: {
-    borderTopLeftRadius: CARD_RADIUS,
-    borderTopRightRadius: CARD_RADIUS,
-    overflow: 'hidden',
-  },
+  /** Keeps a card that is halfway out of view from painting over the row
+      above it; the rounded edge itself is GridTopCaps' job. */
+  listClip: { overflow: 'hidden' },
+  /** Holds the list and the rounded caps drawn on top of it. */
+  gridArea: { flex: 1 },
   columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
   skeletonGrid: {
     flexDirection: 'row',

@@ -33,6 +33,21 @@ const COLUMNS = 3;
 const CARD_WIDTH =
   (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - COLUMN_GAP * (COLUMNS - 1)) / COLUMNS;
 const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 poster ratio
+const CARD_RADIUS = 10;
+
+/**
+ * The grid's geometry, exported for anything that has to draw in register
+ * with the cards rather than beside them.
+ *
+ * Re-deriving these numbers somewhere else is how an overlay ends up a
+ * couple of pixels out of line on one screen width and nobody notices
+ * until it is on a phone.
+ */
+export const GRID_COLUMNS = COLUMNS;
+export const GRID_COLUMN_GAP = COLUMN_GAP;
+export const GRID_HORIZONTAL_PADDING = HORIZONTAL_PADDING;
+export const GRID_CARD_WIDTH = CARD_WIDTH;
+export const GRID_CARD_RADIUS = CARD_RADIUS;
 
 export interface MovieCardProps {
   id: number;
@@ -117,7 +132,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 10,
+    borderRadius: CARD_RADIUS,
     overflow: 'hidden',
     backgroundColor: c.surfaceAlt,
     // Light shadow

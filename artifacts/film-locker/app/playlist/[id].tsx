@@ -30,6 +30,7 @@ import {
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
+import { GridTopCaps } from '@/components/GridTopCaps';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
@@ -591,6 +592,7 @@ export default function PlaylistScreen() {
             </View>
           )}
 
+          <View style={styles.gridArea}>
           <FlatList
             data={filteredItems}
             numColumns={3}
@@ -607,6 +609,8 @@ export default function PlaylistScreen() {
               </View>
             }
           />
+          <GridTopCaps />
+          </View>
         </>
       )}
 
@@ -687,6 +691,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   emptySub: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', lineHeight: 20 },
 
   contentContainer: { paddingHorizontal: HORIZONTAL_PADDING },
+  /** Holds the list and the rounded caps drawn on top of it. */
+  gridArea: { flex: 1, overflow: 'hidden' },
   columnWrapper: { gap: COLUMN_GAP, marginBottom: COLUMN_GAP },
   skeletonGrid: {
     flexDirection: 'row',
