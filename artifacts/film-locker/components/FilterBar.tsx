@@ -14,7 +14,9 @@ import { RangeSlider, formatRange, MAX_VALUE } from '@/components/RangeSlider';
 import {
   SortSheet,
   describeSort,
-  isDefaultSortFor,
+  sameSort,
+  DEFAULT_SORT,
+  type SortKey,
   type SortState,
 } from '@/components/SortSheet';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -278,10 +280,15 @@ interface FilterBarProps {
   sort?: SortState;
   onSortChange?: (sort: SortState) => void;
   /**
-   * Whether this list is of watched films. Decides both which orders are
-   * offered and which one counts as the resting default.
+   * Which orders this screen can offer. A watchlist has no "date watched",
+   * a TMDB list has no "date added", and a playlist has an order of its own
+   * that beats all of them.
    */
-  showWatchedSort?: boolean;
+  sortOptions?: SortKey[];
+  /** The order this screen rests in, against which the button reads unset. */
+  sortDefault?: SortState;
+  /** What "as listed" is called here — "Trending order", and so on. */
+  sortDefaultLabel?: string;
 }
 
 /** The filters that pick a value from the films in front of them. */
@@ -364,7 +371,9 @@ export function FilterBar({
   onChange,
   sort,
   onSortChange,
-  showWatchedSort,
+  sortOptions,
+  sortDefault = DEFAULT_SORT,
+  sortDefaultLabel,
 }: FilterBarProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -475,20 +484,20 @@ export function FilterBar({
 
         {sort && onSortChange ? (
           <TouchableOpacity
-            style={[styles.button, !isDefaultSortFor(sort, Boolean(showWatchedSort)) && styles.buttonActive]}
+            style={[styles.button, !sameSort(sort, sortDefault) && styles.buttonActive]}
             onPress={() => setSortOpen(true)}
             activeOpacity={0.75}
           >
             <Ionicons
               name="swap-vertical-outline"
               size={16}
-              color={!isDefaultSortFor(sort, Boolean(showWatchedSort)) ? colors.onColor : colors.textStrong}
+              color={!sameSort(sort, sortDefault) ? colors.onColor : colors.textStrong}
             />
             <Text
-              style={[styles.buttonText, !isDefaultSortFor(sort, Boolean(showWatchedSort)) && styles.buttonTextActive]}
+              style={[styles.buttonText, !sameSort(sort, sortDefault) && styles.buttonTextActive]}
               numberOfLines={1}
             >
-              {isDefaultSortFor(sort, Boolean(showWatchedSort)) ? 'Sort' : describeSort(sort)}
+              {sameSort(sort, sortDefault) ? 'Sort' : describeSort(sort, sortDefaultLabel)}
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -684,7 +693,8 @@ export function FilterBar({
           onClose={() => setSortOpen(false)}
           sort={sort}
           onChange={onSortChange}
-          showWatchedOptions={showWatchedSort}
+          options={sortOptions ?? ['added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']}
+          defaultLabel={sortDefaultLabel}
         />
       ) : null}
     </>

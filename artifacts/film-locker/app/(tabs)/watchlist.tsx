@@ -431,7 +431,12 @@ export default function WatchlistScreen() {
           sort={sort}
           onSortChange={setSort}
           // "Date watched" is only an order on a list of watched films.
-          showWatchedSort={mode === 'watched'}
+          sortOptions={
+            mode === 'watched'
+              ? ['watched', 'added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']
+              : ['added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']
+          }
+          sortDefault={defaultSortFor(mode === 'watched')}
         />
       )}
 

@@ -13,6 +13,7 @@ import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
 
 export type SortKey =
+  | 'none'
   | 'added'
   | 'watched'
   | 'myRating'
@@ -61,11 +62,14 @@ export const SORT_OPTIONS: Array<{
   label: string;
   desc: string;
   asc: string;
-  /** Only meaningful once a film has been watched. */
-  watchedOnly?: boolean;
 }> = [
+  // The order the list arrived in, which on some screens is the answer
+  // rather than the absence of one: trending IS a ranking, and a playlist
+  // is in the order its owner put it in. Sorting those by anything else
+  // throws information away, so leaving them alone has to be offerable.
+  { key: 'none',       label: 'Default order', desc: '',               asc: '' },
   { key: 'added',      label: 'Date added',    desc: 'Newest first',   asc: 'Oldest first' },
-  { key: 'watched',    label: 'Date watched',  desc: 'Newest first',   asc: 'Oldest first', watchedOnly: true },
+  { key: 'watched',    label: 'Date watched',  desc: 'Newest first',   asc: 'Oldest first' },
   { key: 'myRating',   label: 'Your rating',   desc: 'Highest first',  asc: 'Lowest first' },
   { key: 'tmdbRating', label: 'TMDB rating',   desc: 'Highest first',  asc: 'Lowest first' },
   { key: 'runtime',    label: 'Runtime',       desc: 'Longest first',  asc: 'Shortest first' },
@@ -85,14 +89,16 @@ export interface SortableMovie {
 }
 
 /** The current order, said the way the button should say it. */
-export function describeSort(sort: SortState): string {
-  const opt = SORT_OPTIONS.find((o) => o.key === sort.key);
-  if (!opt) return 'Sort';
-  return opt.label;
+export function describeSort(sort: SortState, defaultLabel?: string): string {
+  if (sort.key === 'none') return defaultLabel ?? 'Default order';
+  return SORT_OPTIONS.find((o) => o.key === sort.key)?.label ?? 'Sort';
 }
 
-export function isDefaultSort(sort: SortState): boolean {
-  return sort.key === DEFAULT_SORT.key && sort.direction === DEFAULT_SORT.direction;
+export function sameSort(a: SortState, b: SortState): boolean {
+  // Direction is meaningless for "as listed", so two of those are the same
+  // order whatever direction they happen to carry.
+  if (a.key === 'none' && b.key === 'none') return true;
+  return a.key === b.key && a.direction === b.direction;
 }
 
 /**
@@ -104,10 +110,14 @@ export function isDefaultSort(sort: SortState): boolean {
  * backwards way of listing what is missing.
  */
 export function applySort<T extends SortableMovie>(movies: T[], sort: SortState): T[] {
+  // "As listed" is a real answer, not a missing one.
+  if (sort.key === 'none') return movies;
+
   const dir = sort.direction === 'asc' ? 1 : -1;
 
   const value = (m: T): number | string | null => {
     switch (sort.key) {
+      case 'none': return null;
       case 'added': return m.addedAt ? Date.parse(m.addedAt) : null;
       case 'watched': return m.watchedAt ? Date.parse(m.watchedAt) : null;
       case 'myRating': return typeof m.rating === 'number' ? m.rating : null;
@@ -142,11 +152,16 @@ interface SortSheetProps {
   onClose: () => void;
   sort: SortState;
   onChange: (sort: SortState) => void;
-  /** Hides orders that say nothing about an unwatched list. */
-  showWatchedOptions?: boolean;
+  /**
+   * Which orders this screen can actually offer, in the order to show them.
+   * A watchlist has no "date watched"; a TMDB list has no "date added".
+   */
+  options: SortKey[];
+  /** What to call "as listed" here — "Trending order", "Playlist order". */
+  defaultLabel?: string;
 }
 
-export function SortSheet({ visible, onClose, sort, onChange, showWatchedOptions }: SortSheetProps) {
+export function SortSheet({ visible, onClose, sort, onChange, options: keys, defaultLabel }: SortSheetProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
 
@@ -154,6 +169,10 @@ export function SortSheet({ visible, onClose, sort, onChange, showWatchedOptions
     (key: SortKey) => {
       // Choosing the order you already have flips it, so the second tap is
       // the one anybody reaches for next and not a separate control.
+      if (key === 'none') {
+        onChange({ key: 'none', direction: 'desc' });
+        return;
+      }
       if (key === sort.key) {
         onChange({ key, direction: sort.direction === 'desc' ? 'asc' : 'desc' });
         return;
@@ -165,7 +184,10 @@ export function SortSheet({ visible, onClose, sort, onChange, showWatchedOptions
     [sort, onChange]
   );
 
-  const options = SORT_OPTIONS.filter((o) => !o.watchedOnly || showWatchedOptions);
+  // Ordered as the screen asked for them, not as they happen to be declared.
+  const options = keys
+    .map((k) => SORT_OPTIONS.find((o) => o.key === k))
+    .filter((o): o is (typeof SORT_OPTIONS)[number] => Boolean(o));
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -194,8 +216,10 @@ export function SortSheet({ visible, onClose, sort, onChange, showWatchedOptions
                     size={20}
                     color={active ? colors.primary : colors.textFaint}
                   />
-                  <Text style={[styles.rowLabel, active && styles.rowLabelActive]}>{o.label}</Text>
-                  {active ? (
+                  <Text style={[styles.rowLabel, active && styles.rowLabelActive]}>
+                    {o.key === 'none' ? defaultLabel ?? o.label : o.label}
+                  </Text>
+                  {active && o.key !== 'none' ? (
                     <View style={styles.dirChip}>
                       <Ionicons
                         name={sort.direction === 'desc' ? 'arrow-down' : 'arrow-up'}

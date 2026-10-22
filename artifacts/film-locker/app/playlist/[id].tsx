@@ -33,6 +33,7 @@ import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
+import { applySort, type SortState } from '@/components/SortSheet';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -326,6 +327,12 @@ export default function PlaylistScreen() {
 
   const [editVisible, setEditVisible] = useState(false);
   const [filters, setFilters] = useState<FilterState>({});
+  /**
+   * A playlist arrives in the order its owner built it, which is a decision
+   * rather than an accident — so that is where this rests, and sorting is
+   * something you opt into.
+   */
+  const [sort, setSort] = useState<SortState>({ key: 'none', direction: 'desc' });
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
 
   const { data: playlist, isLoading } = useGetPlaylist(numericId, {
@@ -460,13 +467,25 @@ export default function PlaylistScreen() {
         language: saved?.language,
         watchProviders: saved?.watchProviders,
         runtime: saved?.runtime,
+        // Both ratings, without which the rating filter and the two rating
+        // orders had nothing to read on this screen — the merge stopped at
+        // the fields the categorical filters needed.
+        rating: saved?.rating,
+        tmdbRating: saved?.tmdbRating,
+        // A playlist item calls its title filmTitle, and the sort reads
+        // `title` — so sorting alphabetically did nothing at all until
+        // these were mapped across. The release year only exists on the
+        // saved row, so that order is empty for films nobody here owns,
+        // which the sort already handles by sinking them.
+        title: item.filmTitle,
+        releaseYear: saved?.releaseYear,
       };
     }),
     [items, savedByTmdbId]
   );
   const filteredItems = useMemo(
-    () => applyFilters(filterableItems, filters),
-    [filterableItems, filters]
+    () => applySort(applyFilters(filterableItems, filters), sort),
+    [filterableItems, filters, sort]
   );
 
   return (
@@ -549,7 +568,19 @@ export default function PlaylistScreen() {
         </View>
       ) : (
         <>
-          <FilterBar movies={filterableItems} filters={filters} onChange={setFilters} />
+          <FilterBar
+            movies={filterableItems}
+            filters={filters}
+            onChange={setFilters}
+            sort={sort}
+            onSortChange={setSort}
+            // No "date watched": a playlist is a list of films, not a
+            // record of having seen them. "Date added" is when it joined
+            // THIS list, which is what addedAt holds on a playlist item.
+            sortOptions={['none', 'added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']}
+            sortDefault={{ key: 'none', direction: 'desc' }}
+            sortDefaultLabel="Playlist order"
+          />
 
           {filteredItems.length > 0 && (
             <View style={styles.sectionLabelRow}>

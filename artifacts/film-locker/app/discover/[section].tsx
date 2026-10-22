@@ -22,6 +22,7 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { applySort, type SortState } from '@/components/SortSheet';
 import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -29,6 +30,13 @@ import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
 
 // ── Section config ────────────────────────────────────────────────────────────
+
+/** What "as listed" means on each of these, since it is not the same thing. */
+const DEFAULT_ORDER_LABEL: Record<string, string> = {
+  trending: 'Trending order',
+  'new-releases': 'Release order',
+  recommendations: 'Best match',
+};
 
 const SECTION_META: Record<string, { title: string; emoji: string }> = {
   trending: { emoji: '🔥', title: 'Trending This Week' },
@@ -47,23 +55,13 @@ const CARD_H = Math.round(CARD_W * 1.5);
 
 // ── Sort types ────────────────────────────────────────────────────────────────
 
-type SortKey = 'default' | 'newest' | 'oldest';
-
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'default', label: 'Most Popular' },
-  { key: 'newest', label: 'Newest' },
-  { key: 'oldest', label: 'Oldest' },
-];
-
-function sortMovies(movies: TmdbMovieCard[], sort: SortKey): TmdbMovieCard[] {
-  if (sort === 'default') return movies;
-  return [...movies].sort((a, b) => {
-    const ya = parseInt(a.releaseYear || '0', 10);
-    const yb = parseInt(b.releaseYear || '0', 10);
-    return sort === 'newest' ? yb - ya : ya - yb;
-  });
-}
-
+/**
+ * Sorting here used to be three chips offering the release year and nothing
+ * else, with its own SortKey, its own comparator and its own row of
+ * buttons. It is the shared sheet now, which brings rating, runtime and
+ * title with it, and a second place to fix whenever sorting changes has
+ * stopped existing.
+ */
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function DiscoverScreen() {
@@ -76,7 +74,12 @@ export default function DiscoverScreen() {
   const meta = SECTION_META[section ?? ''] ?? { emoji: '🎥', title: 'Explore' };
 
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortKey>('default');
+  /**
+   * As TMDB listed it, which on these screens is the answer rather than the
+   * absence of one — trending IS a ranking, and reordering it by title
+   * throws away the only thing that made the list worth showing.
+   */
+  const [sort, setSort] = useState<SortState>({ key: 'none', direction: 'desc' });
   const [filters, setFilters] = useState<FilterState>({});
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
 
@@ -107,7 +110,7 @@ export default function DiscoverScreen() {
       ? rawMovies.filter((m) => m.title.toLowerCase().includes(q))
       : rawMovies;
     const filterApplied = applyFilters(searched, filters);
-    return sortMovies(filterApplied, sort);
+    return applySort(filterApplied, sort);
   }, [rawMovies, query, filters, sort]);
 
   const hasActiveFilters = Object.values(filters).some(Boolean);
@@ -173,23 +176,21 @@ export default function DiscoverScreen() {
       </View>
 
       {/* Sort chips */}
-      <View style={styles.sortRow}>
-        {SORT_OPTIONS.map((opt) => (
-          <TouchableOpacity
-            key={opt.key}
-            onPress={() => setSort(opt.key)}
-            style={[styles.sortChip, sort === opt.key && styles.sortChipActive]}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.sortChipText, sort === opt.key && styles.sortChipTextActive]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
       {/* Filter bar — Genre, Director, Actor, Language, Streaming */}
-      <FilterBar movies={rawMovies} filters={filters} onChange={setFilters} />
+      <FilterBar
+        movies={rawMovies}
+        filters={filters}
+        onChange={setFilters}
+        sort={sort}
+        onSortChange={setSort}
+        // No "date added" or "date watched": these are films from TMDB, not
+        // rows in anybody's locker. "Your rating" stays, since a film you
+        // have already rated can perfectly well turn up in trending.
+        sortOptions={['none', 'tmdbRating', 'runtime', 'year', 'title', 'myRating']}
+        sortDefault={{ key: 'none', direction: 'desc' }}
+        sortDefaultLabel={DEFAULT_ORDER_LABEL[section ?? ''] ?? 'As listed'}
+      />
 
       {/* Content */}
       {isLoading ? (
@@ -295,29 +296,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     height: '100%',
     ...webInputReset,
   },
-
-  // Sort chips
-  sortRow: {
-    flexDirection: 'row',
-    paddingHorizontal: H_PAD,
-    gap: 8,
-    marginBottom: 14,
-  },
-  sortChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: c.surfaceAlt,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
-  sortChipText: {
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    color: c.textStrong,
-  },
-  sortChipTextActive: { color: c.onColor },
 
   // Grid
   grid: { paddingHorizontal: H_PAD, paddingTop: 2 },
