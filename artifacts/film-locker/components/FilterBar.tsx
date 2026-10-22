@@ -14,7 +14,7 @@ import { RangeSlider, formatRange, MAX_VALUE } from '@/components/RangeSlider';
 import {
   SortSheet,
   describeSort,
-  isDefaultSort,
+  isDefaultSortFor,
   type SortState,
 } from '@/components/SortSheet';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -35,8 +35,16 @@ export interface FilterState {
   actor?: string;
   language?: string;
   streaming?: string;
-  /** One of LENGTH_BUCKETS' labels — a band, not an exact runtime. */
-  length?: string;
+  /**
+   * The span of runtimes to keep, in MINUTES.
+   *
+   * Four fixed bands could only ask the questions somebody else had thought
+   * of — "under 90", "over 2½ hours" — and not "between an hour and a half
+   * and two", which is the one people actually have time for. Absent means
+   * no bound on that side.
+   */
+  runtimeMin?: number;
+  runtimeMax?: number;
   /**
    * The span of TMDB scores to keep, in STARS (0–5 in halves), not in
    * TMDB's own 0–10. Both sliders read in the same units so one gesture
@@ -76,26 +84,39 @@ export interface FilterableMovie {
 }
 
 /**
- * Length is banded rather than listed, because every other filter picks from
- * values that repeat across films — a director or a genre — whereas runtimes
- * are near-unique. A dropdown of "127 min", "128 min", "131 min" would be
- * useless; what people actually want to ask is "have I got time for this
- * tonight?"
+ * The runtime slider's scale: nought to four hours, in ten-minute steps.
  *
- * Bounds are inclusive at both ends and must not overlap.
+ * Four hours because the top of the range has to mean "and up" — there are
+ * films past it, and a slider that stopped at the longest film anybody owns
+ * would move its own ends about as the locker changed. A film over the top
+ * end counts as being at it, so "3 hours and up" catches the five-hour one
+ * as well.
+ *
+ * Ten minutes because a finger cannot pick a single minute on a phone, and
+ * nobody filtering by length wants one.
  */
-export const LENGTH_BUCKETS: Array<{ label: string; min: number; max: number }> = [
-  { label: 'Under 90 min', min: 1, max: 89 },
-  { label: '90 min – 2 hr', min: 90, max: 120 },
-  { label: '2 – 2½ hr', min: 121, max: 150 },
-  { label: 'Over 2½ hr', min: 151, max: Infinity },
-];
+export const RUNTIME_MAX = 240;
+export const RUNTIME_STEPS = 24;
 
-/**
- * TMDB scores out of ten, we score out of five. The sliders both read in
- * stars, so the TMDB floor is doubled on its way to the comparison: three
- * stars asks for 6.0 and up.
- */
+/** "1h 30m", "2h", "45m" — the way anybody says a running time. */
+export function formatRuntime(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/** The span in words, or "Any" when both ends are home. */
+export function formatRuntimeRange(min: number, max: number): string {
+  const open = min <= 0;
+  const full = max >= RUNTIME_MAX;
+  if (open && full) return 'Any';
+  if (open) return `up to ${formatRuntime(max)}`;
+  if (full) return `${formatRuntime(min)}+`;
+  return `${formatRuntime(min)} – ${formatRuntime(max)}`;
+}
+
 export const TMDB_PER_STAR = 2;
 
 /** The TMDB score a star threshold is asking for, as TMDB writes it. */
@@ -124,13 +145,20 @@ function inSpan(
   return score >= min * scale && score <= max * scale;
 }
 
-function matchesLengthBucket(runtime: number | null | undefined, label: string): boolean {
-  // Unknown length is excluded rather than swept into the shortest band —
-  // a film we have no runtime for is not evidence of a short film.
+/**
+ * A runtime span, applied to a length that may not be known.
+ *
+ * Unknown is excluded whenever either end has moved, for the reason the old
+ * band version gave: a film we have no runtime for is not evidence of a
+ * short film. A film LONGER than the top of the scale counts as being at
+ * the top, so the upper end genuinely means "and up".
+ */
+function inRuntimeSpan(runtime: number | null | undefined, min: number, max: number): boolean {
+  const open = min <= 0 && max >= RUNTIME_MAX;
+  if (open) return true;
   if (typeof runtime !== 'number' || runtime <= 0) return false;
-  const bucket = LENGTH_BUCKETS.find((b) => b.label === label);
-  if (!bucket) return false;
-  return runtime >= bucket.min && runtime <= bucket.max;
+  const clamped = Math.min(runtime, RUNTIME_MAX);
+  return clamped >= min && clamped <= max;
 }
 
 interface FilterBarProps {
@@ -144,12 +172,15 @@ interface FilterBarProps {
    */
   sort?: SortState;
   onSortChange?: (sort: SortState) => void;
-  /** Passed through: "date watched" says nothing about an unwatched list. */
+  /**
+   * Whether this list is of watched films. Decides both which orders are
+   * offered and which one counts as the resting default.
+   */
   showWatchedSort?: boolean;
 }
 
 /** The filters that pick a value from the films in front of them. */
-type ChipKey = 'genre' | 'director' | 'actor' | 'language' | 'streaming' | 'length';
+type ChipKey = 'genre' | 'director' | 'actor' | 'language' | 'streaming';
 
 const FILTER_LABELS: Record<ChipKey, string> = {
   genre: 'Genre',
@@ -157,10 +188,9 @@ const FILTER_LABELS: Record<ChipKey, string> = {
   actor: 'Actor',
   language: 'Language',
   streaming: 'Streaming',
-  length: 'Length',
 };
 
-const FILTER_KEYS: ChipKey[] = ['genre', 'length', 'director', 'actor', 'language', 'streaming'];
+const FILTER_KEYS: ChipKey[] = ['genre', 'director', 'actor', 'language', 'streaming'];
 
 /**
  * Rating's own key, which is not a FilterState field: it is one chip over
@@ -182,7 +212,8 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     if (filters.language && m.language !== filters.language) return false;
     if (filters.streaming && !providers.some((p) => p.provider_name === filters.streaming))
       return false;
-    if (filters.length && !matchesLengthBucket(m.runtime, filters.length)) return false;
+    if (!inRuntimeSpan(m.runtime, filters.runtimeMin ?? 0, filters.runtimeMax ?? RUNTIME_MAX))
+      return false;
     if (!inSpan(m.tmdbRating, filters.tmdbMin ?? 0, filters.tmdbMax ?? MAX_VALUE, TMDB_PER_STAR))
       return false;
     if (filters.unratedOnly) {
@@ -207,15 +238,6 @@ function getOptions(movies: FilterableMovie[], key: ChipKey): string[] {
     else if (key === 'language') m.language && values.add(m.language);
     else if (key === 'streaming')
       providers.forEach((p) => p.provider_name && values.add(p.provider_name));
-    else if (key === 'length') {
-      const bucket = LENGTH_BUCKETS.find((b) => matchesLengthBucket(m.runtime, b.label));
-      if (bucket) values.add(bucket.label);
-    }
-  }
-  // Bands have a natural order that alphabetical sorting would destroy
-  // ("2 – 2½ hr" before "Under 90 min"), so keep them in the declared order.
-  if (key === 'length') {
-    return LENGTH_BUCKETS.filter((b) => values.has(b.label)).map((b) => b.label);
   }
   return Array.from(values).sort();
 }
@@ -249,8 +271,23 @@ export function FilterBar({
    * at nought stores a nought, which is falsy, so counting values would
    * report "no filters" while a filter was plainly narrowing the list.
    */
+  const runtimeActive =
+    (filters.runtimeMin ?? 0) > 0 || (filters.runtimeMax ?? RUNTIME_MAX) < RUNTIME_MAX;
+
   const activeCount =
-    FILTER_KEYS.filter((k) => filters[k]).length + (ratingActive ? 1 : 0);
+    FILTER_KEYS.filter((k) => filters[k]).length +
+    (ratingActive ? 1 : 0) +
+    (runtimeActive ? 1 : 0);
+
+  const setRuntime = useCallback(
+    (min: number, max: number) => {
+      const next = { ...filters };
+      if (min > 0) next.runtimeMin = min; else delete next.runtimeMin;
+      if (max < RUNTIME_MAX) next.runtimeMax = max; else delete next.runtimeMax;
+      onChange(next);
+    },
+    [filters, onChange]
+  );
 
   const setSpan = useCallback(
     (which: 'tmdb' | 'my', min: number, max: number) => {
@@ -316,20 +353,20 @@ export function FilterBar({
 
         {sort && onSortChange ? (
           <TouchableOpacity
-            style={[styles.button, !isDefaultSort(sort) && styles.buttonActive]}
+            style={[styles.button, !isDefaultSortFor(sort, Boolean(showWatchedSort)) && styles.buttonActive]}
             onPress={() => setSortOpen(true)}
             activeOpacity={0.75}
           >
             <Ionicons
               name="swap-vertical-outline"
               size={16}
-              color={!isDefaultSort(sort) ? colors.onColor : colors.textStrong}
+              color={!isDefaultSortFor(sort, Boolean(showWatchedSort)) ? colors.onColor : colors.textStrong}
             />
             <Text
-              style={[styles.buttonText, !isDefaultSort(sort) && styles.buttonTextActive]}
+              style={[styles.buttonText, !isDefaultSortFor(sort, Boolean(showWatchedSort)) && styles.buttonTextActive]}
               numberOfLines={1}
             >
-              {isDefaultSort(sort) ? 'Sort' : describeSort(sort)}
+              {isDefaultSortFor(sort, Boolean(showWatchedSort)) ? 'Sort' : describeSort(sort)}
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -350,7 +387,16 @@ export function FilterBar({
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Filters</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetTitle}>Filters</Text>
+                {/* Live, and up here as well as on the button: the whole
+                    reason for one sheet is watching the number move as the
+                    set is built, and the footer is below the fold on a
+                    short phone once a category is open. */}
+                <Text style={styles.sheetCount}>
+                  {matching} of {movies.length} film{movies.length === 1 ? '' : 's'}
+                </Text>
+              </View>
               {activeCount > 0 ? (
                 <TouchableOpacity onPress={clearAll} hitSlop={8}>
                   <Text style={styles.clearAll}>Clear all</Text>
@@ -406,6 +452,27 @@ export function FilterBar({
                     Not rated yet
                   </Text>
                 </TouchableOpacity>
+              </View>
+
+              <View style={[styles.block, styles.blockDivided]}>
+                <View style={styles.blockHead}>
+                  <Text style={styles.blockTitle}>Runtime</Text>
+                  <Text style={styles.blockValue}>
+                    {formatRuntimeRange(
+                      filters.runtimeMin ?? 0,
+                      filters.runtimeMax ?? RUNTIME_MAX
+                    )}
+                  </Text>
+                </View>
+                <RangeSlider
+                  min={filters.runtimeMin ?? 0}
+                  max={filters.runtimeMax ?? RUNTIME_MAX}
+                  onChange={setRuntime}
+                  width={SLIDER_W}
+                  maxValue={RUNTIME_MAX}
+                  steps={RUNTIME_STEPS}
+                  tickEvery={60}
+                />
               </View>
 
               {/* The categorical ones, as rows that open in place. One at a
@@ -530,7 +597,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
   },
-  sheetTitle: { flex: 1, fontSize: 17, fontFamily: 'Inter_700Bold', color: c.text },
+  sheetTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: c.text },
+  sheetCount: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted, marginTop: 1 },
   clearAll: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.primary },
   sheetBody: { paddingHorizontal: 20 },
   block: { paddingVertical: 14 },

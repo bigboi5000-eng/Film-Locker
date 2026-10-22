@@ -34,25 +34,45 @@ export interface RangeSliderProps {
   onChange: (min: number, max: number) => void;
   /** Given rather than measured — see the note at the top of this file. */
   width: number;
+  /**
+   * The scale, which is half-stars unless told otherwise.
+   *
+   * Runtime wants the same control over a different range — nought to four
+   * hours in ten-minute steps — and a second slider that worked slightly
+   * differently would be a second set of bugs. So the geometry takes the
+   * scale as numbers rather than assuming the one it was written for.
+   */
+  maxValue?: number;
+  steps?: number;
+  /** Where to draw a tick. Defaults to every whole unit of the scale. */
+  tickEvery?: number;
 }
 
 const THUMB = 24;
 const TRACK_H = 5;
 
-/** Snap a position along the track to the nearest half-star. */
-function valueAt(x: number, usable: number): number {
+/** Snap a position along the track to the nearest step on the scale. */
+function valueAt(x: number, usable: number, maxValue: number, steps: number): number {
   const ratio = Math.min(Math.max(x / usable, 0), 1);
-  return Math.round(ratio * STEPS) / 2;
+  return (Math.round(ratio * steps) / steps) * maxValue;
 }
 
-export function RangeSlider({ min, max, onChange, width }: RangeSliderProps) {
+export function RangeSlider({
+  min,
+  max,
+  onChange,
+  width,
+  maxValue = MAX_VALUE,
+  steps = STEPS,
+  tickEvery = 1,
+}: RangeSliderProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
 
   // The thumbs are centred on their value, so the travel available to them
   // is the width less one thumb — half a thumb of margin at each end.
   const usable = useMemo(() => Math.max(width - THUMB, 1), [width]);
-  const xOf = useCallback((v: number) => (v / MAX_VALUE) * usable, [usable]);
+  const xOf = useCallback((v: number) => (v / maxValue) * usable, [usable, maxValue]);
 
   /** Which handle the finger took hold of, for the length of the gesture. */
   const holding = useRef<'min' | 'max'>('min');
@@ -92,32 +112,32 @@ export function RangeSlider({ min, max, onChange, width }: RangeSliderProps) {
 
   const onGrant = useCallback(
     (e: GestureResponderEvent) => {
-      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable);
+      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
       holding.current = pick(v);
       lastStep.current = v;
       setLive(apply(v, holding.current));
     },
-    [usable, pick, apply]
+    [usable, maxValue, steps, pick, apply]
   );
 
   const onMove = useCallback(
     (e: GestureResponderEvent) => {
-      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable);
+      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
       if (v === lastStep.current) return;
       lastStep.current = v;
       setLive(apply(v, holding.current));
     },
-    [usable, apply]
+    [usable, maxValue, steps, apply]
   );
 
   const onRelease = useCallback(
     (e: GestureResponderEvent) => {
-      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable);
+      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
       const next = apply(v, holding.current);
       setLive(null);
       onChange(next.min, next.max);
     },
-    [usable, apply, onChange]
+    [usable, maxValue, steps, apply, onChange]
   );
 
   const left = xOf(shown.min);
@@ -144,8 +164,8 @@ export function RangeSlider({ min, max, onChange, width }: RangeSliderProps) {
         <View style={styles.track} />
         <View style={[styles.fill, { left, width: Math.max(right - left, 0) }]} />
 
-        {/* A tick at each whole star, so the scale reads without labels. */}
-        {[0, 1, 2, 3, 4, 5].map((n) => (
+        {/* A tick at each round value, so the scale reads without labels. */}
+        {Array.from({ length: Math.floor(maxValue / tickEvery) + 1 }, (_, i) => i * tickEvery).map((n) => (
           <View key={n} style={[styles.tick, { left: xOf(n) - 1 }]} />
         ))}
 

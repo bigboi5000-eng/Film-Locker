@@ -27,8 +27,26 @@ export interface SortState {
   direction: 'asc' | 'desc';
 }
 
-/** What the list arrives in, and what it goes back to when sort is cleared. */
+/** What a watchlist arrives in, and goes back to. */
 export const DEFAULT_SORT: SortState = { key: 'added', direction: 'desc' };
+
+/**
+ * The order a list should be in when nobody has chosen one.
+ *
+ * Not the same answer for both tabs. A watchlist is a queue, so the
+ * interesting end is what you added most recently; a watched list is a
+ * history, so it is what you watched most recently. Defaulting both to
+ * "date added" put a film watched last night below one added last year.
+ */
+export function defaultSortFor(watched: boolean): SortState {
+  return { key: watched ? 'watched' : 'added', direction: 'desc' };
+}
+
+/** Whether this is the resting order for the list it is sorting. */
+export function isDefaultSortFor(sort: SortState, watched: boolean): boolean {
+  const d = defaultSortFor(watched);
+  return sort.key === d.key && sort.direction === d.direction;
+}
 
 /**
  * The orders worth offering, with the words each one actually means.
