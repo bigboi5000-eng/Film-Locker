@@ -32,6 +32,7 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { applySort, DEFAULT_SORT, type SortState } from '@/components/SortSheet';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 import { confirmDestructive } from '@/lib/confirm';
 import {
@@ -163,9 +164,14 @@ export default function WatchlistScreen() {
   // streaming service, so carrying a filter across usually lands on an
   // empty grid that looks like the switch did nothing.
   const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const switchMode = useCallback((next: FilmsMode) => {
     setMode(next);
     setFilters({});
+    // The sort goes back too. "Date watched" is not an order a watchlist
+    // has, so carrying it across would leave the other tab sorted by a
+    // value every film in it is missing.
+    setSort(DEFAULT_SORT);
   }, []);
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
   const [resultMatches, setResultMatches] = useState<GeminiMovieMatch[]>([]);
@@ -232,8 +238,10 @@ export default function WatchlistScreen() {
   );
 
   const filteredMovies = useMemo(
-    () => applyFilters(watchlistMovies, filters),
-    [watchlistMovies, filters]
+    // Sorted after filtering rather than before: ordering a list and then
+    // removing most of it does the same work twice.
+    () => applySort(applyFilters(watchlistMovies, filters), sort),
+    [watchlistMovies, filters, sort]
   );
 
   const searchResults = searchData?.movies ?? [];
@@ -416,7 +424,15 @@ export default function WatchlistScreen() {
 
       {/* Filter bar — hidden while searching or asking the AI */}
       {!isSearchActive && !tools.aiOpen && (
-        <FilterBar movies={watchlistMovies} filters={filters} onChange={setFilters} />
+        <FilterBar
+          movies={watchlistMovies}
+          filters={filters}
+          onChange={setFilters}
+          sort={sort}
+          onSortChange={setSort}
+          // "Date watched" is only an order on a list of watched films.
+          showWatchedSort={mode === 'watched'}
+        />
       )}
 
       {/* Context label row */}

@@ -553,17 +553,23 @@ function CommunitySection({
   }, [queryClient, tmdbId]);
 
   const handleCommunityRating = useCallback(
-    async (n: number) => {
+    async (n: number, viaDrag: boolean) => {
       if (!isLoggedIn) {
         Alert.alert('Sign in required', 'Please sign in to rate this film.');
         return;
       }
       if (Platform.OS !== 'web') Haptics.selectionAsync();
 
-      // Tapping the star you already gave clears it, which is how the
-      // private rating directly above has always behaved. Two sets of stars
-      // on one screen should not need two different mental models.
-      const clearing = userRating === n;
+      // Tapping the star you already gave clears it. SLIDING onto it does
+      // not — landing on your own score mid-drag is how you confirm it, not
+      // how you delete it, which is the rule the private rating has always
+      // followed and this one did not.
+      //
+      // The difference is the whole of "halves don't work here": slide
+      // towards three and a half, overshoot onto the four you already had,
+      // and the rating vanished. The control was reporting which gesture it
+      // was all along; this was the one caller not listening.
+      const clearing = !viaDrag && userRating === n;
 
       try {
         if (clearing) {
@@ -581,8 +587,16 @@ function CommunitySection({
         // The server copies this onto the viewer's own rating of the film;
         // tell the parent so the stars for it move too.
         onRatingChanged?.(n);
-      } catch {
-        Alert.alert('Error', clearing ? 'Could not remove your rating.' : 'Could not save your rating.');
+      } catch (err) {
+        // The server's own words, as the private rating already reports
+        // them. A half-star reaching a deployment whose column has not been
+        // widened yet says exactly that, and "Could not save your rating"
+        // sends the reader nowhere.
+        const detail = err instanceof Error ? err.message : '';
+        Alert.alert(
+          clearing ? 'Could not remove your rating' : 'Could not save your rating',
+          detail || 'Please try again.'
+        );
       }
     },
     [isLoggedIn, submitRating, deleteRating, tmdbId, invalidateScore, userRating, onRatingChanged]
