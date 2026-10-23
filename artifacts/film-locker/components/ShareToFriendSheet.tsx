@@ -22,6 +22,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -35,6 +36,71 @@ import {
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
+
+/**
+ * One person in the list.
+ *
+ * Declared out here rather than inside the sheet, which is what made the
+ * search feel dead. A component declared in a render body is a NEW function
+ * on every render, and React compares element types by identity — so every
+ * keystroke in the filter box did not re-render the rows, it unmounted and
+ * rebuilt all of them, avatars and all. The list flickered, anything in
+ * flight was thrown away, and nothing looked like it was responding to what
+ * was being typed.
+ */
+function UserRow({
+  user,
+  sent,
+  sending,
+  onSend,
+  onOpenChat,
+}: {
+  user: NotificationUser;
+  sent: boolean;
+  sending: boolean;
+  onSend: (user: NotificationUser) => void;
+  onOpenChat: (user: NotificationUser) => void;
+}) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
+  const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
+
+  return (
+    <View style={styles.userRow}>
+      {/* The person, not just a label: tapping them opens the conversation
+          you already have with them, which is where you were going to end
+          up anyway after recommending something. */}
+      <TouchableOpacity
+        style={styles.userTap}
+        onPress={() => onOpenChat(user)}
+        activeOpacity={0.6}
+      >
+        {user.avatarUrl ? (
+          <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Text style={styles.avatarInitials} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
+          </View>
+        )}
+        <Text style={styles.username} numberOfLines={1}>{user.username ?? 'Unknown'}</Text>
+        <Ionicons name="chevron-forward" size={15} color={colors.textFaint} style={styles.userChevron} />
+      </TouchableOpacity>
+      {sending ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : sent ? (
+        <View style={styles.sentBadge}>
+          <Ionicons name="checkmark" size={14} color={colors.successStrong} />
+          <Text style={styles.sentText}>Sent!</Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.sendBtn} onPress={() => onSend(user)} activeOpacity={0.8}>
+          <Ionicons name="paper-plane-outline" size={14} color={colors.onColor} style={{ marginRight: 4 }} />
+          <Text style={styles.sendBtnText}>Send</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
 
 interface ShareToFriendSheetProps {
   visible: boolean;
@@ -53,6 +119,7 @@ export function ShareToFriendSheet({
 }: ShareToFriendSheetProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [sendingTo, setSendingTo] = useState<string | null>(null);
@@ -90,47 +157,24 @@ export function ShareToFriendSheet({
     [send, tmdbId, filmTitle, posterUrl]
   );
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setQuery('');
     setSentTo(new Set());
     onClose();
-  }
+  }, [onClose]);
 
-  function UserRow({ user }: { user: NotificationUser }) {
-    const initials = (user.displayInitials || user.username || '?').slice(0, 5).toUpperCase();
-    const alreadySent = sentTo.has(user.clerkId);
-    const sending = sendingTo === user.clerkId;
-
-    return (
-      <View style={styles.userRow}>
-        {user.avatarUrl ? (
-          <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
-        ) : (
-          <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitials} numberOfLines={1} adjustsFontSizeToFit>{initials}</Text>
-          </View>
-        )}
-        <Text style={styles.username}>{user.username ?? 'Unknown'}</Text>
-        {sending ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : alreadySent ? (
-          <View style={styles.sentBadge}>
-            <Ionicons name="checkmark" size={14} color={colors.successStrong} />
-            <Text style={styles.sentText}>Sent!</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.sendBtn}
-            onPress={() => handleSend(user)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="paper-plane-outline" size={14} color={colors.onColor} style={{ marginRight: 4 }} />
-            <Text style={styles.sendBtnText}>Send</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }
+  const handleOpenChat = useCallback(
+    (user: NotificationUser) => {
+      // Shut the sheet before routing, or the conversation opens behind a
+      // modal that is still sitting on top of it.
+      handleClose();
+      router.push({
+        pathname: '/inbox/[userId]',
+        params: { userId: user.clerkId, username: user.username ?? '' },
+      });
+    },
+    [handleClose, router]
+  );
 
   return (
     <Modal
@@ -141,7 +185,11 @@ export function ShareToFriendSheet({
     >
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // 'height' on Android, not undefined. Undefined means the view does
+        // nothing at all, so the sheet stayed pinned to the bottom of the
+        // screen with the keyboard drawn over the search box and the top of
+        // the list. Every other sheet in the app already does this.
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <TouchableOpacity style={styles.backdrop} onPress={handleClose} activeOpacity={1} />
         <View style={styles.sheet}>
@@ -190,7 +238,15 @@ export function ShareToFriendSheet({
             <FlatList
               data={filtered}
               keyExtractor={(u) => u.clerkId}
-              renderItem={({ item }) => <UserRow user={item} />}
+              renderItem={({ item }) => (
+                <UserRow
+                  user={item}
+                  sent={sentTo.has(item.clerkId)}
+                  sending={sendingTo === item.clerkId}
+                  onSend={handleSend}
+                  onOpenChat={handleOpenChat}
+                />
+              )}
               style={styles.list}
               keyboardShouldPersistTaps="handled"
             />
@@ -247,7 +303,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
   avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { fontSize: 14, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  userTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
+  userChevron: { marginHorizontal: 6 },
 
   sendBtn: {
     flexDirection: 'row', alignItems: 'center',

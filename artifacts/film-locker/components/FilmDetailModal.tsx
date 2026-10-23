@@ -916,12 +916,15 @@ const makeCommunityStyles = (c: Palette) => StyleSheet.create({
 function RecommendSheet({
   visible,
   onClose,
+  onOpenChat,
   tmdbId,
   filmTitle,
   posterUrl,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** Tapping the person rather than the Send button. */
+  onOpenChat: (user: NotificationUser) => void;
   tmdbId: number;
   filmTitle: string;
   posterUrl: string;
@@ -964,21 +967,35 @@ function RecommendSheet({
 
       return (
         <View style={rsStyles.userRow}>
-          {/* Avatar */}
-          {item.avatarUrl ? (
-            <Image
-              source={{ uri: item.avatarUrl }}
-              style={rsStyles.avatar}
-              contentFit="cover"
+          {/* The person, not just a label: tapping them opens the
+              conversation you already have, which is where recommending
+              something was heading anyway. */}
+          <TouchableOpacity
+            style={rsStyles.userTap}
+            onPress={() => onOpenChat(item)}
+            activeOpacity={0.6}
+          >
+            {item.avatarUrl ? (
+              <Image
+                source={{ uri: item.avatarUrl }}
+                style={rsStyles.avatar}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[rsStyles.avatar, rsStyles.avatarFallback]}>
+                <Text style={rsStyles.avatarText}>{initials}</Text>
+              </View>
+            )}
+            <Text style={rsStyles.username} numberOfLines={1}>
+              {name}
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={15}
+              color={colors.textFaint}
+              style={rsStyles.userChevron}
             />
-          ) : (
-            <View style={[rsStyles.avatar, rsStyles.avatarFallback]}>
-              <Text style={rsStyles.avatarText}>{initials}</Text>
-            </View>
-          )}
-          <Text style={rsStyles.username} numberOfLines={1}>
-            {name}
-          </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[rsStyles.sendBtn, sent && rsStyles.sendBtnSent]}
             onPress={() => handleSend(item)}
@@ -994,7 +1011,7 @@ function RecommendSheet({
         </View>
       );
     },
-    [sentIds, isPending, handleSend]
+    [sentIds, isPending, handleSend, onOpenChat, colors, rsStyles]
   );
 
   return (
@@ -1075,7 +1092,9 @@ const makeRsStyles = (c: Palette) => StyleSheet.create({
   avatar: { width: 40, height: 40, borderRadius: 20, flexShrink: 0 },
   avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: c.avatarFg },
+  userTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
+  userChevron: { marginHorizontal: 6 },
   sendBtn: {
     backgroundColor: c.primary,
     paddingHorizontal: 16,
@@ -1770,6 +1789,17 @@ export function FilmDetailModal({
       <RecommendSheet
         visible={recommendVisible}
         onClose={() => setRecommendVisible(false)}
+        onOpenChat={(user) => {
+          // Both modals have to go: this sheet sits inside the film sheet,
+          // so closing only the top one leaves the conversation underneath
+          // a film still covering the screen.
+          setRecommendVisible(false);
+          handleClose();
+          router.push({
+            pathname: '/inbox/[userId]',
+            params: { userId: user.clerkId, username: user.username ?? '' },
+          });
+        }}
         tmdbId={tmdbId}
         filmTitle={title}
         posterUrl={posterUrl}
