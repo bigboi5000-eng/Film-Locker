@@ -45,9 +45,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     # The compile is on this runner now, so this is the real build time
-    # rather than the time to upload a tarball. Forty minutes of headroom on
-    # a build that takes twenty to thirty from cold.
-    timeout-minutes: 60
+    # rather than the time to upload a tarball. Twenty to thirty minutes in
+    # the ordinary case, but that is WITH the caches restoring. When
+    # GitHub's cache service is having a bad day -- "Cache service responded
+    # with 400" -- Gradle starts from nothing and sixty was not enough, so a
+    # perfectly good build was thrown away at the ceiling. Ninety costs
+    # nothing on a run that does not need it.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
