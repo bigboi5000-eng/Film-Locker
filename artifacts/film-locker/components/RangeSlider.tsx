@@ -111,6 +111,18 @@ export function RangeSlider({
   );
 
   /**
+   * The track's left edge in page space, captured as the finger goes down.
+   *
+   * Same reason as StarRating's: Android re-runs hit testing on every
+   * ACTION_MOVE and reports locationX against whatever view is under the
+   * finger then, not against the view holding the responder. A finger
+   * sliding along a track forty pixels tall leaves it constantly, and each
+   * time it does the origin moves. pageX minus this is stable wherever the
+   * finger goes.
+   */
+  const originX = useRef(0);
+
+  /**
    * Returns true so the sheet's ScrollView cannot take the drag. See the
    * note on StarRating's onGrant: that return value becomes React Native's
    * blockNativeResponder, and without it a slide is only ever held by a
@@ -118,7 +130,10 @@ export function RangeSlider({
    */
   const onGrant = useCallback(
     (e: GestureResponderEvent): boolean => {
-      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
+      const { locationX, pageX } = e.nativeEvent;
+      // The one event whose locationX is known to be ours.
+      originX.current = pageX - locationX;
+      const v = valueAt(locationX - THUMB / 2, usable, maxValue, steps);
       holding.current = pick(v);
       lastStep.current = v;
       setLive(apply(v, holding.current));
@@ -129,7 +144,8 @@ export function RangeSlider({
 
   const onMove = useCallback(
     (e: GestureResponderEvent) => {
-      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
+      const x = e.nativeEvent.pageX - originX.current;
+      const v = valueAt(x - THUMB / 2, usable, maxValue, steps);
       if (v === lastStep.current) return;
       lastStep.current = v;
       setLive(apply(v, holding.current));
@@ -139,7 +155,8 @@ export function RangeSlider({
 
   const onRelease = useCallback(
     (e: GestureResponderEvent) => {
-      const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
+      const x = e.nativeEvent.pageX - originX.current;
+      const v = valueAt(x - THUMB / 2, usable, maxValue, steps);
       const next = apply(v, holding.current);
       setLive(null);
       onChange(next.min, next.max);

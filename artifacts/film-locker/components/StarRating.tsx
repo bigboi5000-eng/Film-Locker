@@ -7,17 +7,20 @@
  * and the ones in other sets lean the wrong way against a left-to-right
  * fill.
  *
- * Two gestures, deliberately different:
+ * Where your finger is IS the rating, whether it taps or slides. Ten zones
+ * of equal width, each half a star.
  *
- *  - A tap gives a WHOLE star, always. Hitting the left edge of the fourth
- *    star and getting 3½ is the kind of precision nobody asked a tap for,
- *    and the commonest rating in any five-star system is a round number.
- *  - A drag gives halves, following the finger, like a slider. Precision is
- *    something you opt into by taking the time to slide.
+ * A tap used to give a whole star always, on the reasoning that nobody asks
+ * a tap for half-star precision. In practice that left a half reachable
+ * only by sliding, so when sliding was broken there was no way to give one
+ * at all — and being unable to say three and a half is worse than
+ * occasionally meaning four and getting it on the second try. The value
+ * under the finger is shown before it is committed either way, so a tap
+ * that lands on the wrong side of a star can be slid onto the right one
+ * without lifting.
  *
- * The value under the finger is shown as it moves and only committed on
- * release, so a drag across the row does not fire five writes on its way to
- * the one that was meant.
+ * The value is only committed on release, so a drag across the row does not
+ * fire five writes on its way to the one that was meant.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Platform, type GestureResponderEvent } from 'react-native';
@@ -141,6 +144,34 @@ export function StarRating({
   const [held, setHeld] = useState<number | null>(null);
   const startX = useRef(0);
   const startPage = useRef({ x: 0, y: 0 });
+  /**
+   * The container's left edge in page space, captured once as the finger
+   * goes down. Every x after that is derived from it.
+   *
+   * locationX cannot be used for a drag on Android, and this is the whole
+   * of why the stars jumped about instead of following the finger.
+   * JSTouchDispatcher re-runs hit testing on EVERY ACTION_MOVE
+   * (`findTargetTagAndSetCoordinates(ev)`) and fills targetCoordinates
+   * with the position "in the target view" — the view under the finger at
+   * that instant — while still dispatching the event to the view that
+   * holds the responder. So locationX is measured from whatever happens to
+   * be under your finger, which is only this control while the finger
+   * stays inside it. The row is twenty-eight pixels tall; a sideways slide
+   * strays above or below it constantly, and each time it does the origin
+   * jumps to some ancestor's left edge and the rating leaps.
+   *
+   * It is also why the private row escaped. Its container sits in a block,
+   * so its left edge and its parent's are the same place and the jump is
+   * nearly nothing. The community row has a label beside it, putting its
+   * left edge some hundred and fifty pixels in — the better part of the
+   * control's own width, so a stray pixel of vertical drift threw the
+   * rating anywhere.
+   *
+   * pageX is relative to the root view and means the same thing in every
+   * event, so this origin plus pageX is exact however far the finger
+   * wanders.
+   */
+  const originX = useRef(0);
   /** Set once the gesture is clearly a scroll rather than a rating. */
   const verticalRef = useRef(false);
   const movedRef = useRef(false);
@@ -189,7 +220,7 @@ export function StarRating({
 
   /** Where along the row the finger is, as a rating. */
   const ratingAt = useCallback(
-    (x: number, halves: boolean): number => {
+    (x: number): number => {
       const stride = size + gap;
       // The far left quarter of the first star is nought, where that is a
       // value at all. It costs that star a little of its half-zone and buys
@@ -212,7 +243,6 @@ export function StarRating({
       // entirely to the one behind.
       const shifted = x + gap / 2;
       const index = Math.min(Math.max(Math.floor(shifted / stride), 0), 4);
-      if (!halves) return index + 1;
       const within = shifted - index * stride;
       return index + (within < stride / 2 ? 0.5 : 1);
     },
@@ -240,15 +270,19 @@ export function StarRating({
    */
   const onGrant = useCallback(
     (e: GestureResponderEvent): boolean => {
-      startX.current = e.nativeEvent.locationX;
-      // Page coordinates, because these are only ever used as deltas and a
-      // delta does not care what it is measured from.
-      startPage.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+      const { locationX, pageX, pageY } = e.nativeEvent;
+      // ACTION_DOWN is the one moment locationX is known to be ours: the
+      // finger is inside this view, because that is how the gesture was
+      // granted in the first place. So this is the only chance to learn
+      // where the view's left edge is, and after this nothing reads
+      // locationX again.
+      originX.current = pageX - locationX;
+      startX.current = locationX;
+      startPage.current = { x: pageX, y: pageY };
       verticalRef.current = false;
       movedRef.current = false;
       onInteractionChange?.(true);
-      // A press starts on the whole star under it; sliding refines it.
-      const next = ratingAt(e.nativeEvent.locationX, false);
+      const next = ratingAt(locationX);
       lastStepRef.current = next;
       setPreview(next);
       return true;
@@ -258,7 +292,7 @@ export function StarRating({
 
   const onMove = useCallback(
     (e: GestureResponderEvent) => {
-      const x = e.nativeEvent.locationX;
+      const x = e.nativeEvent.pageX - originX.current;
       const dx = Math.abs(e.nativeEvent.pageX - startPage.current.x);
       const dy = Math.abs(e.nativeEvent.pageY - startPage.current.y);
       // Once, and it stays decided: a gesture that set off downwards is a
@@ -268,7 +302,7 @@ export function StarRating({
         verticalRef.current = true;
       }
       if (!movedRef.current && Math.abs(x - startX.current) > TAP_SLOP) movedRef.current = true;
-      const next = ratingAt(x, movedRef.current);
+      const next = ratingAt(x);
       if (next !== lastStepRef.current) {
         lastStepRef.current = next;
         setPreview(next);
@@ -282,7 +316,12 @@ export function StarRating({
 
   const onRelease = useCallback(
     (e: GestureResponderEvent) => {
-      const next = ratingAt(e.nativeEvent.locationX, movedRef.current);
+      // ACTION_UP re-runs the same hit test ACTION_MOVE does, so the
+      // release has to come from page space too or a rating can be thrown
+      // off by the last pixel of the gesture alone.
+      const next = ratingAt(e.nativeEvent.pageX - originX.current);
+      // Still tracked, because tapping the score you already have clears it
+      // while sliding onto it does not.
       const viaDrag = movedRef.current;
       onInteractionChange?.(false);
       setPreview(null);
@@ -309,9 +348,11 @@ export function StarRating({
       // and a drag could only ever reach a half or a whole, because the
       // whole gesture was being measured against a single star's width.
       //
-      // Android computes that origin once, on ACTION_DOWN, and reuses it for
-      // every move and the release (JSTouchDispatcher), so one wrong press
-      // skewed the entire gesture rather than just its first frame.
+      // Android resolves that target on ACTION_DOWN and dispatches every
+      // later event to it, so one wrong press skewed a whole gesture rather
+      // than just its first frame. It does NOT reuse the origin, though —
+      // see originX above, which is the reason nothing here reads locationX
+      // after the grant.
       //
       // `none` means "this view and its children can't be the target", so
       // the responder below is, and x is measured from the row's own left
