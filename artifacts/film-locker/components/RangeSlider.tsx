@@ -110,12 +110,19 @@ export function RangeSlider({
     [shown.min, shown.max]
   );
 
+  /**
+   * Returns true so the sheet's ScrollView cannot take the drag. See the
+   * note on StarRating's onGrant: that return value becomes React Native's
+   * blockNativeResponder, and without it a slide is only ever held by a
+   * React state change racing the native scroll recogniser.
+   */
   const onGrant = useCallback(
-    (e: GestureResponderEvent) => {
+    (e: GestureResponderEvent): boolean => {
       const v = valueAt(e.nativeEvent.locationX - THUMB / 2, usable, maxValue, steps);
       holding.current = pick(v);
       lastStep.current = v;
       setLive(apply(v, holding.current));
+      return true;
     },
     [usable, maxValue, steps, pick, apply]
   );

@@ -219,8 +219,27 @@ export function StarRating({
     [size, gap, allowZero]
   );
 
+  /**
+   * Returns true, and that return value is the whole fix for a drag that
+   * dies halfway.
+   *
+   * React Native reads what onResponderGrant returns and passes it to
+   * UIManager.setJSResponder as blockNativeResponder — in the renderer:
+   * `blockHostResponder = (true === executeDirectDispatch(grantEvent))`.
+   * When it is true, Android calls requestDisallowInterceptTouchEvent on
+   * every ancestor, and the enclosing ScrollView cannot intercept the
+   * gesture at any point. When it is false — which is what a callback
+   * returning undefined means — the ScrollView is free to claim the drag
+   * the moment the finger passes its touch slop, and JS finds out via
+   * onResponderTerminate, with the rating abandoned wherever it had got to.
+   *
+   * That is why taps were fine and slides were not: a tap never travels
+   * far enough for the ScrollView to want it. scrollEnabled={!starActive}
+   * was covering for this, but it is a React state change racing a native
+   * gesture recogniser, and it only has to lose once.
+   */
   const onGrant = useCallback(
-    (e: GestureResponderEvent) => {
+    (e: GestureResponderEvent): boolean => {
       startX.current = e.nativeEvent.locationX;
       // Page coordinates, because these are only ever used as deltas and a
       // delta does not care what it is measured from.
@@ -232,6 +251,7 @@ export function StarRating({
       const next = ratingAt(e.nativeEvent.locationX, false);
       lastStepRef.current = next;
       setPreview(next);
+      return true;
     },
     [ratingAt, onInteractionChange]
   );
