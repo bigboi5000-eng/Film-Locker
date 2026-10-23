@@ -301,6 +301,12 @@ interface FilterBarProps {
   sortDefault?: SortState;
   /** What "as listed" is called here — "Trending order", and so on. */
   sortDefaultLabel?: string;
+  /**
+   * Whether to offer filtering by your own rating. False on a watchlist,
+   * where in principle you have not seen any of these films yet, so the
+   * control can only ever filter the whole list away.
+   */
+  showMyRating?: boolean;
 }
 
 /** The filters that pick a value from the films in front of them. */
@@ -387,6 +393,7 @@ export function FilterBar({
   sortOptions,
   sortDefault = DEFAULT_SORT,
   sortDefaultLabel,
+  showMyRating = true,
 }: FilterBarProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -533,8 +540,16 @@ export function FilterBar({
         animationType="slide"
         onRequestClose={() => setFilterOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+        <View style={styles.backdrop}>
+          {/* The backdrop is its own layer behind the sheet rather than a
+              Pressable wrapped AROUND it. Wrapping it means every touch on
+              the sheet is first considered as a press on that Pressable,
+              which claims the responder on touch-down and re-renders for its
+              pressed state — so dragging the list inside started late and
+              felt like it was being dragged through treacle, most of all
+              once a category was open and there was something to scroll. */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterOpen(false)} />
+          <View style={styles.sheet}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
@@ -577,6 +592,7 @@ export function FilterBar({
                 />
               </View>
 
+              {showMyRating && (
               <View style={[styles.block, styles.blockDivided]}>
                 <View style={styles.blockHead}>
                   <Text style={styles.blockTitle}>Your rating</Text>
@@ -603,6 +619,7 @@ export function FilterBar({
                   </Text>
                 </TouchableOpacity>
               </View>
+              )}
 
               <View style={[styles.block, styles.blockDivided]}>
                 <View style={styles.blockHead}>
@@ -711,8 +728,8 @@ export function FilterBar({
                 </Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {sort && onSortChange ? (

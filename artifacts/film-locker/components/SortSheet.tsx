@@ -191,8 +191,16 @@ export function SortSheet({ visible, onClose, sort, onChange, options: keys, def
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.backdrop}>
+        {/* The backdrop is its own layer behind the sheet rather than a
+            Pressable wrapped AROUND it. Wrapping it means every touch on
+            the sheet is first considered as a press on that Pressable,
+            which claims the responder on touch-down and re-renders for its
+            pressed state — so dragging the list inside started late and
+            felt like it was being dragged through treacle, most of all
+            once a category was open and there was something to scroll. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.sheet}>
           <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={styles.title}>Sort by</Text>
@@ -236,8 +244,8 @@ export function SortSheet({ visible, onClose, sort, onChange, options: keys, def
             })}
             <Text style={styles.hint}>Tap the selected order again to reverse it.</Text>
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

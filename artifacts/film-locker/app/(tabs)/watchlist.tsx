@@ -505,12 +505,16 @@ export default function WatchlistScreen() {
           onChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          // "Date watched" is only an order on a list of watched films.
+          // "Date watched" is only an order on a list of watched films,
+          // and "Your rating" only means anything once there is one — on a
+          // watchlist you have, in principle, seen none of these yet, so
+          // both the order and the filter would be sorting by nothing.
           sortOptions={
             mode === 'watched'
               ? ['watched', 'added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']
-              : ['added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']
+              : ['added', 'tmdbRating', 'runtime', 'title', 'year']
           }
+          showMyRating={mode === 'watched'}
           sortDefault={defaultSortFor(mode === 'watched')}
         />
         </View>

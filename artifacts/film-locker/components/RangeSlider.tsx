@@ -48,6 +48,9 @@ export interface RangeSliderProps {
   tickEvery?: number;
 }
 
+/** How far down a finger travels before the gesture is read as a scroll. */
+const SCROLL_SLOP = 12;
+
 const THUMB = 24;
 const TRACK_H = 5;
 
@@ -121,23 +124,33 @@ export function RangeSlider({
    * finger goes.
    */
   const originX = useRef(0);
+  /** Set once the gesture is clearly a scroll rather than a slide. */
+  const verticalRef = useRef(false);
+  const startPage = useRef({ x: 0, y: 0 });
 
   /**
-   * Returns true so the sheet's ScrollView cannot take the drag. See the
-   * note on StarRating's onGrant: that return value becomes React Native's
-   * blockNativeResponder, and without it a slide is only ever held by a
-   * React state change racing the native scroll recogniser.
+   * Deliberately does NOT return true.
+   *
+   * Returning true sets React Native's blockNativeResponder, which calls
+   * requestDisallowInterceptTouchEvent on every ancestor — and three
+   * full-width sliders stacked down a scrolling sheet then make most of
+   * that sheet a place where dragging does nothing at all. The sliders do
+   * not need it: a vertical ScrollView only intercepts once |deltaY|
+   * passes its touch slop, so it was never going to take a sideways slide.
+   * StarRating does block, because it is one short row and holding the
+   * scroll still while a finger is on it is the behaviour wanted there.
    */
   const onGrant = useCallback(
-    (e: GestureResponderEvent): boolean => {
-      const { locationX, pageX } = e.nativeEvent;
+    (e: GestureResponderEvent) => {
+      const { locationX, pageX, pageY } = e.nativeEvent;
       // The one event whose locationX is known to be ours.
       originX.current = pageX - locationX;
+      startPage.current = { x: pageX, y: pageY };
+      verticalRef.current = false;
       const v = valueAt(locationX - THUMB / 2, usable, maxValue, steps);
       holding.current = pick(v);
       lastStep.current = v;
       setLive(apply(v, holding.current));
-      return true;
     },
     [usable, maxValue, steps, pick, apply]
   );
@@ -145,6 +158,11 @@ export function RangeSlider({
   const onMove = useCallback(
     (e: GestureResponderEvent) => {
       const x = e.nativeEvent.pageX - originX.current;
+      // Decided once: a gesture that set off downwards is the sheet being
+      // scrolled, and saying so lets the scroll view have it.
+      const dx = Math.abs(e.nativeEvent.pageX - startPage.current.x);
+      const dy = Math.abs(e.nativeEvent.pageY - startPage.current.y);
+      if (!verticalRef.current && dy > SCROLL_SLOP && dy > dx) verticalRef.current = true;
       const v = valueAt(x - THUMB / 2, usable, maxValue, steps);
       if (v === lastStep.current) return;
       lastStep.current = v;
@@ -172,10 +190,10 @@ export function RangeSlider({
       style={{ width, height: THUMB + 10, justifyContent: 'center' }}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
-      // Kept for the whole gesture. This sits in a dropdown that does not
-      // scroll, but the rule belongs to the control rather than to where it
-      // happens to be used today.
-      onResponderTerminationRequest={() => false}
+      // Handed over only for a clearly downward gesture, which is the
+      // sheet being scrolled. A sideways slide stays the slider's, even if
+      // the finger drifts off the track.
+      onResponderTerminationRequest={() => verticalRef.current}
       onResponderGrant={onGrant}
       onResponderMove={onMove}
       onResponderRelease={onRelease}
