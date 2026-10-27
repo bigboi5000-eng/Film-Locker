@@ -23,7 +23,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { useColors, useIsDark } from '@/hooks/useColors';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react';
+import { setBaseUrl, setAuthTokenGetter, ApiError } from '@workspace/api-client-react';
 import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { customFetch } from '@workspace/api-client-react';
 
@@ -35,7 +35,32 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient();
+/**
+ * Retry the things worth retrying, and nothing else.
+ *
+ * The default retries everything three times, which is wrong in both
+ * directions here: a 404 or a 403 is a settled answer and retrying it only
+ * delays showing the user what happened, while a stalled connection — now
+ * that requests time out rather than hanging — is exactly the case where
+ * trying again usually works, because the second attempt opens a fresh
+ * socket.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        if (failureCount >= 2) return false;
+        // A reply from the server is an answer, not a failure to reach it.
+        // 408 and 429 are the two that explicitly invite another go.
+        if (error instanceof ApiError) {
+          return error.status === 408 || error.status === 429;
+        }
+        return true;
+      },
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    },
+  },
+});
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 

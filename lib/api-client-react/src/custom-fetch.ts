@@ -9,6 +9,79 @@ export type BodyType<T> = T;
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
+
+/**
+ * How long a request may hang before it is given up on.
+ *
+ * React Native's fetch has NO default timeout, and that is not a detail: a
+ * socket that stalls — a Wi-Fi to mobile handover, a dozing device, a
+ * connection a middlebox dropped without telling either end — leaves the
+ * promise unsettled for ever. React Query then sits in `pending` with no
+ * error and no retry, which on screen is every spinner in the app turning
+ * until the process is killed. An error is recoverable; a hang is not.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * And a shorter one for the auth token, because that one hangs EVERYTHING.
+ *
+ * The getter is Clerk's getToken(), which is itself a network call to
+ * refresh a short-lived token. Every authenticated request waits on it
+ * before it is even sent, so one stalled refresh is not one dead screen, it
+ * is all of them at once — the whole app spinning while not a single
+ * request has left the device. Ten seconds is already far longer than a
+ * token refresh takes.
+ */
+const TOKEN_TIMEOUT_MS = 10_000;
+
+/** Thrown when either of the above runs out. */
+export class TimeoutError extends Error {
+  readonly phase: "token" | "request";
+  constructor(phase: "token" | "request", ms: number) {
+    super(
+      phase === "token"
+        ? `Timed out after ${ms}ms waiting for an auth token`
+        : `Request timed out after ${ms}ms`,
+    );
+    this.name = "TimeoutError";
+    this.phase = phase;
+  }
+}
+
+/**
+ * An abort signal that fires on a timer, on the caller's own signal, or
+ * both.
+ *
+ * React Query passes its own signal so it can cancel on unmount, and that
+ * has to keep working — so this listens to it rather than replacing it.
+ */
+function signalWithTimeout(
+  caller: AbortSignal | null | undefined,
+  ms: number,
+): { signal: AbortSignal; timedOut: () => boolean; done: () => void } {
+  const controller = new AbortController();
+  let didTimeOut = false;
+
+  const timer = setTimeout(() => {
+    didTimeOut = true;
+    controller.abort();
+  }, ms);
+
+  const onCallerAbort = () => controller.abort();
+  if (caller) {
+    if (caller.aborted) controller.abort();
+    else caller.addEventListener("abort", onCallerAbort, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    timedOut: () => didTimeOut,
+    done: () => {
+      clearTimeout(timer);
+      caller?.removeEventListener("abort", onCallerAbort);
+    },
+  };
+}
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 // ---------------------------------------------------------------------------
@@ -352,15 +425,45 @@ export async function customFetch<T = unknown>(
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {
-    const token = await _authTokenGetter();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
+    // Raced against a timer rather than simply awaited. A null token is a
+    // legitimate answer — it is what being signed out looks like — so the
+    // flag is what distinguishes "no token" from "never answered".
+    let tokenTimer: ReturnType<typeof setTimeout> | undefined;
+    let tokenTimedOut = false;
+    try {
+      const token = await Promise.race([
+        Promise.resolve(_authTokenGetter()),
+        new Promise<null>((resolve) => {
+          tokenTimer = setTimeout(() => {
+            tokenTimedOut = true;
+            resolve(null);
+          }, TOKEN_TIMEOUT_MS);
+        }),
+      ]);
+      if (tokenTimedOut) throw new TimeoutError("token", TOKEN_TIMEOUT_MS);
+      if (token) {
+        headers.set("authorization", `Bearer ${token}`);
+      }
+    } finally {
+      clearTimeout(tokenTimer);
     }
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const timeout = signalWithTimeout(init.signal, REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, method, headers, signal: timeout.signal });
+  } catch (err) {
+    // An abort reads as a plain AbortError, so the only way to tell the
+    // timer firing from React Query cancelling the query is to have kept
+    // track ourselves.
+    if (timeout.timedOut()) throw new TimeoutError("request", REQUEST_TIMEOUT_MS);
+    throw err;
+  } finally {
+    timeout.done();
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
