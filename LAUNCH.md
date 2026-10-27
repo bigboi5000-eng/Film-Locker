@@ -48,8 +48,16 @@ absorbed before real users existed; it is not a live concern now.
 
 ## 2. Database
 
-- Confirm **backups are enabled** on the Railway Postgres instance. Losing the
-  database is a far likelier bad day than a breach.
+- The database is **Neon**, not Railway. Railway runs the API server and holds
+  the `DATABASE_URL` that points at Neon — the host reads `ep-…​.neon.tech`.
+  There is no Postgres service in the Railway project, so anything about
+  rotating credentials or taking backups happens in the Neon console.
+- Confirm **backups are enabled** on that Neon project. Losing the database is
+  a far likelier bad day than a breach.
+- Rotating the password: Neon console → the branch → Roles → Reset password.
+  Roles are per-branch, so a reset on one branch leaves every other branch on
+  the old password. Only the password segment of the connection string
+  changes; the host and database name stay as they are.
 - Migrations apply on container start (see `Dockerfile`), and the server logs
   `schemaUpToDate` on boot. If that ever reads `false`, the deploy is running
   against a schema the code does not match and endpoints touching new columns
