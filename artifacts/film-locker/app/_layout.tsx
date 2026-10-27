@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/expo';
-import { tokenCache } from '@clerk/expo/token-cache';
+import { chunkedTokenCache } from '@/lib/clerkTokenCache';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ShareIntentHandler } from '@/components/ShareIntentHandler';
@@ -254,7 +254,12 @@ export default function RootLayout() {
 
   return (
     <ShareIntentProvider>
-      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      {/* Not @clerk/expo's own tokenCache — see lib/clerkTokenCache.ts. That
+          one hands a token straight to SecureStore, which refuses anything
+          over 2048 bytes, and Clerk's JWTs go past that. The write failed
+          with nothing to catch it, so the session survived exactly as long
+          as the in-memory token did. */}
+      <ClerkProvider publishableKey={publishableKey} tokenCache={chunkedTokenCache}>
         <ClerkLoaded>
           <SafeAreaProvider>
             <ThemeProvider>

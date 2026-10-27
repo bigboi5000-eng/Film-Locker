@@ -53,7 +53,17 @@ export function LoadError({
     return (
       <View style={styles.compactWrap}>
         <Ionicons name="cloud-offline-outline" size={16} color={colors.textFaint} />
-        <Text style={styles.compactText} numberOfLines={1}>{title}</Text>
+        {/* A timeout says WHICH timeout even here, where there is only room
+            for one line. Whether the auth token or the response ran out is
+            the difference between a dead connection and a stuck sign-in,
+            and it is the one thing worth knowing when this happens. */}
+        <Text style={styles.compactText} numberOfLines={1}>
+          {error instanceof TimeoutError
+            ? error.phase === 'token'
+              ? 'Sign-in timed out'
+              : 'Connection timed out'
+            : title}
+        </Text>
         {onRetry ? (
           <TouchableOpacity onPress={onRetry} disabled={retrying} hitSlop={8}>
             <Text style={styles.compactLink}>{retrying ? 'Retrying…' : 'Retry'}</Text>
