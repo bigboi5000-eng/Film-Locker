@@ -34,17 +34,20 @@ const REQUEST_TIMEOUT_MS = 30_000;
  */
 const TOKEN_TIMEOUT_MS = 10_000;
 
-/** Thrown when either of the above runs out. */
+/**
+ * Thrown when a request runs out of time.
+ *
+ * Only the request itself can raise this now. A token that does not
+ * arrive is no longer fatal — see the note where it is fetched — so there
+ * is nothing left to distinguish, and `phase` stays only because callers
+ * read it.
+ */
 export class TimeoutError extends Error {
-  readonly phase: "token" | "request";
-  constructor(phase: "token" | "request", ms: number) {
-    super(
-      phase === "token"
-        ? `Timed out after ${ms}ms waiting for an auth token`
-        : `Request timed out after ${ms}ms`,
-    );
+  readonly phase: "request";
+  constructor(ms: number) {
+    super(`Request timed out after ${ms}ms`);
     this.name = "TimeoutError";
-    this.phase = phase;
+    this.phase = "request";
   }
 }
 
@@ -425,22 +428,29 @@ export async function customFetch<T = unknown>(
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {
-    // Raced against a timer rather than simply awaited. A null token is a
-    // legitimate answer — it is what being signed out looks like — so the
-    // flag is what distinguishes "no token" from "never answered".
+    // Not being able to get a token NEVER stops the request.
+    //
+    // It used to. The getter is Clerk's getToken(), and when a refresh
+    // fails that rejects — the rejection came straight back out of here
+    // and the fetch was never made, so a broken sign-in took down every
+    // screen in the app including the ones that need no sign-in at all.
+    // Trending and new releases are public; they were failing purely
+    // because the app could not answer a question nobody had asked. The
+    // giveaway was that they started working again once the session had
+    // properly ended, because a signed-out getToken() returns null
+    // instead of throwing.
+    //
+    // Sending it unauthenticated is strictly better: a public endpoint
+    // answers normally, and a private one replies 401 — which is a real
+    // answer the UI can show and the user can act on.
     let tokenTimer: ReturnType<typeof setTimeout> | undefined;
-    let tokenTimedOut = false;
     try {
       const token = await Promise.race([
-        Promise.resolve(_authTokenGetter()),
+        Promise.resolve(_authTokenGetter()).catch(() => null),
         new Promise<null>((resolve) => {
-          tokenTimer = setTimeout(() => {
-            tokenTimedOut = true;
-            resolve(null);
-          }, TOKEN_TIMEOUT_MS);
+          tokenTimer = setTimeout(() => resolve(null), TOKEN_TIMEOUT_MS);
         }),
       ]);
-      if (tokenTimedOut) throw new TimeoutError("token", TOKEN_TIMEOUT_MS);
       if (token) {
         headers.set("authorization", `Bearer ${token}`);
       }
@@ -459,7 +469,7 @@ export async function customFetch<T = unknown>(
     // An abort reads as a plain AbortError, so the only way to tell the
     // timer firing from React Query cancelling the query is to have kept
     // track ourselves.
-    if (timeout.timedOut()) throw new TimeoutError("request", REQUEST_TIMEOUT_MS);
+    if (timeout.timedOut()) throw new TimeoutError(REQUEST_TIMEOUT_MS);
     throw err;
   } finally {
     timeout.done();

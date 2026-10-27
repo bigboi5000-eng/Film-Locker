@@ -1,8 +1,8 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import rateLimit from "express-rate-limit";
-import { clerkMiddleware } from "@clerk/express";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { clerkMiddleware, getAuth } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
   CLERK_PROXY_PATH,
@@ -75,7 +75,7 @@ app.use(
   })),
 );
 
-// General rate limit — 400 requests per 15 min per IP.
+// General rate limit — 1200 requests per 15 min, per user where known.
 // Was 120, which is easy for one active session to exceed legitimately: the
 // notifications badge alone polls every 30s (30/15min), and normal tab
 // navigation fires several list/count queries per screen — a few minutes of
@@ -84,10 +84,20 @@ app.use(
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 400,
+    max: 1200,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many requests — please try again later." },
+    // Per SIGNED-IN USER where we know one, falling back to IP only for
+    // anonymous traffic.
+    //
+    // Keying everything by IP is wrong on a phone. Mobile carriers put
+    // very large numbers of subscribers behind one address, so the
+    // budget was shared with strangers, and a single user on a laptop and
+    // a phone on the same wifi spent it twice over. It also made the limit
+    // unpredictable in exactly the way a limit must not be: the same
+    // amount of use would or would not trip it depending on who else was
+    // on the network.
+    keyGenerator: (req) => getAuth(req)?.userId ?? ipKeyGenerator(req.ip ?? ""),
   }),
 );
 

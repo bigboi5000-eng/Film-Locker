@@ -53,7 +53,10 @@ const queryClient = new QueryClient({
         // A reply from the server is an answer, not a failure to reach it.
         // 408 and 429 are the two that explicitly invite another go.
         if (error instanceof ApiError) {
-          return error.status === 408 || error.status === 429;
+          // Not 429. The window is fifteen minutes, so trying again in two
+          // seconds cannot succeed and only spends more of the budget that
+          // ran out — which is how a brief overshoot turns into a long one.
+          return error.status === 408;
         }
         return true;
       },

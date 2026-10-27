@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TimeoutError } from '@workspace/api-client-react';
+import { TimeoutError, ApiError } from '@workspace/api-client-react';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
@@ -42,11 +42,16 @@ export function LoadError({
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
 
-  const blurb =
-    error instanceof TimeoutError
-      ? error.phase === 'token'
-        ? 'Your sign-in took too long to confirm. This usually clears on its own.'
-        : 'The connection timed out. Check your signal and try again.'
+  // A 429 is the one failure that is nobody's fault and fixes itself, and
+  // the one it is actively unhelpful to call a connection problem: the
+  // connection is fine, the server is asking for a pause. Saying so stops
+  // the next half hour being spent looking at the network.
+  const tooMany = error instanceof ApiError && error.status === 429;
+
+  const blurb = tooMany
+    ? 'The server is asking for a short pause. This clears on its own in a few minutes.'
+    : error instanceof TimeoutError
+      ? 'The connection timed out. Check your signal and try again.'
       : 'Something went wrong reaching the server. Your films are safe.';
 
   if (compact) {
@@ -58,11 +63,11 @@ export function LoadError({
             the difference between a dead connection and a stuck sign-in,
             and it is the one thing worth knowing when this happens. */}
         <Text style={styles.compactText} numberOfLines={1}>
-          {error instanceof TimeoutError
-            ? error.phase === 'token'
-              ? 'Sign-in timed out'
-              : 'Connection timed out'
-            : title}
+          {tooMany
+            ? 'Too many requests — pausing'
+            : error instanceof TimeoutError
+              ? 'Connection timed out'
+              : title}
         </Text>
         {onRetry ? (
           <TouchableOpacity onPress={onRetry} disabled={retrying} hitSlop={8}>
