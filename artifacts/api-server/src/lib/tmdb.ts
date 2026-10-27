@@ -1,5 +1,6 @@
 import type { WatchProvider } from "@workspace/db";
 import { cached } from "./cache";
+import { logger } from "./logger";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
@@ -116,6 +117,17 @@ export interface TmdbMovieDetails extends TmdbCandidate {
   tmdbVoteCount: number;
   /** Running time in minutes, or null when TMDB has no runtime for the film. */
   runtime: number | null;
+  /**
+   * True when credits or watch providers did not come back.
+   *
+   * Only here to keep a half-answer out of the cache. An empty cast and a
+   * cast that failed to arrive are the same empty array to everyone
+   * downstream, so without this flag a film fetched during a throttle was
+   * remembered as castless for the full half-hour TTL — which is why the
+   * data "came in fine for a minute and then went", and then stayed gone.
+   * Stripped from the HTTP response by the schema, which does not know it.
+   */
+  degraded?: boolean;
 }
 
 // ── Genre map (stable TMDB list — no API call needed) ─────────────────────────
@@ -129,6 +141,34 @@ const TMDB_GENRE_MAP: Record<number, string> = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * A TMDB request that retries a throttle instead of losing the field.
+ *
+ * TMDB answers a burst with 429, and a burst is the normal case here: one
+ * film detail is three requests, and enriching a twenty-film discovery rail
+ * is sixty. Every one of those that comes back 429 used to be a silently
+ * missing cast list.
+ *
+ * Only 429 and 5xx are retried — a 401 or a 404 is a settled answer and
+ * asking again just spends another request on the same reply. Retry-After
+ * is honoured where TMDB sends it, capped so one unlucky call cannot hold a
+ * request open for a minute.
+ */
+async function tmdbFetch(url: string, attempt = 0): Promise<Response> {
+  const res = await fetch(url);
+  if (res.ok) return res;
+
+  const retryable = res.status === 429 || res.status >= 500;
+  if (!retryable || attempt >= 2) return res;
+
+  const header = Number(res.headers.get("retry-after"));
+  const waitMs = Number.isFinite(header) && header > 0
+    ? Math.min(header * 1000, 3000)
+    : 400 * 2 ** attempt;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  return tmdbFetch(url, attempt + 1);
+}
 
 function getApiKey(): string {
   const key = process.env["TMDB_API_KEY"];
@@ -195,14 +235,25 @@ export async function enrichCandidates(
   return Promise.all(
     candidates.map(async (c) => {
       const [creditsResult, providersResult, detailsResult] = await Promise.allSettled([
-        fetch(`${TMDB_BASE}/movie/${c.tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
+        tmdbFetch(`${TMDB_BASE}/movie/${c.tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
           okJson<TmdbCredits>(r)
         ),
-        fetch(`${TMDB_BASE}/movie/${c.tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
+        tmdbFetch(`${TMDB_BASE}/movie/${c.tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
           okJson<TmdbProvidersResponse>(r)
         ),
         fetchMovieDetails(c.tmdbId, region),
       ]);
+
+      if (creditsResult.status === "rejected" || providersResult.status === "rejected") {
+        logger.warn(
+          {
+            tmdbId: c.tmdbId,
+            credits: creditsResult.status === "rejected" ? String(creditsResult.reason) : "ok",
+            providers: providersResult.status === "rejected" ? String(providersResult.reason) : "ok",
+          },
+          "TMDB enrich partially failed — cast or providers missing",
+        );
+      }
 
       const runtime =
         detailsResult.status === "fulfilled" ? detailsResult.value?.runtime ?? null : null;
@@ -453,13 +504,17 @@ export async function fetchMovieDetails(
   // Three upstream requests per call, and the same films recur constantly —
   // a shared post identified by several users, or one list mentioning a film
   // twice. Cached per region since watch providers differ by country.
-  // Nulls (the details request itself failing) are not cached, so a blip
-  // doesn't stick.
+  // Neither a null (the details request itself failing) nor a half answer
+  // is cached, so a blip doesn't stick. The half answer is the one that
+  // bit: details succeeding while credits and providers were throttled
+  // gave a perfectly valid-looking film with no cast and nothing to watch
+  // it on, and caching that pinned the gap in place for thirty minutes
+  // after TMDB had recovered.
   return cached(
     `tmdb:details:${tmdbId}:${region}`,
     DETAILS_CACHE_TTL_MS,
     () => fetchMovieDetailsUncached(tmdbId, region),
-    { shouldCache: (result) => result !== null },
+    { shouldCache: (result) => result !== null && !result.degraded },
   );
 }
 
@@ -482,18 +537,36 @@ async function fetchMovieDetailsUncached(
 
   const [detailsResult, creditsResult, providersResult] =
     await Promise.allSettled([
-      fetch(`${TMDB_BASE}/movie/${tmdbId}?api_key=${apiKey}&language=en-US`).then((r) =>
+      tmdbFetch(`${TMDB_BASE}/movie/${tmdbId}?api_key=${apiKey}&language=en-US`).then((r) =>
         okJson<TmdbMovieDetail>(r)
       ),
-      fetch(`${TMDB_BASE}/movie/${tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
+      tmdbFetch(`${TMDB_BASE}/movie/${tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
         okJson<TmdbCredits>(r)
       ),
-      fetch(`${TMDB_BASE}/movie/${tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
+      tmdbFetch(`${TMDB_BASE}/movie/${tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
         okJson<TmdbProvidersResponse>(r)
       ),
     ]);
 
   if (detailsResult.status === "rejected") return null;
+
+  // Said out loud, because it never was. A rejected credits or providers
+  // call was read only as `status !== "fulfilled"` and the field quietly
+  // came back empty, so a throttled TMDB looked exactly like a film with no
+  // cast — in the logs, in the response, and on the screen.
+  const degraded =
+    creditsResult.status === "rejected" || providersResult.status === "rejected";
+  if (degraded) {
+    logger.warn(
+      {
+        tmdbId,
+        region,
+        credits: creditsResult.status === "rejected" ? String(creditsResult.reason) : "ok",
+        providers: providersResult.status === "rejected" ? String(providersResult.reason) : "ok",
+      },
+      "TMDB detail partially failed — cast or providers missing",
+    );
+  }
 
   const details = detailsResult.value;
 
@@ -581,6 +654,7 @@ async function fetchMovieDetailsUncached(
     genres,
     language,
     watchProviders,
+    degraded,
     tmdbRating,
     tmdbVoteCount,
     runtime,

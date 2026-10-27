@@ -126,6 +126,16 @@ export async function backfillEnrichment(options: BackfillOptions = {}): Promise
         continue;
       }
 
+      // A throttled credits or providers call leaves a film looking cast-
+      // less and unstreamable, and writing that would be worse here than
+      // anywhere else: it also stamps enrichedAt, so the film counts as
+      // done and is never looked at again. Same reasoning as the null
+      // above — leave it for the next run.
+      if (details.degraded) {
+        failed++;
+        continue;
+      }
+
       const written = await db
         .update(moviesTable)
         .set({
