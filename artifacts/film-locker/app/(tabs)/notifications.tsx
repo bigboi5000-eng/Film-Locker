@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { SignedOutGate } from '@/components/SignedOutGate';
+import { LoadError } from '@/components/LoadError';
 import { useAuth } from '@clerk/expo';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
@@ -396,7 +397,7 @@ function NotificationsScreenInner() {
   useEffect(() => {
     if (requestedTab === 'friends' || requestedTab === 'messages') setActiveTab(requestedTab);
   }, [requestedTab]);
-  const { data, isLoading, refetch, isRefetching } = useGetConversations();
+  const { data, isLoading, isError, error, refetch, isRefetching } = useGetConversations();
   const { data: followsData } = useGetFollows();
   const incomingRequestCount = followsData?.incomingRequests?.length ?? 0;
 
@@ -484,6 +485,14 @@ function NotificationsScreenInner() {
             />
           )}
           ListEmptyComponent={
+            isError ? (
+              <LoadError
+                title="Could not load your messages"
+                error={error}
+                onRetry={refetch}
+                retrying={isRefetching}
+              />
+            ) : (
             <View style={styles.empty}>
               <Ionicons name="mail-open-outline" size={56} color={colors.iconFaint} />
               <Text style={styles.emptyTitle}>No conversations yet</Text>
@@ -499,6 +508,7 @@ function NotificationsScreenInner() {
                 <Text style={styles.findBtnText}>Find People</Text>
               </TouchableOpacity>
             </View>
+            )
           }
           contentContainerStyle={
             conversations.length === 0 ? { flex: 1 } : { paddingBottom: insets.bottom + 16 }

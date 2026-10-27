@@ -21,6 +21,7 @@ import {
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { LoadError } from '@/components/LoadError';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { applySort, type SortState } from '@/components/SortSheet';
 import { webInputReset } from '@/lib/webInputReset';
@@ -86,9 +87,15 @@ export default function DiscoverScreen() {
   const region = useMemo(() => getDeviceRegion(), []);
 
   // Fetch data for whichever section we're in
-  const { data: trendingData, isLoading: trendingLoading } = useGetTrending({ region });
-  const { data: newReleasesData, isLoading: newReleasesLoading } = useGetNewReleases({ region });
-  const { data: recommendationsData, isLoading: recommendationsLoading } = useGetRecommendations({ region });
+  const trending = useGetTrending({ region });
+  const newReleases = useGetNewReleases({ region });
+  const recommendations = useGetRecommendations({ region });
+  const { data: trendingData, isLoading: trendingLoading } = trending;
+  const { data: newReleasesData, isLoading: newReleasesLoading } = newReleases;
+  const { data: recommendationsData, isLoading: recommendationsLoading } = recommendations;
+  /** Whichever of the three this screen is actually showing. */
+  const active =
+    section === 'trending' ? trending : section === 'new-releases' ? newReleases : recommendations;
   const { data: lockerData } = useListMovies();
 
   const rawMovies: TmdbMovieCard[] = useMemo(() => {
@@ -197,6 +204,13 @@ export default function DiscoverScreen() {
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : active.isError ? (
+        <LoadError
+          title="Could not load these films"
+          error={active.error}
+          onRetry={active.refetch}
+          retrying={active.isRefetching}
+        />
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No films found</Text>

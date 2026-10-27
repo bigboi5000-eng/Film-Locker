@@ -35,6 +35,7 @@ import {
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { LoadError } from '@/components/LoadError';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
@@ -182,8 +183,8 @@ export default function HomeScreen() {
 
   const region = useMemo(() => getDeviceRegion(), []);
 
-  const { data: trendingData, isLoading: trendingLoading, refetch: refetchTrending, isRefetching: trendingRefetching } = useGetTrending({ region });
-  const { data: newReleasesData, isLoading: newReleasesLoading, refetch: refetchNew, isRefetching: newRefetching } = useGetNewReleases({ region });
+  const { data: trendingData, isLoading: trendingLoading, isError: trendingError, error: trendingErr, refetch: refetchTrending, isRefetching: trendingRefetching } = useGetTrending({ region });
+  const { data: newReleasesData, isLoading: newReleasesLoading, isError: newError, error: newErr, refetch: refetchNew, isRefetching: newRefetching } = useGetNewReleases({ region });
   // The locker is the signed-in user's own films, so there is nothing to
   // fetch without an account. It also decides whether the Recommended
   // section appears at all, which is why a guest simply does not see it.
@@ -230,7 +231,7 @@ export default function HomeScreen() {
   // Trending and New Releases are public; recommendations are not — they are
   // built from your own locker, so there is nothing to ask for without an
   // account. Disabled rather than left to 401 on every render.
-  const { data: recommendationsData, isLoading: recommendationsLoading, refetch: refetchRecommendations, isRefetching: recommendationsRefetching } = useGetRecommendations(
+  const { data: recommendationsData, isLoading: recommendationsLoading, isError: recsError, error: recsErr, refetch: refetchRecommendations, isRefetching: recommendationsRefetching } = useGetRecommendations(
     { region },
     { query: { queryKey: getGetRecommendationsQueryKey({ region }), enabled: Boolean(isSignedIn) } }
   );
@@ -404,6 +405,14 @@ export default function HomeScreen() {
           <SectionHeader title="🔥 Trending This Week" section="trending" />
           {trendingLoading ? (
             <SectionSkeleton />
+          ) : trendingError ? (
+            <LoadError
+              compact
+              title="Could not load trending"
+              error={trendingErr}
+              onRetry={refetchTrending}
+              retrying={trendingRefetching}
+            />
           ) : (
             <FlatList
               data={trending}
@@ -425,6 +434,14 @@ export default function HomeScreen() {
           <SectionHeader title="🎬 New Releases" section="new-releases" />
           {newReleasesLoading ? (
             <SectionSkeleton />
+          ) : newError ? (
+            <LoadError
+              compact
+              title="Could not load new releases"
+              error={newErr}
+              onRetry={refetchNew}
+              retrying={newRefetching}
+            />
           ) : (
             <FlatList
               data={newReleases}
@@ -447,6 +464,14 @@ export default function HomeScreen() {
             <SectionHeader title="✨ Recommended for You" section="recommendations" />
             {recommendationsLoading ? (
               <SectionSkeleton />
+            ) : recsError ? (
+              <LoadError
+                compact
+                title="Could not load recommendations"
+                error={recsErr}
+                onRetry={refetchRecommendations}
+                retrying={recommendationsRefetching}
+              />
             ) : recommendations.length === 0 ? null : (
               <FlatList
                 data={recommendations}

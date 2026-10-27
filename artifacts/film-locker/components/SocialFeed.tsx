@@ -46,6 +46,7 @@ import {
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { StarRating, formatStars } from '@/components/StarRating';
 import { ShareToFriendSheet } from '@/components/ShareToFriendSheet';
+import { LoadError } from '@/components/LoadError';
 import { useToast } from '@/components/ToastProvider';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -301,7 +302,7 @@ export function SocialFeedView() {
   const [selected, setSelected] = useState<FeedItem | null>(null);
   const [sharing, setSharing] = useState<FeedItem | null>(null);
 
-  const { data, isLoading, refetch, isRefetching } = useGetFeed(undefined, {
+  const { data, isLoading, isError, error, refetch, isRefetching } = useGetFeed(undefined, {
     query: { queryKey: getGetFeedQueryKey(), refetchOnMount: 'always' },
   });
   const { mutate: markSeen } = useMarkFeedSeen();
@@ -413,14 +414,23 @@ export function SocialFeedView() {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="film-outline" size={52} color={colors.iconFaint} />
-            <Text style={styles.emptyTitle}>Nothing here yet</Text>
-            <Text style={styles.emptyText}>
-              Follow people and this fills with what they watch, rate, review and put in public
-              playlists — plus anybody public who has written about a film you have saved.
-            </Text>
-          </View>
+          isError ? (
+            <LoadError
+              title="Could not load your feed"
+              error={error}
+              onRetry={refetch}
+              retrying={isRefetching}
+            />
+          ) : (
+            <View style={styles.empty}>
+              <Ionicons name="film-outline" size={52} color={colors.iconFaint} />
+              <Text style={styles.emptyTitle}>Nothing here yet</Text>
+              <Text style={styles.emptyText}>
+                Follow people and this fills with what they watch, rate, review and put in public
+                playlists — plus anybody public who has written about a film you have saved.
+              </Text>
+            </View>
+          )
         }
       />
 

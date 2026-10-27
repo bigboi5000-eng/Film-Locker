@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { webInputReset } from '@/lib/webInputReset';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
+import { LoadError } from '@/components/LoadError';
 import {
   useGetMyPlaylists,
   useGetFollowedPlaylists,
@@ -42,7 +43,7 @@ export default function PlaylistsScreen() {
   const [createVisible, setCreateVisible] = useState(false);
 
   // ── Mine ────────────────────────────────────────────────────────────────
-  const { data: myData, isLoading: myLoading } = useGetMyPlaylists({
+  const { data: myData, isLoading: myLoading, isError: myError, error: myErr, refetch: refetchMine, isRefetching: myRefetching } = useGetMyPlaylists({
     query: { queryKey: getGetMyPlaylistsQueryKey() },
   });
   const { mutateAsync: createPlaylist, isPending: creating } = useCreatePlaylist();
@@ -145,6 +146,13 @@ export default function PlaylistsScreen() {
       {tab === 'mine' ? (
         myLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+        ) : myError ? (
+          <LoadError
+            title="Could not load your playlists"
+            error={myErr}
+            onRetry={refetchMine}
+            retrying={myRefetching}
+          />
         ) : (
           <FlatList
             data={myPlaylists}

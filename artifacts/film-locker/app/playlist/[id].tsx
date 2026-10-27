@@ -31,6 +31,7 @@ import {
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
+import { LoadError } from '@/components/LoadError';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
@@ -336,7 +337,7 @@ export default function PlaylistScreen() {
   const [sort, setSort] = useState<SortState>({ key: 'none', direction: 'desc' });
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
 
-  const { data: playlist, isLoading } = useGetPlaylist(numericId, {
+  const { data: playlist, isLoading, isError, error, refetch, isRefetching } = useGetPlaylist(numericId, {
     query: { queryKey: getGetPlaylistQueryKey(numericId), enabled: !isNaN(numericId) },
   });
 
@@ -559,6 +560,13 @@ export default function PlaylistScreen() {
             <MovieCardSkeleton key={i} />
           ))}
         </View>
+      ) : isError ? (
+        <LoadError
+          title="Could not load this playlist"
+          error={error}
+          onRetry={refetch}
+          retrying={isRefetching}
+        />
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="film-outline" size={56} color={colors.iconFaint} />

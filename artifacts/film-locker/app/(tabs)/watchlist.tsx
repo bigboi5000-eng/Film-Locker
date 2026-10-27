@@ -33,6 +33,7 @@ import {
 } from '@workspace/api-client-react';
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
+import { LoadError } from '@/components/LoadError';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { applySort, defaultSortFor, type SortState } from '@/components/SortSheet';
@@ -262,7 +263,7 @@ export default function WatchlistScreen() {
 
   // The locker is this user's own films — nothing to fetch without an
   // account, and it would 401 on every render for a guest.
-  const { data: moviesData, isLoading, isRefetching, refetch } = useListMovies(
+  const { data: moviesData, isLoading, isError, error, isRefetching, refetch } = useListMovies(
     { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
   );
   const { mutateAsync: deleteMovie } = useDeleteMovie();
@@ -639,6 +640,18 @@ export default function WatchlistScreen() {
           onScroll={onScroll}
           scrollEventThrottle={16}
           ListEmptyComponent={
+            // An empty list and a list that failed to arrive are the same
+            // `undefined` from in here, so the error has to be asked about
+            // first — otherwise a dead connection reads as "you own no
+            // films", which is alarming and wrong.
+            isError ? (
+              <LoadError
+                title={mode === 'watched' ? 'Could not load your films' : 'Could not load your watchlist'}
+                error={error}
+                onRetry={refetch}
+                retrying={isRefetching}
+              />
+            ) : (
             <View style={styles.emptyState}>
               <Ionicons
                 name={mode === 'watched' ? 'checkmark-circle-outline' : 'bookmark-outline'}
@@ -660,6 +673,7 @@ export default function WatchlistScreen() {
                     : 'Search, paste a social link, or ask above for a recommendation'}
               </Text>
             </View>
+            )
           }
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
