@@ -22,6 +22,7 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { LoadError } from '@/components/LoadError';
+import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { applySort, type SortState } from '@/components/SortSheet';
 import { webInputReset } from '@/lib/webInputReset';
@@ -85,6 +86,7 @@ export default function DiscoverScreen() {
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
 
   const region = useMemo(() => getDeviceRegion(), []);
+  const watchedTmdbIds = useWatchedTmdbIds();
 
   // Fetch data for whichever section we're in
   const trending = useGetTrending({ region });
@@ -134,7 +136,13 @@ export default function DiscoverScreen() {
       const col = index % COLS;
       return (
         <View style={{ marginLeft: col === 0 ? 0 : GAP, marginBottom: GAP }}>
-          <DiscoverCard movie={item} onPress={setSelectedMovie} width={CARD_W} height={CARD_H} />
+          <DiscoverCard
+            movie={item}
+            onPress={setSelectedMovie}
+            width={CARD_W}
+            height={CARD_H}
+            isWatched={watchedTmdbIds.has(item.tmdbId)}
+          />
         </View>
       );
     },

@@ -34,6 +34,8 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
+import { SearchResultRow } from '@/components/SearchResultRow';
+import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
 import { applySort, defaultSortFor, type SortState } from '@/components/SortSheet';
@@ -63,48 +65,6 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-// ── Search result row ─────────────────────────────────────────────────────────
-
-interface SearchResultRowProps {
-  movie: TmdbMovieCard;
-  isSaved: boolean;
-  savedMovie?: Movie;
-  onPress: (movie: TmdbMovieCard, savedMovie?: Movie) => void;
-}
-
-function SearchResultRow({ movie, isSaved, savedMovie, onPress }: SearchResultRowProps) {
-  const colors = useColors();
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <TouchableOpacity
-      style={styles.resultRow}
-      onPress={() => onPress(movie, savedMovie)}
-      activeOpacity={0.75}
-    >
-      <Image
-        source={{ uri: movie.posterUrl }}
-        style={styles.resultPoster}
-        contentFit="cover"
-        transition={200}
-        placeholder={require('@/assets/images/icon.png')}
-      />
-      <View style={styles.resultInfo}>
-        <Text style={styles.resultTitle} numberOfLines={2}>
-          {movie.title}
-        </Text>
-        {movie.releaseYear ? (
-          <Text style={styles.resultYear}>{movie.releaseYear}</Text>
-        ) : null}
-      </View>
-      {isSaved && (
-        <View style={styles.savedBadge}>
-          <Ionicons name="bookmark" size={14} color={colors.onColor} />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
 }
 
 // ── Modal selection state ─────────────────────────────────────────────────────
@@ -263,6 +223,7 @@ export default function WatchlistScreen() {
 
   // The locker is this user's own films — nothing to fetch without an
   // account, and it would 401 on every render for a guest.
+  const watchedTmdbIds = useWatchedTmdbIds();
   const { data: moviesData, isLoading, isError, error, isRefetching, refetch } = useListMovies(
     { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
   );
@@ -387,10 +348,11 @@ export default function WatchlistScreen() {
           isSaved={Boolean(saved)}
           savedMovie={saved}
           onPress={openMovieModal}
+          isWatched={watchedTmdbIds.has(item.tmdbId)}
         />
       );
     },
-    [savedByTmdbId, openMovieModal]
+    [savedByTmdbId, openMovieModal, watchedTmdbIds]
   );
 
   const renderAiResult = useCallback(
@@ -796,43 +758,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
 
   // Search result rows
-  resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: HORIZONTAL_PADDING,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.surfaceAlt,
-  },
-  resultPoster: {
-    width: 42,
-    height: 63,
-    borderRadius: 6,
-    backgroundColor: c.surfaceAlt,
-    marginRight: 12,
-  },
-  resultInfo: { flex: 1 },
-  resultTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: c.text,
-    lineHeight: 19,
-  },
-  resultYear: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    color: c.star,
-    marginTop: 3,
-  },
-  savedBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: c.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 10,
-  },
 
   // Grid
   /** Keeps a card that is halfway out of view from painting over the row

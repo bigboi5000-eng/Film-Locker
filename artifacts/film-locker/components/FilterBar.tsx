@@ -80,6 +80,14 @@ export interface FilterState {
    * matches everything.
    */
   unratedOnly?: boolean;
+  /**
+   * Seen it, or not yet. Absent means both.
+   *
+   * Only offered where a list mixes the two. On the Films tabs the
+   * toggle at the top has already answered it, and asking twice in two
+   * places is how a filter and a tab end up disagreeing.
+   */
+  watchedState?: 'watched' | 'unwatched';
 }
 
 /**
@@ -117,6 +125,8 @@ export interface FilterableMovie {
   tmdbRating?: number | null;
   /** The owner's own score out of 5, in halves; null when unrated. */
   rating?: number | null;
+  /** Whether the viewer has seen it. Undefined where it is not known. */
+  isWatched?: boolean;
 }
 
 /**
@@ -307,6 +317,11 @@ interface FilterBarProps {
    * control can only ever filter the whole list away.
    */
   showMyRating?: boolean;
+  /**
+   * Whether to offer "seen it / not yet". A playlist mixes both and a
+   * Films tab has already decided, so this is off unless asked for.
+   */
+  showWatched?: boolean;
 }
 
 /** The filters that pick a value from the films in front of them. */
@@ -358,6 +373,8 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     } else if (!inSpan(m.rating, filters.myMin ?? 0, filters.myMax ?? MAX_VALUE, 1)) {
       return false;
     }
+    if (filters.watchedState === 'watched' && !m.isWatched) return false;
+    if (filters.watchedState === 'unwatched' && m.isWatched) return false;
     return true;
   });
 }
@@ -394,6 +411,7 @@ export function FilterBar({
   sortDefault = DEFAULT_SORT,
   sortDefaultLabel,
   showMyRating = true,
+  showWatched = false,
 }: FilterBarProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -425,7 +443,8 @@ export function FilterBar({
   const activeCount =
     FILTER_KEYS.filter((k) => (filters[k]?.length ?? 0) > 0).length +
     (ratingActive ? 1 : 0) +
-    (runtimeActive ? 1 : 0);
+    (runtimeActive ? 1 : 0) +
+    (filters.watchedState ? 1 : 0);
 
   const setRuntime = useCallback(
     (min: number, max: number) => {
@@ -451,6 +470,18 @@ export function FilterBar({
       onChange(next);
     },
     [filters, onChange]
+  );
+
+  const setWatchedState = useCallback(
+    (value: 'watched' | 'unwatched') => {
+      const next = { ...filters };
+      // Tapping the choice you already have clears it, so "both" needs no
+      // third chip of its own — the same rule the category chips follow.
+      if (next.watchedState === value) delete next.watchedState;
+      else next.watchedState = value;
+      onChange(next);
+    },
+    [filters, onChange],
   );
 
   const toggleUnrated = useCallback(() => {
@@ -591,6 +622,40 @@ export function FilterBar({
                   width={SLIDER_W}
                 />
               </View>
+
+              {showWatched && (
+                <View style={[styles.block, styles.blockDivided]}>
+                  <View style={styles.blockHead}>
+                    <Text style={styles.blockTitle}>Seen it</Text>
+                    <Text style={styles.blockValue}>
+                      {filters.watchedState === 'watched'
+                        ? 'Watched'
+                        : filters.watchedState === 'unwatched'
+                          ? 'Not yet'
+                          : 'Any'}
+                    </Text>
+                  </View>
+                  <View style={styles.optionWrap}>
+                    {(['watched', 'unwatched'] as const).map((value) => {
+                      const picked = filters.watchedState === value;
+                      return (
+                        <TouchableOpacity
+                          key={value}
+                          style={[styles.optionChip, picked && styles.optionChipPicked]}
+                          onPress={() => setWatchedState(value)}
+                          activeOpacity={0.75}
+                        >
+                          <Text
+                            style={[styles.optionChipText, picked && styles.optionChipTextPicked]}
+                          >
+                            {value === 'watched' ? 'Watched' : 'Not watched'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               {showMyRating && (
               <View style={[styles.block, styles.blockDivided]}>

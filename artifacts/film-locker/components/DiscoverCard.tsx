@@ -10,9 +10,15 @@ interface DiscoverCardProps {
   onPress: (movie: TmdbMovieCard) => void;
   width: number;
   height: number;
+  /**
+   * Shows the same tick MovieCard uses, because a film you have seen is
+   * worth marking most where you are being offered it again — a trending
+   * rail, a recommendation, someone else's playlist.
+   */
+  isWatched?: boolean;
 }
 
-export function DiscoverCard({ movie, onPress, width, height }: DiscoverCardProps) {
+export function DiscoverCard({ movie, onPress, width, height, isWatched }: DiscoverCardProps) {
   const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity
@@ -35,11 +41,30 @@ export function DiscoverCard({ movie, onPress, width, height }: DiscoverCardProp
           ) : null}
         </View>
       </View>
+      {isWatched && (
+        <View style={styles.watchedBadge}>
+          <Text style={styles.watchedBadgeText}>✓</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  // Deliberately identical to MovieCard's, so one film does not wear two
+  // different ticks depending on which screen it turns up on.
+  watchedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: c.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  watchedBadgeText: { color: c.onColor, fontSize: 12, fontFamily: 'Inter_700Bold' },
   card: {
     borderRadius: 10,
     overflow: 'hidden',

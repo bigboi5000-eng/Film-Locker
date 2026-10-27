@@ -32,6 +32,7 @@ import {
 import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
+import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
@@ -337,6 +338,7 @@ export default function PlaylistScreen() {
   const [sort, setSort] = useState<SortState>({ key: 'none', direction: 'desc' });
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
 
+  const watchedTmdbIds = useWatchedTmdbIds();
   const { data: playlist, isLoading, isError, error, refetch, isRefetching } = useGetPlaylist(numericId, {
     query: { queryKey: getGetPlaylistQueryKey(numericId), enabled: !isNaN(numericId) },
   });
@@ -451,8 +453,9 @@ export default function PlaylistScreen() {
       posterUrl={item.posterUrl}
       onPress={() => openItemModal(item)}
       onLongPress={isOwner ? () => handleRemove(item.tmdbId, item.filmTitle) : undefined}
+      isWatched={watchedTmdbIds.has(item.tmdbId)}
     />
-  ), [savedByTmdbId, openItemModal, handleRemove, isOwner]);
+  ), [savedByTmdbId, openItemModal, handleRemove, isOwner, watchedTmdbIds]);
 
   const items = playlist?.items ?? [];
   const existingTmdbIds = useMemo(() => new Set(items.map((item) => item.tmdbId)), [items]);
@@ -481,9 +484,14 @@ export default function PlaylistScreen() {
         // which the sort already handles by sinking them.
         title: item.filmTitle,
         releaseYear: saved?.releaseYear,
+        // Taken from the watched set rather than from `saved`, so a film
+        // someone else put in this playlist is still ticked and still
+        // filterable if the viewer has seen it — the saved row only
+        // exists for films already in their own locker.
+        isWatched: watchedTmdbIds.has(item.tmdbId),
       };
     }),
-    [items, savedByTmdbId]
+    [items, savedByTmdbId, watchedTmdbIds]
   );
   const filteredItems = useMemo(
     () => applySort(applyFilters(filterableItems, filters), sort),
@@ -587,6 +595,9 @@ export default function PlaylistScreen() {
             // record of having seen them. "Date added" is when it joined
             // THIS list, which is what addedAt holds on a playlist item.
             sortOptions={['none', 'added', 'myRating', 'tmdbRating', 'runtime', 'title', 'year']}
+            // A playlist mixes seen and unseen, which the Films tabs never
+            // do — their own toggle has already answered it.
+            showWatched
             sortDefault={{ key: 'none', direction: 'desc' }}
             sortDefaultLabel="Playlist order"
           />

@@ -2355,6 +2355,11 @@ components:
         - "Seen anything good lately?"
         - "Is it worth watching?"
         # Replies, including the genre answers to "what are you feeling like?"
+        # Yes and No first: half the questions above are closed ones, and
+        # answering "Is it worth watching?" previously meant finding a
+        # quote that happened to mean yes.
+        - "Yes"
+        - "No"
         - "Loved it!"
         - "Something funny"
         - "Something scary"

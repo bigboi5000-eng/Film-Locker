@@ -36,6 +36,8 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { LoadError } from '@/components/LoadError';
+import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
+import { SearchResultRow } from '@/components/SearchResultRow';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
@@ -246,6 +248,9 @@ export default function HomeScreen() {
   const playlists = playlistsData?.playlists ?? [];
   const hasWatchlist = (lockerData?.movies.length ?? 0) > 0;
 
+  /** Films already seen, so a rail can tick them wherever they appear. */
+  const watchedTmdbIds = useWatchedTmdbIds();
+
   /** TMDB ids already in the locker, so a recommendation can say so. */
   const savedTmdbIds = useMemo(
     () => new Set((lockerData?.movies ?? []).map((m) => m.tmdbId)),
@@ -381,18 +386,22 @@ export default function HomeScreen() {
             {!isSearchFetching && searchResults.length === 0 ? (
               <Text style={styles.searchEmpty}>No films found for “{debouncedQuery}”.</Text>
             ) : (
-              <View style={styles.searchGrid}>
+              // A list, as on the Films tab, rather than the poster grid
+              // this used to draw. A grid reads as something to browse; a
+              // search is a question, and its answers want a full-width
+              // title, a year, and room for the badges that say you
+              // already own or have already seen one. Mapped rather than
+              // virtualised because this sits inside the page's own
+              // ScrollView and the result set is small.
+              <View>
                 {searchResults.map((m) => (
-                  <TouchableOpacity
+                  <SearchResultRow
                     key={m.tmdbId}
-                    style={styles.searchCard}
-                    onPress={() => setSelectedMovie(m)}
-                    activeOpacity={0.8}
-                  >
-                    <Image source={{ uri: m.posterUrl }} style={styles.searchPoster} contentFit="cover" />
-                    <Text style={styles.searchTitle} numberOfLines={2}>{m.title}</Text>
-                    <Text style={styles.searchYear}>{m.releaseYear}</Text>
-                  </TouchableOpacity>
+                    movie={m}
+                    isSaved={savedTmdbIds.has(m.tmdbId)}
+                    onPress={(movie) => setSelectedMovie(movie)}
+                    isWatched={watchedTmdbIds.has(m.tmdbId)}
+                  />
                 ))}
               </View>
             )}
@@ -422,7 +431,13 @@ export default function HomeScreen() {
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
                 <View style={{ marginRight: 12 }}>
-                  <DiscoverCard movie={item} onPress={setSelectedMovie} width={CARD_W} height={CARD_H} />
+                  <DiscoverCard
+                    movie={item}
+                    onPress={setSelectedMovie}
+                    width={CARD_W}
+                    height={CARD_H}
+                    isWatched={watchedTmdbIds.has(item.tmdbId)}
+                  />
                 </View>
               )}
             />
@@ -451,7 +466,13 @@ export default function HomeScreen() {
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
                 <View style={{ marginRight: 12 }}>
-                  <DiscoverCard movie={item} onPress={setSelectedMovie} width={CARD_W} height={CARD_H} />
+                  <DiscoverCard
+                    movie={item}
+                    onPress={setSelectedMovie}
+                    width={CARD_W}
+                    height={CARD_H}
+                    isWatched={watchedTmdbIds.has(item.tmdbId)}
+                  />
                 </View>
               )}
             />
@@ -481,7 +502,13 @@ export default function HomeScreen() {
                 contentContainerStyle={styles.horizontalList}
                 renderItem={({ item }) => (
                   <View style={{ marginRight: 12 }}>
-                    <DiscoverCard movie={item} onPress={setSelectedMovie} width={CARD_W} height={CARD_H} />
+                    <DiscoverCard
+                    movie={item}
+                    onPress={setSelectedMovie}
+                    width={CARD_W}
+                    height={CARD_H}
+                    isWatched={watchedTmdbIds.has(item.tmdbId)}
+                  />
                   </View>
                 )}
               />
@@ -584,11 +611,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   appTitle: { fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: 3, color: c.text },
   appSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted, marginTop: 2 },
   searchEmpty: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textMuted },
-  searchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  searchCard: { width: '30%' },
-  searchPoster: { width: '100%', aspectRatio: 2 / 3, borderRadius: 8, backgroundColor: c.surfaceAlt },
-  searchTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.text, marginTop: 6 },
-  searchYear: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 1 },
   signInBtn: {
     backgroundColor: c.primary, borderRadius: 18,
     paddingHorizontal: 16, paddingVertical: 9,

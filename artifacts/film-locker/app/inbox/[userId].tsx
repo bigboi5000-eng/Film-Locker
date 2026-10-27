@@ -67,6 +67,11 @@ const PHRASE_ROWS: ReadonlyArray<{ keys: readonly string[] }> = [
   },
   {
     keys: [
+      // Yes and No lead this row: the row above is mostly closed
+      // questions, and answering one used to mean hunting for a film
+      // quote that happened to mean yes.
+      'Yes',
+      'No',
       WATCHED_IT,
       'Loved it!',
       'This was great!',

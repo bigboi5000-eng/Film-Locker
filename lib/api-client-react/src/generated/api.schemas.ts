@@ -416,6 +416,8 @@ export const ConversationMessageContent = {
   'What_should_I_watch_tonight?': 'What should I watch tonight?',
   'Seen_anything_good_lately?': 'Seen anything good lately?',
   'Is_it_worth_watching?': 'Is it worth watching?',
+  Yes: 'Yes',
+  No: 'No',
   'Loved_it!': 'Loved it!',
   Something_funny: 'Something funny',
   Something_scary: 'Something scary',
