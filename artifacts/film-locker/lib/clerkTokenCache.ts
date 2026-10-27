@@ -97,10 +97,14 @@ export const chunkedTokenCache = {
   async saveToken(key: string, token: string): Promise<void> {
     try {
       if (byteLength(token) <= CHUNK_SIZE) {
+        // Chunks are only swept when the value being replaced was actually
+        // chunked. Sweeping unconditionally meant thirty-two keystore
+        // deletes on every save, and Clerk saves on every refresh — about
+        // once a minute, for nothing, in the middle of the one operation
+        // that must not be slow.
+        const previous = await SecureStore.getItemAsync(key, OPTS).catch(() => null);
         await SecureStore.setItemAsync(key, token, OPTS);
-        // A previous large token may have left chunks behind; they would
-        // never be read again, but they would sit in the keychain.
-        await clearChunks(key);
+        if (previous?.startsWith(MANIFEST)) await clearChunks(key);
         return;
       }
 
