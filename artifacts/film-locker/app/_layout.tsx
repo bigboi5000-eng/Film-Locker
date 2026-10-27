@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -58,9 +58,42 @@ const queryClient = new QueryClient({
         return true;
       },
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+      /**
+       * Half a minute before anything is considered worth fetching again.
+       *
+       * Needed now that coming back to the app refetches on focus: without
+       * it every query is stale the instant it lands, so every glance at
+       * the app would refire every request on screen. Invalidation after a
+       * mutation ignores this, so rating a film still updates immediately.
+       */
+      staleTime: 30_000,
     },
   },
 });
+
+/**
+ * Tell React Query when the app is in front of you.
+ *
+ * It refetches stale queries on focus, but "focus" means a browser window
+ * event, which React Native does not have — so without this the feature is
+ * simply inert on a phone, and nothing refetches when you return to the
+ * app however long it has been in your pocket.
+ *
+ * That is the other half of the spinning: a connection does not survive
+ * being backgrounded, and with no focus signal React Query had no reason
+ * to go and get anything, so the screen stayed exactly as stale as it was
+ * when you left. Now returning to the app refreshes what is on it, which
+ * is also what recovers a failed request without you doing anything.
+ */
+function useRefetchOnForeground(): void {
+  useEffect(() => {
+    const onChange = (status: AppStateStatus) => {
+      if (Platform.OS !== 'web') focusManager.setFocused(status === 'active');
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, []);
+}
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -202,6 +235,8 @@ function ThemedChrome() {
 }
 
 export default function RootLayout() {
+  useRefetchOnForeground();
+
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
