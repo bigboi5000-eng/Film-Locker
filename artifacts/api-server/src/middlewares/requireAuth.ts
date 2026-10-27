@@ -74,7 +74,14 @@ export function requireAuth(
   const userId = auth?.userId;
   if (!userId) {
     logger.warn(
-      { url: req.originalUrl.split("?")[0], ...describeToken(req.headers.authorization) },
+      {
+        url: req.originalUrl.split("?")[0],
+        // What the client said about itself on the way out. Only present
+        // when it failed to attach a token, and never carries anything
+        // secret — see setAuthStateDescriber in the API client.
+        clientAuth: req.headers["x-auth-debug"] ?? undefined,
+        ...describeToken(req.headers.authorization),
+      },
       "rejected an unauthenticated request",
     );
     res.status(401).json({ error: "Unauthorized" });

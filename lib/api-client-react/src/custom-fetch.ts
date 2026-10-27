@@ -93,6 +93,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _authStateDescriber: (() => string) | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -118,6 +119,25 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Supplies a short description of the client's own auth state, sent as a
+ * header ONLY on requests that end up with no token.
+ *
+ * There is no other way to see this. When the token getter comes back
+ * empty the request still goes out, the server answers 401, and from the
+ * server that is indistinguishable from a signed-out user browsing —
+ * while on the device the app may believe it is perfectly well signed in.
+ * Those are different bugs. Carrying a few words of client state over
+ * with the failed request is the only way to read, from a log the owner
+ * can actually see, which one is happening.
+ *
+ * Never put a token or anything else secret in here: it is a plain header
+ * and it is written to the logs on purpose.
+ */
+export function setAuthStateDescriber(fn: (() => string) | null): void {
+  _authStateDescriber = fn;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -444,15 +464,36 @@ export async function customFetch<T = unknown>(
     // answers normally, and a private one replies 401 — which is a real
     // answer the UI can show and the user can act on.
     let tokenTimer: ReturnType<typeof setTimeout> | undefined;
+    let tokenError: string | null = null;
     try {
       const token = await Promise.race([
-        Promise.resolve(_authTokenGetter()).catch(() => null),
+        Promise.resolve(_authTokenGetter()).catch((err: unknown) => {
+          // Recorded rather than thrown. The request still goes — see
+          // above — but which of "no session" and "the call failed" this
+          // was is the difference between two unrelated bugs.
+          tokenError = `threw:${err instanceof Error ? `${err.name}:${err.message}` : String(err)}`;
+          return null;
+        }),
         new Promise<null>((resolve) => {
-          tokenTimer = setTimeout(() => resolve(null), TOKEN_TIMEOUT_MS);
+          tokenTimer = setTimeout(() => {
+            tokenError = "timed-out";
+            resolve(null);
+          }, TOKEN_TIMEOUT_MS);
         }),
       ]);
       if (token) {
         headers.set("authorization", `Bearer ${token}`);
+      } else {
+        // No token, so say what happened instead. The server logs this
+        // beside the 401 it is about to send.
+        const why = tokenError ?? "returned-null";
+        let state = "";
+        try {
+          state = _authStateDescriber?.() ?? "";
+        } catch {
+          state = "describer-threw";
+        }
+        headers.set("x-auth-debug", `${why}${state ? `; ${state}` : ""}`.slice(0, 200));
       }
     } finally {
       clearTimeout(tokenTimer);

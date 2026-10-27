@@ -8,6 +8,7 @@ import { useUser } from '@clerk/expo';
 import { useColors } from '@/hooks/useColors';
 import {
   setAuthTokenGetter,
+  setAuthStateDescriber,
   useGetConversations,
   getGetConversationsQueryKey,
   useGetFollows,
@@ -66,7 +67,15 @@ export default function TabLayout() {
   // Wire Clerk bearer token into the generated API client for every request
   useEffect(() => {
     setAuthTokenGetter(() => getToken());
-  }, [getToken]);
+    // And what the app believes about itself, sent only when a request
+    // ends up with no token. From the server a tokenless request looks
+    // like an ordinary signed-out visitor; this is what distinguishes
+    // that from the app insisting it is signed in while Clerk hands back
+    // nothing — which is the state we are actually chasing.
+    setAuthStateDescriber(
+      () => `isSignedIn=${isSignedIn} isLoaded=${isLoaded} hasUser=${Boolean(user)}`,
+    );
+  }, [getToken, isSignedIn, isLoaded, user]);
 
   // JIT-provision the user row in the DB on every sign-in
   useEffect(() => {
