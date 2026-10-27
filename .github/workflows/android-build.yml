@@ -196,16 +196,33 @@ jobs:
         working-directory: artifacts/film-locker
         run: |
           if [ -s build.log ]; then
-            # Workflow commands are one line, so newlines become %0A and a
-            # literal % has to be escaped first or it eats what follows.
-            MSG="$(sed -e 's/\x1b\[[0-9;]*m//g' build.log \
-                   | tail -n 40 \
-                   | sed -e 's/%/%25/g' -e 's/\r//g' \
+            CLEAN="$(mktemp)"
+            sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' build.log > "$CLEAN"
+
+            # The last forty lines are EAS's own wrapper saying the Gradle
+            # build "failed with unknown error", which is true and useless:
+            # the task that actually failed, and Gradle's "What went wrong",
+            # are hundreds of lines further up. Pull those out by name and
+            # fall back to the tail only when nothing matches.
+            DIAG="$(grep -nE '^(FAILURE: Build (failed|completed)|\* What went wrong:|\* Try:|Caused by:|> Task .* FAILED|error:|e: |No space left on device|OutOfMemoryError|Execution failed for task)' "$CLEAN" \
+                    | head -n 40 \
+                    | cut -d: -f2-)"
+
+            # Gradle puts the explanation in the lines AFTER "What went
+            # wrong", so include a window around the first one.
+            CTX="$(awk '/\* What went wrong:/{found=NR} found && NR>=found && NR<=found+12' "$CLEAN" | head -n 13)"
+
+            MSG="$(printf '%s\n%s\n--- last lines ---\n%s\n' "$DIAG" "$CTX" "$(tail -n 15 "$CLEAN")" \
+                   | sed -e 's/%/%25/g' \
                    | awk '{ printf "%s%%0A", $0 }')"
             echo "::error title=Android build failed::${MSG}"
           else
             echo "::error title=Android build failed::the build wrote no output at all — it failed before it started."
           fi
+
+          # Disk is the usual suspect behind an "unknown error" from Gradle,
+          # and it is gone by the time anyone looks.
+          echo "::notice title=Disk at failure::$(df -h / | tail -1)"
 
       # Written by the build step, and it holds nothing sensitive, but it
       # sits in the working tree and this keeps the checkout clean.
