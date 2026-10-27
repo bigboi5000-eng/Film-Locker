@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/expo';
+import { resourceCache } from '@clerk/expo/resource-cache';
 import { chunkedTokenCache } from '@/lib/clerkTokenCache';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -262,7 +263,24 @@ export default function RootLayout() {
           over 2048 bytes, and Clerk's JWTs go past that. The write failed
           with nothing to catch it, so the session survived exactly as long
           as the in-memory token did. */}
-      <ClerkProvider publishableKey={publishableKey} tokenCache={chunkedTokenCache}>
+      {/* resourceCache is what stops a failed refresh becoming a sign-out.
+          Clerk refreshes the session token in the background every fifty
+          seconds, and the token itself lives sixty. Without a resource
+          cache a refresh that fails has nothing to fall back on, so when
+          the token expires isSignedIn flips to false and the app decides
+          you are logged out — on the dot, a minute after signing in, which
+          is exactly what was happening. With it, getToken() hands back the
+          cached token and the session rides out the failure.
+
+          Clerk's own store chunks around SecureStore's 2048-byte limit,
+          which is the same limit that lib/clerkTokenCache.ts works around
+          for the session token — their cache covers the resources, not
+          that. */}
+      <ClerkProvider
+        publishableKey={publishableKey}
+        tokenCache={chunkedTokenCache}
+        __experimental_resourceCache={resourceCache}
+      >
         <ClerkLoaded>
           <SafeAreaProvider>
             <ThemeProvider>
