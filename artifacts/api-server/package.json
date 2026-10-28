@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@clerk/express": "^2.1.52",
+    "@clerk/express": "^2.1.84",
     "@clerk/shared": "^4.27.1",
     "@google/genai": "^2.10.0",
     "@workspace/api-zod": "workspace:*",

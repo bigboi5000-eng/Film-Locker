@@ -3,7 +3,6 @@ import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { runStorageSelfTest, storageSelfTestResult } from '@/lib/clerkTokenCache';
 import { useAuth } from '@clerk/expo';
 import { useUser } from '@clerk/expo';
 import { useColors } from '@/hooks/useColors';
@@ -74,17 +73,9 @@ export default function TabLayout() {
     // that from the app insisting it is signed in while Clerk hands back
     // nothing — which is the state we are actually chasing.
     setAuthStateDescriber(
-      () =>
-        `isSignedIn=${isSignedIn} isLoaded=${isLoaded} hasUser=${Boolean(user)} ` +
-        `store=${storageSelfTestResult()}`,
+      () => `isSignedIn=${isSignedIn} isLoaded=${isLoaded} hasUser=${Boolean(user)}`,
     );
   }, [getToken, isSignedIn, isLoaded, user]);
-
-  // Once per launch, and the answer rides along with the next request
-  // that fails to find a token.
-  useEffect(() => {
-    void runStorageSelfTest();
-  }, []);
 
   // JIT-provision the user row in the DB on every sign-in
   useEffect(() => {

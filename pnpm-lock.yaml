@@ -164,8 +164,8 @@ importers:
   artifacts/api-server:
     dependencies:
       '@clerk/express':
-        specifier: ^2.1.52
-        version: 2.1.52(express@5.2.1)
+        specifier: ^2.1.84
+        version: 2.1.84(express@5.2.1)
       '@clerk/shared':
         specifier: ^4.27.1
         version: 4.27.1
@@ -1154,8 +1154,8 @@ packages:
   '@base-org/account@2.0.1':
     resolution: {integrity: sha512-tySVNx+vd6XEynZL0uvB10uKiwnAfThr8AbKTwILVG86mPbLAhEOInQIk+uDnvpTvfdUhC1Bi5T/46JvFoLZQQ==}
 
-  '@clerk/backend@3.16.1':
-    resolution: {integrity: sha512-tbsrGqw45ar7PDnEV3gwkHE/HM1EwRcYPPLyL3Hw9H0Ms5fG7hZ8+EJegPJ4DpKdfvOw5M+hYMeCVKwv3NxahA==}
+  '@clerk/backend@3.26.3':
+    resolution: {integrity: sha512-hgCEEVloVYe+QPusZoDp3d/V9vVlFKGufdfvjSGimadD4Ii7K16dgxXB/5/lSvc0KgQLmD54Nh8zRMKez7ZSrA==}
     engines: {node: '>=20.9.0'}
 
   '@clerk/clerk-js@6.41.0':
@@ -1207,8 +1207,8 @@ packages:
       react-dom:
         optional: true
 
-  '@clerk/express@2.1.52':
-    resolution: {integrity: sha512-eDwz7ZwuT9NEJXhamXtOtVd/2Y7p4v1ExTJWrb8RM+faAR57EYvous1EEaIGhdfB9dH014L2+7pcZwsVsX2ijw==}
+  '@clerk/express@2.1.84':
+    resolution: {integrity: sha512-P/ZJry0cbG/na1iAXMPPZFIO34qvEaMq50lASeIeV5j6ARaD/vZx0cJTuoRCKkmIND22KxhGR7NLrGmeS0e5ew==}
     engines: {node: '>=20.9.0'}
     peerDependencies:
       express: ^4.17.0 || ^5.0.0
@@ -6995,9 +6995,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@clerk/backend@3.16.1':
+  '@clerk/backend@3.26.3':
     dependencies:
-      '@clerk/shared': 4.27.1
+      '@clerk/shared': 4.42.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       standardwebhooks: 1.0.0
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -7060,10 +7060,10 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@clerk/express@2.1.52(express@5.2.1)':
+  '@clerk/express@2.1.84(express@5.2.1)':
     dependencies:
-      '@clerk/backend': 3.16.1
-      '@clerk/shared': 4.27.1
+      '@clerk/backend': 3.26.3
+      '@clerk/shared': 4.42.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       express: 5.2.1
       tslib: 2.8.1
     transitivePeerDependencies:
