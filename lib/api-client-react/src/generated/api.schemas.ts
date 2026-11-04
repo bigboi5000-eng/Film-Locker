@@ -563,6 +563,12 @@ export interface UserProfile {
   /** Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester. */
   isPrivate: boolean;
   avatarUrl?: string | null;
+  /** Push when somebody recommends you a film. */
+  notifyRecommendations?: boolean;
+  /** Push when somebody sends you a message. */
+  notifyMessages?: boolean;
+  /** Push for Film Pal activity — a new follower, a request to connect, or a request of yours being accepted. */
+  notifyPals?: boolean;
 }
 
 /**
@@ -679,6 +685,12 @@ export interface UpdateMeBody {
   displayInitials?: string | null;
   /** Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way. */
   isPrivate?: boolean;
+  /** Push when somebody recommends you a film. */
+  notifyRecommendations?: boolean;
+  /** Push when somebody sends you a message. */
+  notifyMessages?: boolean;
+  /** Push for Film Pal activity — a new follower, a request to connect, or a request of yours being accepted. */
+  notifyPals?: boolean;
 }
 
 export interface SearchUsersResponse {

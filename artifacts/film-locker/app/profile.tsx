@@ -20,6 +20,7 @@ import { confirmDestructive } from '@/lib/confirm';
 import Constants from 'expo-constants';
 import { PRIVACY_URL, TERMS_URL, CONTACT_EMAIL } from '@/lib/legalLinks';
 import { useToast } from '@/components/ToastProvider';
+import { pushStatus } from '@/lib/pushNotifications';
 import { webInputReset } from '@/lib/webInputReset';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -116,6 +117,41 @@ function ThemePicker() {
   );
 }
 
+/** The three preference columns, as the settings screen names them. */
+type NotifyKey = 'notifyRecommendations' | 'notifyMessages' | 'notifyPals';
+
+/**
+ * One row per thing the server actually pushes about — see sendPush's four
+ * call sites. Grouped rather than one switch per call site, because "a
+ * follow, a request, and a request being accepted" is one thing to a
+ * person and three to the code.
+ */
+const NOTIFY_ROWS: ReadonlyArray<{
+  key: NotifyKey;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  blurb: string;
+}> = [
+  {
+    key: 'notifyRecommendations',
+    icon: 'film-outline',
+    label: 'Film recommendations',
+    blurb: 'When a Film Pal sends you something to watch',
+  },
+  {
+    key: 'notifyMessages',
+    icon: 'chatbubble-ellipses-outline',
+    label: 'Messages',
+    blurb: 'When somebody replies in a conversation',
+  },
+  {
+    key: 'notifyPals',
+    icon: 'people-outline',
+    label: 'Film Pals',
+    blurb: 'New followers, requests to connect, and requests accepted',
+  },
+];
+
 export default function ProfileScreen() {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -168,6 +204,42 @@ export default function ProfileScreen() {
       showToast({ title: 'Could not update username', subtitle: errorMessage(err) ?? 'Try a different one.', variant: 'error' });
     }
   }, [usernameInput, updateMe, queryClient, showToast]);
+
+  /**
+   * Which notification switch is mid-flight, so only that row shows a
+   * spinner rather than the whole card going busy.
+   */
+  const [savingNotify, setSavingNotify] = useState<NotifyKey | null>(null);
+
+  const handleToggleNotify = useCallback(
+    async (key: NotifyKey, next: boolean) => {
+      setSavingNotify(key);
+      try {
+        await updateMe({ data: { [key]: next } });
+        await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      } catch (err) {
+        showToast({
+          title: 'Could not change that setting',
+          subtitle: errorMessage(err),
+          variant: 'error',
+        });
+      } finally {
+        setSavingNotify(null);
+      }
+    },
+    [updateMe, queryClient, showToast],
+  );
+
+  /**
+   * Whether the device can receive a push at all, which is a separate
+   * question from whether the user wants one.
+   *
+   * Worth showing, because the two failures look identical from the
+   * outside: three switches turned on and nothing ever arriving. On
+   * Android with no Firebase credentials that is exactly what happened,
+   * and there was nowhere in the app that would have said so.
+   */
+  const push = pushStatus();
 
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
 
@@ -433,6 +505,61 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* Notifications */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Notifications</Text>
+
+          {push.reason ? (
+            <View style={styles.notifyNotice}>
+              <Ionicons
+                name={push.reason === 'denied' ? 'notifications-off-outline' : 'warning-outline'}
+                size={16}
+                color={colors.textMuted}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.notifyNoticeText}>
+                  {push.reason === 'denied'
+                    ? 'Notifications are turned off for Film Locker in your device settings, so nothing below will reach you.'
+                    : 'This device could not register for push notifications, so nothing below will reach you. Everything still appears in your inbox.'}
+                </Text>
+                {push.reason === 'denied' ? (
+                  <TouchableOpacity onPress={() => Linking.openSettings()} hitSlop={6}>
+                    <Text style={styles.notifyNoticeLink}>Open device settings</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
+          {NOTIFY_ROWS.map(({ key, icon, label, blurb }) => (
+            <View key={key} style={styles.privacyRow}>
+              <View style={styles.rowIcon}>
+                <Ionicons name={icon} size={18} color={colors.textMuted} />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>{label}</Text>
+                <Text style={styles.rowValue}>{blurb}</Text>
+              </View>
+              {savingNotify === key ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Switch
+                  // Defaulting to true while the profile loads, to match the
+                  // column default — a switch that flicks off and back on as
+                  // the request lands reads as the setting being changed.
+                  value={profile?.[key] ?? true}
+                  onValueChange={(next) => handleToggleNotify(key, next)}
+                  trackColor={{ true: colors.primary }}
+                />
+              )}
+            </View>
+          ))}
+
+          <Text style={styles.notifyFootnote}>
+            Turning one off only silences the push. It still arrives in your inbox.
+          </Text>
+        </View>
+
         {/* Appearance */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Appearance</Text>
@@ -563,6 +690,37 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 13,
     borderTopWidth: 1, borderTopColor: c.surfaceAlt,
+  },
+  notifyNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: c.surfaceSubtle,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  notifyNoticeText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: c.textMuted,
+    lineHeight: 18,
+  },
+  notifyNoticeLink: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: c.primary,
+    marginTop: 6,
+  },
+  notifyFootnote: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: c.textFaint,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 2,
+    lineHeight: 17,
   },
   privacyRow: {
     flexDirection: 'row', alignItems: 'center',

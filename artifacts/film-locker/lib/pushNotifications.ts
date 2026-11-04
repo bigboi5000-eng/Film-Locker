@@ -27,10 +27,31 @@ Notifications.setNotificationHandler({
 });
 
 /**
+ * Why there is no push token, when there isn't one.
+ *
+ * 'denied' is a choice and nothing is wrong. The rest are faults, and the
+ * settings screen shows them rather than leaving a switch that is on while
+ * nothing arrives — which is what Android looked like with no Firebase
+ * credentials: permission granted, channel created, and getExpoPushToken
+ * throwing into a bare catch that returned null.
+ */
+export type PushUnavailableReason = 'denied' | 'no-project-id' | 'error' | null;
+
+let lastReason: PushUnavailableReason = null;
+let lastError: string | null = null;
+
+/** What stopped push working last time registration ran. */
+export function pushStatus(): { reason: PushUnavailableReason; detail: string | null } {
+  return { reason: lastReason, detail: lastError };
+}
+
+/**
  * Request permission and return the Expo push token string, or null when
  * unavailable.  Never throws — push is a best-effort enhancement.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
+  lastReason = null;
+  lastError = null;
   try {
     // Simulators have no APNs credentials, so getExpoPushTokenAsync throws
     // there. That is caught below and returns null, which is why there is no
@@ -57,16 +78,25 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     if (!permissionGranted) {
       // User denied — graceful degradation, in-app inbox still works.
+      lastReason = 'denied';
       return null;
     }
 
-    const token = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
-    });
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      lastReason = 'no-project-id';
+      return null;
+    }
 
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
     return token.data;
-  } catch {
-    // Broad catch: push is optional, never crash startup.
+  } catch (err) {
+    // Still never throws — push is optional and must not break startup —
+    // but the reason is kept now instead of vanishing. On Android with no
+    // FCM credentials this is where it failed, silently, for as long as
+    // the app has existed.
+    lastReason = 'error';
+    lastError = err instanceof Error ? err.message : String(err);
     return null;
   }
 }

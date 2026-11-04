@@ -46,7 +46,28 @@ export async function sendPush(opts: {
   };
 
   try {
-    await expo.sendPushNotificationsAsync([message]);
+    const [ticket] = await expo.sendPushNotificationsAsync([message]);
+
+    // The tickets were being thrown away, and they are the only place a
+    // delivery problem is ever reported. sendPushNotificationsAsync
+    // resolves happily for a push that Expo then refuses to deliver, so
+    // every Android failure — no FCM credentials, a sender id that does
+    // not match, a token from an uninstalled build — looked from here like
+    // a push that had been sent. Nothing in the logs, and no way to tell
+    // "delivered" from "silently dropped" on a platform where the only
+    // other evidence is a phone that stays quiet.
+    if (ticket?.status === "error") {
+      logger.warn(
+        {
+          title,
+          message: ticket.message,
+          // DeviceNotRegistered, MismatchSenderId, InvalidCredentials,
+          // MessageTooBig, MessageRateExceeded.
+          code: ticket.details?.error,
+        },
+        "push rejected by Expo",
+      );
+    }
   } catch (err) {
     // Non-fatal by design — see the file comment.
     logger.warn({ err, title }, "push notification failed to send");

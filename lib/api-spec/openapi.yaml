@@ -2646,6 +2646,17 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        notifyRecommendations:
+          type: boolean
+          description: Push when somebody recommends you a film.
+        notifyMessages:
+          type: boolean
+          description: Push when somebody sends you a message.
+        notifyPals:
+          type: boolean
+          description: >
+            Push for Film Pal activity — a new follower, a request to
+            connect, or a request of yours being accepted.
       required:
         - clerkId
         - email
@@ -2852,6 +2863,17 @@ components:
             Switch between a public account (anyone can follow instantly)
             and a private one (follows need your approval). Existing
             followers are unaffected either way.
+        notifyRecommendations:
+          type: boolean
+          description: Push when somebody recommends you a film.
+        notifyMessages:
+          type: boolean
+          description: Push when somebody sends you a message.
+        notifyPals:
+          type: boolean
+          description: >
+            Push for Film Pal activity — a new follower, a request to
+            connect, or a request of yours being accepted.
 
     SearchUsersResponse:
       type: object

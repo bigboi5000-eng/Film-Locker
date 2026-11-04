@@ -121,6 +121,9 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
       displayInitials: usersTable.displayInitials,
       isPrivate: usersTable.isPrivate,
       avatarUrl: usersTable.avatarUrl,
+      notifyRecommendations: usersTable.notifyRecommendations,
+      notifyMessages: usersTable.notifyMessages,
+      notifyPals: usersTable.notifyPals,
     })
     .from(usersTable)
     .where(eq(usersTable.clerkId, clerkUserId));
@@ -183,6 +186,9 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     displayInitials: row.displayInitials,
     isPrivate: row.isPrivate,
     avatarUrl: row.avatarUrl,
+    notifyRecommendations: row.notifyRecommendations,
+    notifyMessages: row.notifyMessages,
+    notifyPals: row.notifyPals,
   });
 });
 

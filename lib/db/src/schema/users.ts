@@ -10,6 +10,20 @@ export const usersTable = pgTable("users", {
   isPrivate: boolean("is_private").notNull().default(false), // private users require accepted follow requests to be followed/messaged; their comments are followers-only
   avatarUrl: text("avatar_url"),
   expoPushToken: text("expo_push_token"), // nullable — set when user grants push permission
+  /**
+   * Which pushes this user wants. All on by default: somebody who has just
+   * granted the OS permission has said yes once already, and a new account
+   * that receives nothing looks broken rather than considerate.
+   *
+   * Separate from the OS switch rather than a copy of it. Turning the whole
+   * lot off in Android or iOS settings is a blunt instrument that also hides
+   * the one notification somebody does want, and the server cannot read it
+   * anyway — it only learns a device is unreachable from a push receipt,
+   * after the fact.
+   */
+  notifyRecommendations: boolean("notify_recommendations").notNull().default(true),
+  notifyMessages: boolean("notify_messages").notNull().default(true),
+  notifyPals: boolean("notify_pals").notNull().default(true),
   // When this user last looked at the social feed. The feed puts anything
   // newer than this first, so it answers "what has happened since I last
   // looked" rather than making people hunt through what they have already

@@ -1165,7 +1165,10 @@ export const SyncUserResponse = zod.object({
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(syncUserResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
   "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "notifyRecommendations": zod.boolean().optional().describe('Push when somebody recommends you a film.'),
+  "notifyMessages": zod.boolean().optional().describe('Push when somebody sends you a message.'),
+  "notifyPals": zod.boolean().optional().describe('Push for Film Pal activity — a new follower, a request to connect, or a request of yours being accepted.\n')
 })
 
 
@@ -1182,7 +1185,10 @@ export const GetMeResponse = zod.object({
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(getMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
   "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "notifyRecommendations": zod.boolean().optional().describe('Push when somebody recommends you a film.'),
+  "notifyMessages": zod.boolean().optional().describe('Push when somebody sends you a message.'),
+  "notifyPals": zod.boolean().optional().describe('Push for Film Pal activity — a new follower, a request to connect, or a request of yours being accepted.\n')
 })
 
 
@@ -1199,7 +1205,10 @@ export const updateMeBodyDisplayInitialsMax = 3;
 export const UpdateMeBody = zod.object({
   "username": zod.string().min(updateMeBodyUsernameMin).max(updateMeBodyUsernameMax).optional(),
   "displayInitials": zod.string().max(updateMeBodyDisplayInitialsMax).nullish().describe('Optional — set null\/empty to clear and fall back to username-derived initials'),
-  "isPrivate": zod.boolean().optional().describe('Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way.\n')
+  "isPrivate": zod.boolean().optional().describe('Switch between a public account (anyone can follow instantly) and a private one (follows need your approval). Existing followers are unaffected either way.\n'),
+  "notifyRecommendations": zod.boolean().optional().describe('Push when somebody recommends you a film.'),
+  "notifyMessages": zod.boolean().optional().describe('Push when somebody sends you a message.'),
+  "notifyPals": zod.boolean().optional().describe('Push for Film Pal activity — a new follower, a request to connect, or a request of yours being accepted.\n')
 })
 
 export const updateMeResponseDisplayInitialsMax = 5;
@@ -1212,7 +1221,10 @@ export const UpdateMeResponse = zod.object({
   "username": zod.string().nullish(),
   "displayInitials": zod.string().max(updateMeResponseDisplayInitialsMax).nullish().describe('Optional short display initials shown instead of username-derived ones'),
   "isPrivate": zod.boolean().describe('Private accounts require an accepted follow request before they can be followed, recommended to, messaged, or have their comments seen by the requester.\n'),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "notifyRecommendations": zod.boolean().optional().describe('Push when somebody recommends you a film.'),
+  "notifyMessages": zod.boolean().optional().describe('Push when somebody sends you a message.'),
+  "notifyPals": zod.boolean().optional().describe('Push for Film Pal activity — a new follower, a request to connect, or a request of yours being accepted.\n')
 })
 
 

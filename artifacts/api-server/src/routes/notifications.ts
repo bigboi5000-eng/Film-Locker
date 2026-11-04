@@ -381,7 +381,10 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
       .from(usersTable)
       .where(eq(usersTable.clerkId, clerkUserId)),
     db
-      .select({ expoPushToken: usersTable.expoPushToken })
+      .select({
+        expoPushToken: usersTable.expoPushToken,
+        notifyRecommendations: usersTable.notifyRecommendations,
+      })
       .from(usersTable)
       .where(eq(usersTable.clerkId, toUserId)),
   ]);
@@ -392,7 +395,11 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   // landing on the list only to pick out the row that was just announced is
   // a tap and a search for no reason.
   void sendPush({
-    token: recipientWithToken?.expoPushToken,
+    // Silenced by the recipient's own setting rather than by not sending:
+    // the row is already written and the in-app inbox still shows it, which
+    // is the whole point of the preference being about the push and not
+    // about the notification itself.
+    token: recipientWithToken?.notifyRecommendations ? recipientWithToken?.expoPushToken : null,
     title: "🎬 New film recommendation",
     body: `${sender?.username ?? "Someone"} recommended "${filmTitle}" to you`,
     screen: `/inbox/${clerkUserId}`,
@@ -710,7 +717,11 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
   const { content, replyToNotificationId } = body.data;
 
   const [recipient] = await db
-    .select({ clerkId: usersTable.clerkId, expoPushToken: usersTable.expoPushToken })
+    .select({
+      clerkId: usersTable.clerkId,
+      expoPushToken: usersTable.expoPushToken,
+      notifyMessages: usersTable.notifyMessages,
+    })
     .from(usersTable)
     .where(eq(usersTable.clerkId, otherUserId));
   if (!recipient) { res.status(404).json({ error: "User not found." }); return; }
@@ -745,7 +756,7 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
     .returning();
 
   // Best-effort push to the recipient
-  if (recipient.expoPushToken) {
+  if (recipient.expoPushToken && recipient.notifyMessages) {
     const [sender] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.clerkId, clerkUserId));
     void sendPush({
       token: recipient.expoPushToken,

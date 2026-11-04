@@ -148,7 +148,7 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
         .from(usersTable)
         .where(eq(usersTable.clerkId, clerkUserId)),
       db
-        .select({ expoPushToken: usersTable.expoPushToken })
+        .select({ expoPushToken: usersTable.expoPushToken, notifyPals: usersTable.notifyPals })
         .from(usersTable)
         .where(eq(usersTable.clerkId, followeeId)),
     ]);
@@ -162,7 +162,7 @@ router.post("/follows", requireAuth, async (req, res): Promise<void> => {
     // makes the two of you Film Pals, and it is the only thing that unlocks
     // the conversation between you.
     void sendPush({
-      token: recipient?.expoPushToken,
+      token: recipient?.notifyPals ? recipient?.expoPushToken : null,
       title: pending ? "🎬 New Film Pal request" : "🎬 New follower",
       body: pending
         ? `${who} has asked to connect with you`
@@ -212,13 +212,13 @@ router.patch("/follows/:userId/accept", requireAuth, async (req, res): Promise<v
       .from(usersTable)
       .where(eq(usersTable.clerkId, clerkUserId)),
     db
-      .select({ expoPushToken: usersTable.expoPushToken })
+      .select({ expoPushToken: usersTable.expoPushToken, notifyPals: usersTable.notifyPals })
       .from(usersTable)
       .where(eq(usersTable.clerkId, followerId)),
   ]);
 
   void sendPush({
-    token: requester?.expoPushToken,
+    token: requester?.notifyPals ? requester?.expoPushToken : null,
     title: "🎬 Film Pal request accepted",
     body: `${accepter?.username ?? "Someone"} accepted your request`,
     screen: `/user/${clerkUserId}`,
