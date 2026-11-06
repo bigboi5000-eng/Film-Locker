@@ -262,3 +262,73 @@ export function termsOfServiceHtml(): string {
     `
   );
 }
+
+/**
+ * A support page, because App Store review rejected the app under
+ * guideline 1.5 for a Support URL that did not resolve.
+ *
+ * Served from here rather than built as a separate site: the privacy and
+ * terms pages already live on this server, Apple needs one working page
+ * with a way to get help, and a page that ships with the API cannot fall
+ * out of step with it or quietly stop being deployed.
+ */
+export function supportHtml(): string {
+  return page(
+    "Support",
+    `
+    <p>
+      Film Locker is a place to keep the films you mean to watch, the ones
+      you have seen, and what you thought of them — and to swap them with
+      people you know.
+    </p>
+
+    <h2>Get in touch</h2>
+    <p>
+      Email <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> and a
+      person will answer. Please say which device you are on and what you
+      were doing, which makes most things much quicker to sort out.
+    </p>
+
+    <h2>Common questions</h2>
+
+    <h3>How do I add a film?</h3>
+    <p>
+      Search for it on the Home or Films tab, or paste a link to a post
+      about it — Instagram, TikTok, Reddit and most of the rest — and the
+      films mentioned in it are identified for you. You can also share a
+      post to Film Locker directly from another app.
+    </p>
+
+    <h3>Do I need an account?</h3>
+    <p>
+      Not to browse or search. An account is needed only to keep a list of
+      your own, rate films, or share them with friends.
+    </p>
+
+    <h3>I am not getting notifications</h3>
+    <p>
+      Check Settings inside the app, under Notifications, where each kind
+      can be turned on or off, and check that notifications are allowed for
+      Film Locker in your device settings.
+    </p>
+
+    <h3>How do I delete my account?</h3>
+    <p>
+      In the app: your profile, then Delete account. It removes your films,
+      ratings, comments, messages and follows, and cannot be undone.
+    </p>
+
+    <h2>Privacy and terms</h2>
+    <p>
+      Our <a href="/privacy">privacy policy</a> explains what is collected
+      and why, and the <a href="/terms">terms of service</a> cover using the
+      app.
+    </p>
+
+    <div class="note">
+      Film data and images come from The Movie Database (TMDB). Film Locker
+      is not affiliated with or endorsed by TMDB.
+    </div>
+  `,
+  );
+}

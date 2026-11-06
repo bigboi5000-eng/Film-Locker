@@ -57,7 +57,13 @@ jobs:
 
       - uses: expo/expo-github-action@v8
         with:
-          eas-version: latest
+          # Pinned, not latest. Run 43 died in 78 seconds, before Gradle
+          # started, on the day eas-cli went from 26 to 27 — a major
+          # version arriving between two builds of unchanged native config.
+          # A build pipeline that silently takes whatever upstream shipped
+          # this morning cannot tell you whether your own change broke it.
+          # Raise this deliberately, and on a build that only raises it.
+          eas-version: 26.0.0
           token: ${{ secrets.EXPO_TOKEN }}
 
       # The .p8 cannot be committed, so it is held as a base64 secret and

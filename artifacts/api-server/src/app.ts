@@ -11,7 +11,7 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { privacyPolicyHtml, termsOfServiceHtml } from "./lib/legalContent";
+import { privacyPolicyHtml, supportHtml, termsOfServiceHtml } from "./lib/legalContent";
 
 const app: Express = express();
 
@@ -31,6 +31,13 @@ app.get("/privacy", (_req, res) => {
 });
 app.get("/terms", (_req, res) => {
   res.type("html").send(termsOfServiceHtml());
+});
+// App Store review requires a Support URL that resolves to a real page;
+// guideline 1.5, and a rejection for the one in App Store Connect
+// returning an error. Served beside privacy and terms so the three cannot
+// drift apart or be deployed separately.
+app.get("/support", (_req, res) => {
+  res.type("html").send(supportHtml());
 });
 
 // Structured request logging

@@ -26,6 +26,8 @@ import {
   getListMoviesQueryKey,
   useDeleteMovie,
   useSearchMovies,
+  useGetTrending,
+  getGetTrendingQueryKey,
   getSearchMoviesQueryKey,
   type Movie,
   type TmdbMovieCard,
@@ -35,6 +37,7 @@ import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
 import { SearchResultRow } from '@/components/SearchResultRow';
+import { getDeviceRegion } from '@/lib/region';
 import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
@@ -224,6 +227,24 @@ export default function WatchlistScreen() {
   // The locker is this user's own films — nothing to fetch without an
   // account, and it would 401 on every render for a guest.
   const watchedTmdbIds = useWatchedTmdbIds();
+  /**
+   * Something to look at on this tab without an account.
+   *
+   * App review rejected the app twice over 5.1.1(v), the second time
+   * saying it "still requires users to register before accessing film
+   * listing". The redirect was already gone by then and search already
+   * worked signed out — but the tab called Films showed a signed-out
+   * visitor no films whatever, only a panel about the watchlist they
+   * could not have. Browsing films is not account based, so this tab now
+   * lists some. Saving one still needs an account, which is the part that
+   * genuinely is.
+   */
+  const region = useMemo(() => getDeviceRegion(), []);
+  const { data: trendingData, isLoading: trendingLoading } = useGetTrending(
+    { region },
+    { query: { queryKey: getGetTrendingQueryKey({ region }), enabled: !isSignedIn } },
+  );
+  const guestFilms = trendingData?.movies ?? [];
   const { data: moviesData, isLoading, isError, error, isRefetching, refetch } = useListMovies(
     { query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) } }
   );
@@ -579,11 +600,53 @@ export default function WatchlistScreen() {
            account. Only the saved list is account based, so only it is
            replaced. */
         !isSignedIn ? (
-          <SignedOutGate
-            icon="bookmark-outline"
-            title="Your watchlist lives here"
-            blurb="Search films above without an account. Saving them to a list, rating them and sharing them needs one."
-          />
+          trendingLoading ? (
+            <View style={styles.skeletonGrid}>
+              {[...Array(6)].map((_, i) => (
+                <MovieCardSkeleton key={i} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.gridArea}>
+              <FlatList<TmdbMovieCard>
+                key="guest-grid"
+                data={guestFilms}
+                keyExtractor={(item) => `guest-${item.tmdbId}`}
+                numColumns={3}
+                columnWrapperStyle={styles.columnWrapper}
+                contentContainerStyle={[
+                  styles.contentContainer,
+                  { paddingBottom: insets.bottom + 16 },
+                ]}
+                style={styles.listClip}
+                showsVerticalScrollIndicator={false}
+                ListHeaderComponent={
+                  <TouchableOpacity
+                    style={styles.guestBanner}
+                    onPress={() => router.push('/(auth)/sign-up')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="bookmark-outline" size={18} color={colors.primary} />
+                    <Text style={styles.guestBannerText}>
+                      Browse and search freely. Create a free account to save films,
+                      rate them and share them with friends.
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                  </TouchableOpacity>
+                }
+                renderItem={({ item }) => (
+                  <MovieCard
+                    id={item.tmdbId}
+                    title={item.title}
+                    releaseYear={item.releaseYear}
+                    posterUrl={item.posterUrl}
+                    onPress={() => openMovieModal(item)}
+                  />
+                )}
+              />
+              <GridTopCaps />
+            </View>
+          )
         ) : (
         /* WATCHLIST GRID */
         <View style={styles.gridArea}>
@@ -758,6 +821,24 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
 
   // Search result rows
+
+  guestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    backgroundColor: c.surfaceSubtle,
+    borderRadius: 10,
+  },
+  guestBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: c.textMuted,
+    lineHeight: 18,
+  },
 
   // Grid
   /** Keeps a card that is halfway out of view from painting over the row
