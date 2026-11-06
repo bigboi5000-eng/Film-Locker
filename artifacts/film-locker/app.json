@@ -23,6 +23,7 @@
     "android": {
       "backgroundColor": "#FFFFFF",
       "package": "com.filmlocker.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FAF0DB"

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "983821100078",
+    "project_id": "film-locker-d0129",
+    "storage_bucket": "film-locker-d0129.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:983821100078:android:e8246a41a1f4780b90abbf",
+        "android_client_info": {
+          "package_name": "com.filmlocker.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDmukSk7A2am4WfJ3Xyp0qO1rTLEceHqsc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
