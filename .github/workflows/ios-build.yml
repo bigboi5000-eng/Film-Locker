@@ -127,7 +127,39 @@ jobs:
           # expo-apple-authentication — and tries to switch the capability
           # off, which guideline 4.8 requires to stay on.
           EXPO_NO_CAPABILITY_SYNC: "1"
-        run: eas build --profile ${{ inputs.profile }} --platform ios --non-interactive
+        run: |
+          # pipefail and 2>&1 for the same reason the Android workflow has
+          # them: without pipefail this step's status is tee's, which always
+          # succeeds, and eas writes its errors to stderr.
+          set -o pipefail
+          eas build --profile ${{ inputs.profile }} --platform ios \
+            --non-interactive 2>&1 | tee ios-build.log
+
+      # Run 10 failed here and the only thing the run could say was "exit
+      # code 1": this workflow captured nothing, and the job log lives on
+      # blob storage where the API cannot read it. Same treatment as the
+      # Android workflow — pull out the lines that name a cause, and keep
+      # the tail for a failure that matches none of them.
+      - name: Why it failed
+        if: failure()
+        working-directory: artifacts/film-locker
+        run: |
+          if [ ! -s ios-build.log ]; then
+            echo "::error title=iOS build failed::the build wrote no output at all."
+            exit 0
+          fi
+          CLEAN="$(mktemp)"
+          sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' ios-build.log > "$CLEAN"
+          DIAG="$(grep -nE '([Ee]rror|failed|Failed|FAILURE|not authorized|Unauthorized|forbidden|outdated|minimum|upgrade|quota|limit|credential|provisioning|certificate)' "$CLEAN" \
+                  | head -n 30 | cut -d: -f2-)"
+          MSG="$(printf '%s\n--- last lines ---\n%s\n' "$DIAG" "$(tail -n 20 "$CLEAN")" \
+                 | sed -e 's/%/%25/g' | awk '{ printf "%s%%0A", $0 }')"
+          echo "::error title=iOS build failed::${MSG}"
+
+      - name: Tidy the log away
+        if: always()
+        working-directory: artifacts/film-locker
+        run: rm -f ios-build.log
 
       # eas submit does not read the EXPO_ASC_* variables the build step
       # uses. It looks for the key in eas.json's submit profile, and refuses
