@@ -12,6 +12,8 @@ import { webInputReset } from '@/lib/webInputReset';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import { LoadError } from '@/components/LoadError';
+import { SignedOutGate } from '@/components/SignedOutGate';
+import { useAuth } from '@clerk/expo';
 import {
   useGetMyPlaylists,
   useGetFollowedPlaylists,
@@ -39,18 +41,30 @@ export default function PlaylistsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>('mine');
+  const { isSignedIn } = useAuth();
+  /**
+   * A guest opens on Discover, which is the half of this screen that is
+   * theirs to use.
+   *
+   * Mine asks the server for playlists belonging to an account that does
+   * not exist, so signed out it answered 401 and — once failed queries
+   * started showing an error instead of an empty list — greeted a guest
+   * with "Could not load your playlists" on a screen full of films they
+   * were perfectly entitled to browse. Public playlists need no account
+   * and the server has always served them.
+   */
+  const [tab, setTab] = useState<Tab>(isSignedIn ? 'mine' : 'discover');
   const [createVisible, setCreateVisible] = useState(false);
 
   // ── Mine ────────────────────────────────────────────────────────────────
   const { data: myData, isLoading: myLoading, isError: myError, error: myErr, refetch: refetchMine, isRefetching: myRefetching } = useGetMyPlaylists({
-    query: { queryKey: getGetMyPlaylistsQueryKey() },
+    query: { queryKey: getGetMyPlaylistsQueryKey(), enabled: Boolean(isSignedIn) },
   });
   const { mutateAsync: createPlaylist, isPending: creating } = useCreatePlaylist();
   const myPlaylists = myData?.playlists ?? [];
 
   const { data: followedData } = useGetFollowedPlaylists({
-    query: { queryKey: getGetFollowedPlaylistsQueryKey() },
+    query: { queryKey: getGetFollowedPlaylistsQueryKey(), enabled: Boolean(isSignedIn) },
   });
   const followedPlaylists = followedData?.playlists ?? [];
 
@@ -144,7 +158,13 @@ export default function PlaylistsScreen() {
       </View>
 
       {tab === 'mine' ? (
-        myLoading ? (
+        !isSignedIn ? (
+          <SignedOutGate
+            icon="albums-outline"
+            title="Your playlists live here"
+            blurb="Browse other people's lists under Discover without an account. Making your own needs one."
+          />
+        ) : myLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
         ) : myError ? (
           <LoadError
@@ -309,7 +329,7 @@ export default function PlaylistsScreen() {
         </View>
       )}
 
-      {tab === 'mine' && (
+      {tab === 'mine' && isSignedIn && (
         <TouchableOpacity style={styles.fab} onPress={() => setCreateVisible(true)} activeOpacity={0.85}>
           <Ionicons name="add" size={26} color={colors.onColor} />
         </TouchableOpacity>
