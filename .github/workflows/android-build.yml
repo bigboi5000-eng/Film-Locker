@@ -40,6 +40,11 @@ on:
         type: choice
         options: [preview, production]
         default: preview
+      where:
+        description: "eas builds on Expo's servers and appears in the EAS dashboard; local builds on this runner and spends none of the plan's monthly Android builds"
+        type: choice
+        options: [eas, local]
+        default: eas
 
 jobs:
   build:
@@ -141,18 +146,37 @@ jobs:
           echo "artifact=${OUT}" >> "$GITHUB_OUTPUT"
           echo "name=film-locker-${SHORT_SHA}-${{ inputs.profile }}" >> "$GITHUB_OUTPUT"
 
+          # A remote build produces nothing on this machine: the artifact
+          # lives on Expo's servers and the dashboard is where it is
+          # collected from. --output only makes sense for a local one, and
+          # passing it to a remote build is what would leave the upload
+          # step looking for a file that was never going to exist.
+          if [ "${{ inputs.where }}" = "local" ]; then
+            echo "local=true" >> "$GITHUB_OUTPUT"
+            EXTRA="--local --output $OUT"
+          else
+            echo "local=false" >> "$GITHUB_OUTPUT"
+            EXTRA=""
+          fi
+
           # 2>&1, because eas writes its progress and its errors to stderr.
           # Piping stdout alone left the log without the one thing worth
           # reading when something goes wrong.
           eas build \
             --profile ${{ inputs.profile }} \
             --platform android \
-            --local \
             --non-interactive \
-            --output "$OUT" 2>&1 | tee build.log
+            $EXTRA 2>&1 | tee build.log
+
+          # The dashboard link, pulled back out of the log, so a remote
+          # build says where it went rather than only that it went.
+          if [ "${{ inputs.where }}" != "local" ]; then
+            URL="$(grep -oE 'https://expo\.dev/accounts/[^ ]*builds/[0-9a-f-]+' build.log | head -1)"
+            echo "easurl=${URL}" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/upload-artifact@v4
-        if: success()
+        if: success() && steps.build.outputs.local == 'true'
         with:
           name: ${{ steps.build.outputs.name }}
           path: ${{ steps.build.outputs.artifact }}
@@ -161,8 +185,23 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Where it went (EAS)
+        if: success() && steps.build.outputs.local != 'true'
+        run: |
+          URL="${{ steps.build.outputs.easurl }}"
+          echo "::notice title=Android build finished on EAS::${URL:-see the EAS dashboard} (profile: ${{ inputs.profile }}, commit: ${GITHUB_SHA})"
+          {
+            echo "### Android build finished on EAS"
+            echo ""
+            echo "Built on Expo's servers, so it spent one of the plan's"
+            echo "monthly Android builds and is collected from the dashboard"
+            echo "rather than from this run's Artifacts."
+            echo ""
+            if [ -n "$URL" ]; then echo "[Open the build]($URL)"; else echo "https://expo.dev — Projects → Film Locker → Builds"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Where to find it
-        if: success()
+        if: success() && steps.build.outputs.local == 'true'
         run: |
           # An annotation as well as the summary, because the two are not
           # readable by the same things. The step summary is only on the
