@@ -1236,6 +1236,33 @@ export const DeleteMeResponse = zod.void()
 
 
 /**
+ * A copy of the account's own data, meant to be taken away before deleting it. Mirrors what deletion removes, so the two cannot drift: a thing that can be destroyed and not exported is a thing somebody loses without warning.
+ * @summary Everything this app holds for the authenticated user
+ */
+export const ExportMyDataResponse = zod.object({
+  "exportedAt": zod.string().describe('ISO timestamp this copy was made.'),
+  "account": zod.object({
+
+}).passthrough().describe('Profile fields, not including anything held by the auth provider.'),
+  "films": zod.array(zod.object({
+
+}).passthrough()).describe('The locker — watchlist and watched, with ratings and when each was added.'),
+  "playlists": zod.array(zod.object({
+
+}).passthrough()).describe('Playlists owned by this user, each with its films.'),
+  "comments": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "communityRatings": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "follows": zod.object({
+
+}).passthrough().optional().describe('Who this account follows and who follows it.')
+}).describe('Deliberately plain JSON rather than a zip: one file a person can open, read and keep, and that another tool can import.\n')
+
+
+/**
  * @summary Search users by username or email
  */
 export const searchUsersQueryQMin = 2;

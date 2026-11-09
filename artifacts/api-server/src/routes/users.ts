@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { clerkClient } from "@clerk/express";
-import { eq, or, and, ilike, count, desc, sql } from "drizzle-orm";
+import { eq, or, and, ilike, count, desc, sql, inArray } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -199,6 +199,136 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
 // client deletes the Clerk identity itself. Deliberately does not touch
 // Clerk; called from the app just before clerkUser.delete() so the two
 // stay in sync for the one deletion path the app actually exposes.
+
+// ── GET /users/me/export ──────────────────────────────────────────────────────
+/**
+ * A copy of everything this app holds for the user, to take away.
+ *
+ * Mirrors deleteUserData's list on purpose. Anything that can be
+ * destroyed and not exported is something somebody loses without having
+ * been given the chance to keep it, and the two lists drifting apart is
+ * how that happens quietly — so they are written against the same tables
+ * and should be changed together.
+ *
+ * Left out deliberately: other people's rows. Messages are a conversation
+ * rather than a possession, and exporting somebody else's words because
+ * they were addressed to you hands one person a transcript of another's
+ * without their say. Deletion removes your side of those; the export
+ * covers what is yours alone. Clerk holds the email, any name the sign-in
+ * provider passed and the session history, and exports those itself.
+ */
+router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+
+  const [account] = await db
+    .select({
+      username: usersTable.username,
+      displayInitials: usersTable.displayInitials,
+      email: usersTable.email,
+      isPrivate: usersTable.isPrivate,
+      joinedAt: usersTable.createdAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkId, clerkUserId));
+
+  if (!account) {
+    res.status(404).json({ error: "User profile not found." });
+    return;
+  }
+
+  const [films, ownPlaylists, comments, communityRatings, following, followers] =
+    await Promise.all([
+      db
+        .select({
+          tmdbId: moviesTable.tmdbId,
+          title: moviesTable.title,
+          releaseYear: moviesTable.releaseYear,
+          isWatched: moviesTable.isWatched,
+          rating: moviesTable.rating,
+          director: moviesTable.director,
+          runtime: moviesTable.runtime,
+          genres: moviesTable.genres,
+          // Where it came from, which is the user's own and is the one
+          // field the privacy policy singles out as kept.
+          sourceUrl: moviesTable.sourceUrl,
+          watchedAt: moviesTable.watchedAt,
+          addedAt: moviesTable.addedAt,
+        })
+        .from(moviesTable)
+        .where(eq(moviesTable.clerkUserId, clerkUserId))
+        .orderBy(desc(moviesTable.addedAt)),
+      db
+        .select({
+          id: playlistsTable.id,
+          name: playlistsTable.name,
+          isPublic: playlistsTable.isPublic,
+          createdAt: playlistsTable.createdAt,
+        })
+        .from(playlistsTable)
+        .where(eq(playlistsTable.userId, clerkUserId)),
+      db
+        .select({
+          tmdbId: filmCommentsTable.tmdbId,
+          body: filmCommentsTable.body,
+          createdAt: filmCommentsTable.createdAt,
+        })
+        .from(filmCommentsTable)
+        .where(eq(filmCommentsTable.userId, clerkUserId)),
+      db
+        .select({
+          tmdbId: filmCommunityRatingsTable.tmdbId,
+          rating: filmCommunityRatingsTable.rating,
+        })
+        .from(filmCommunityRatingsTable)
+        .where(eq(filmCommunityRatingsTable.userId, clerkUserId)),
+      db
+        .select({ clerkId: followsTable.followeeId, status: followsTable.status })
+        .from(followsTable)
+        .where(eq(followsTable.followerId, clerkUserId)),
+      db
+        .select({ clerkId: followsTable.followerId, status: followsTable.status })
+        .from(followsTable)
+        .where(eq(followsTable.followeeId, clerkUserId)),
+    ]);
+
+  // One query for every playlist's films rather than one per playlist,
+  // which on an account with forty lists is forty round trips to Neon for
+  // a file somebody is waiting on.
+  const ids = ownPlaylists.map((pl) => pl.id);
+  const items = ids.length
+    ? await db
+        .select({
+          playlistId: playlistItemsTable.playlistId,
+          tmdbId: playlistItemsTable.tmdbId,
+          filmTitle: playlistItemsTable.filmTitle,
+          sourceUrl: playlistItemsTable.sourceUrl,
+        })
+        .from(playlistItemsTable)
+        .where(inArray(playlistItemsTable.playlistId, ids))
+    : [];
+
+  const byPlaylist = new Map<number, typeof items>();
+  for (const it of items) {
+    const list = byPlaylist.get(it.playlistId) ?? [];
+    list.push(it);
+    byPlaylist.set(it.playlistId, list);
+  }
+
+  res.json({
+    exportedAt: new Date().toISOString(),
+    account,
+    films,
+    playlists: ownPlaylists.map((pl) => ({
+      name: pl.name,
+      isPublic: pl.isPublic,
+      createdAt: pl.createdAt,
+      films: (byPlaylist.get(pl.id) ?? []).map(({ playlistId: _pid, ...film }) => film),
+    })),
+    comments,
+    communityRatings,
+    follows: { following, followers },
+  });
+});
 
 router.delete("/users/me", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, ActivityIndicator, Platform, Switch, Linking,
+  ScrollView, ActivityIndicator, Platform, Switch, Linking, Share, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import {
   useUpdateMe,
   useSubmitFeedback,
   useDeleteMe,
+  exportMyData,
   getGetMeQueryKey,
 } from '@workspace/api-client-react';
 import { confirmDestructive } from '@/lib/confirm';
@@ -21,6 +22,7 @@ import Constants from 'expo-constants';
 import { PRIVACY_URL, TERMS_URL, CONTACT_EMAIL } from '@/lib/legalLinks';
 import { useToast } from '@/components/ToastProvider';
 import { pushStatus } from '@/lib/pushNotifications';
+import { File, Paths } from 'expo-file-system';
 import { webInputReset } from '@/lib/webInputReset';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -255,6 +257,43 @@ export default function ProfileScreen() {
     }
   }, [updateMe, queryClient, showToast]);
 
+  /**
+   * Write the export to a file and hand it to the share sheet.
+   *
+   * A file rather than a screen of JSON: the point of an export is to
+   * leave with it — into Files, a note, an email to yourself — and a
+   * page you can only scroll is not a copy of anything.
+   */
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async (): Promise<boolean> => {
+    setExporting(true);
+    try {
+      const data = await exportMyData();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const file = new File(Paths.cache, `film-locker-export-${stamp}.json`);
+      if (file.exists) file.delete();
+      file.create();
+      file.write(JSON.stringify(data, null, 2));
+
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { url: file.uri }
+          : { message: `Film Locker export — ${stamp}`, url: file.uri },
+      );
+      return true;
+    } catch (err) {
+      showToast({
+        title: 'Could not export your data',
+        subtitle: errorMessage(err),
+        variant: 'error',
+      });
+      return false;
+    } finally {
+      setExporting(false);
+    }
+  }, [showToast]);
+
   const handleStartEditInitials = useCallback(() => {
     setInitialsInput(profile?.displayInitials ?? '');
     setEditingInitials(true);
@@ -308,7 +347,15 @@ export default function ProfileScreen() {
 
   const { mutateAsync: deleteMe } = useDeleteMe();
 
-  const handleDeleteAccount = useCallback(() => {
+  /**
+   * Offered before the deletion is confirmed, not after.
+   *
+   * Deletion takes the watchlist, the ratings, the playlists and the
+   * comments with it and cannot be undone, so the moment to mention that
+   * a copy can be kept is while there is still something to copy. Asking
+   * afterwards would be describing a door that had already shut.
+   */
+  const confirmDelete = useCallback(() => {
     confirmDestructive(
       'This permanently deletes your Film Locker account, watchlist, and all social data. This cannot be undone.',
       'Delete',
@@ -335,6 +382,28 @@ export default function ProfileScreen() {
       }
     );
   }, [deleteMe, signOut, router, showToast]);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Take a copy first?',
+      'Deleting your account removes your watchlist, ratings, playlists and comments for good. You can save a copy of them before it goes.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Export first',
+          onPress: () => {
+            // The confirmation only follows a successful export. If the
+            // export failed, the toast has said so and pressing on to
+            // "this cannot be undone" would be pretending otherwise.
+            void handleExport().then((ok) => {
+              if (ok) confirmDelete();
+            });
+          },
+        },
+        { text: 'Delete without exporting', style: 'destructive', onPress: confirmDelete },
+      ],
+    );
+  }, [handleExport, confirmDelete]);
 
   // Leave the moment the session goes, however it goes — signing out, or a
   // session expiring while the screen is open. Deliberately below every hook
@@ -643,6 +712,12 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Account actions</Text>
           <Row icon="log-out-outline" label="Sign out" onPress={handleSignOut} />
+          <Row
+            icon={exporting ? 'hourglass-outline' : 'download-outline'}
+            label={exporting ? 'Preparing your export…' : 'Export your data'}
+            value="Your watchlist, ratings, playlists and comments, as a file"
+            onPress={exporting ? undefined : () => void handleExport()}
+          />
           <Row icon="trash-outline" label="Delete account" danger onPress={handleDeleteAccount} />
         </View>
       </ScrollView>

@@ -29,6 +29,7 @@ import type {
   ConversationFeedItem,
   ConversationsResponse,
   CreatePlaylistBody,
+  DataExport,
   ExtractFromImageBody,
   FeedResponse,
   FilmComment,
@@ -2930,6 +2931,84 @@ export const useDeleteMe = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteMeMutationOptions(options));
     }
+
+export const getExportMyDataUrl = () => {
+
+
+
+
+  return `/api/users/me/export`
+}
+
+/**
+ * A copy of the account's own data, meant to be taken away before deleting it. Mirrors what deletion removes, so the two cannot drift: a thing that can be destroyed and not exported is a thing somebody loses without warning.
+ * @summary Everything this app holds for the authenticated user
+ */
+export const exportMyData = async ( options?: RequestInit): Promise<DataExport> => {
+
+  return customFetch<DataExport>(getExportMyDataUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportMyDataQueryKey = () => {
+    return [
+    `/api/users/me/export`
+    ] as const;
+    }
+
+
+export const getExportMyDataQueryOptions = <TData = Awaited<ReturnType<typeof exportMyData>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportMyDataQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportMyData>>> = ({ signal }) => exportMyData({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportMyDataQueryResult = NonNullable<Awaited<ReturnType<typeof exportMyData>>>
+export type ExportMyDataQueryError = ErrorType<void>
+
+
+/**
+ * @summary Everything this app holds for the authenticated user
+ */
+
+export function useExportMyData<TData = Awaited<ReturnType<typeof exportMyData>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportMyDataQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getSearchUsersUrl = (params: SearchUsersParams,) => {
   const normalizedParams = new URLSearchParams();

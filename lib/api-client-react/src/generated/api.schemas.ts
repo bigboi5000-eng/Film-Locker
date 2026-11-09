@@ -693,6 +693,42 @@ export interface UpdateMeBody {
   notifyPals?: boolean;
 }
 
+/**
+ * Profile fields, not including anything held by the auth provider.
+ */
+export type DataExportAccount = { [key: string]: unknown };
+
+export type DataExportFilmsItem = { [key: string]: unknown };
+
+export type DataExportPlaylistsItem = { [key: string]: unknown };
+
+export type DataExportCommentsItem = { [key: string]: unknown };
+
+export type DataExportCommunityRatingsItem = { [key: string]: unknown };
+
+/**
+ * Who this account follows and who follows it.
+ */
+export type DataExportFollows = { [key: string]: unknown };
+
+/**
+ * Deliberately plain JSON rather than a zip: one file a person can open, read and keep, and that another tool can import.
+ */
+export interface DataExport {
+  /** ISO timestamp this copy was made. */
+  exportedAt: string;
+  /** Profile fields, not including anything held by the auth provider. */
+  account: DataExportAccount;
+  /** The locker — watchlist and watched, with ratings and when each was added. */
+  films: DataExportFilmsItem[];
+  /** Playlists owned by this user, each with its films. */
+  playlists: DataExportPlaylistsItem[];
+  comments?: DataExportCommentsItem[];
+  communityRatings?: DataExportCommunityRatingsItem[];
+  /** Who this account follows and who follows it. */
+  follows?: DataExportFollows;
+}
+
 export interface SearchUsersResponse {
   users: PublicUserProfile[];
 }

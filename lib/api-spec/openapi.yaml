@@ -867,6 +867,28 @@ paths:
         "401":
           description: Unauthorized
 
+  /users/me/export:
+    get:
+      operationId: exportMyData
+      tags: [users]
+      summary: Everything this app holds for the authenticated user
+      description: >
+        A copy of the account's own data, meant to be taken away before
+        deleting it. Mirrors what deletion removes, so the two cannot
+        drift: a thing that can be destroyed and not exported is a thing
+        somebody loses without warning.
+      responses:
+        "200":
+          description: The export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExport"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Profile not found
+
   /users/search:
     get:
       operationId: searchUsers
@@ -2874,6 +2896,45 @@ components:
           description: >
             Push for Film Pal activity — a new follower, a request to
             connect, or a request of yours being accepted.
+
+    DataExport:
+      type: object
+      description: >
+        Deliberately plain JSON rather than a zip: one file a person can
+        open, read and keep, and that another tool can import.
+      properties:
+        exportedAt:
+          type: string
+          description: ISO timestamp this copy was made.
+        account:
+          type: object
+          description: Profile fields, not including anything held by the auth provider.
+        films:
+          type: array
+          description: The locker — watchlist and watched, with ratings and when each was added.
+          items:
+            type: object
+        playlists:
+          type: array
+          description: Playlists owned by this user, each with its films.
+          items:
+            type: object
+        comments:
+          type: array
+          items:
+            type: object
+        communityRatings:
+          type: array
+          items:
+            type: object
+        follows:
+          type: object
+          description: Who this account follows and who follows it.
+      required:
+        - exportedAt
+        - account
+        - films
+        - playlists
 
     SearchUsersResponse:
       type: object
