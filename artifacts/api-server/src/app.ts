@@ -11,7 +11,7 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { privacyPolicyHtml, supportHtml, termsOfServiceHtml } from "./lib/legalContent";
+import { supportHtml } from "./lib/legalContent";
 
 const app: Express = express();
 
@@ -26,16 +26,25 @@ app.set("trust proxy", 1);
 // Public legal pages — deliberately outside /api and unauthenticated, so
 // they're plain reachable URLs (e.g. for the App Store Connect privacy
 // policy field) as well as links from inside the app.
-app.get("/privacy", (_req, res) => {
-  res.type("html").send(privacyPolicyHtml());
-});
-app.get("/terms", (_req, res) => {
-  res.type("html").send(termsOfServiceHtml());
-});
-// App Store review requires a Support URL that resolves to a real page;
-// guideline 1.5, and a rejection for the one in App Store Connect
-// returning an error. Served beside privacy and terms so the three cannot
-// drift apart or be deployed separately.
+/**
+ * The legal pages live on the website, and only there.
+ *
+ * They used to be served here as well, and the two copies did exactly
+ * what two copies of a document do: the one people actually read — the
+ * app links to film-locker.com — sat two months stale, still saying a
+ * shared link was not stored, while the corrected text went to the copy
+ * nobody was looking at. A comment in legalLinks.ts had even warned that
+ * both would need changing. It was not enough, because "remember to
+ * update both" never is.
+ *
+ * So these redirect now. One text, on the canonical host, and nothing
+ * here that can quietly disagree with it. 301 rather than 302: the app
+ * links are compiled into builds already on people's phones and are not
+ * going to move.
+ */
+const SITE = "https://film-locker.com";
+app.get("/privacy", (_req, res) => res.redirect(301, `${SITE}/privacy`));
+app.get("/terms", (_req, res) => res.redirect(301, `${SITE}/terms`));
 app.get("/support", (_req, res) => {
   res.type("html").send(supportHtml());
 });
