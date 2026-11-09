@@ -1,4 +1,4 @@
-const LAST_UPDATED = "September 4, 2026";
+const LAST_UPDATED = "November 9, 2026";
 const CONTACT_EMAIL = "hello@film-locker.com";
 
 const PAGE_STYLE = `
@@ -46,8 +46,8 @@ export function privacyPolicyHtml(): string {
       <li><strong>Sign-in security records:</strong> Clerk keeps a record of your sign-ins so it can run your session and flag suspicious activity — the device and browser used, the IP address it came from, and when each session started. This is held by Clerk rather than by us, and is used for account security only.</li>
       <li><strong>Your locker:</strong> films you add to your watchlist or mark as watched, and any star ratings you give them.</li>
       <li><strong>Your playlists:</strong> the playlists you create, the films in them, whether each one is public or private, and which other people's playlists you follow.</li>
-      <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, films you recommend to people you follow, and reactions/messages exchanged with people you follow each other with (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
-      <li><strong>Content you share for lookup:</strong> if you paste a social media link or caption to identify a film, that text (and, where needed, audio or video extracted from the link) is processed to figure out what film you mean. It is not stored beyond what's needed to complete that lookup.</li>
+      <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, the community star ratings you give (these are public and counted into each film's average, unlike the private rating in your own locker), films you recommend to people you follow, and reactions/messages exchanged with people you follow each other with (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
+      <li><strong>Content you share for lookup:</strong> if you paste a social media link or caption to identify a film, that text (and, where needed, audio or video extracted from the link) is processed to figure out what film you mean. The caption, audio and video are not kept beyond that lookup. <strong>The link itself is kept</strong> against any film you then save from it, so the app can show you where the film came from and take you back to the original post; it is visible only to you, and it goes when you remove the film or delete your account.</li>
       <li><strong>Photos you choose to identify films from:</strong> if you take a photo or pick an image from your device to find the films in it — a poster, a cinema listing, a screenshot of a post — that image is sent to Google Gemini to be read. We do not store the image: it is held only for as long as the lookup takes, then deleted. Google does not use it to train its models — see the note on Gemini's paid tier below. The app only ever accesses the camera or a photo you specifically select; it never browses your photo library on its own.</li>
       <li><strong>Feedback:</strong> anything you submit through the in-app feedback form, along with the email on your account.</li>
       <li><strong>Push notification token:</strong> only if you enable notifications, so we can deliver them to your device.</li>
@@ -67,6 +67,8 @@ export function privacyPolicyHtml(): string {
       <li><strong>The Movie Database (TMDB)</strong> — film details, posters, and where-to-watch info. Search terms you enter are sent to TMDB to look up matching films.</li>
       <li><strong>Google Gemini</strong> — used to identify films from a shared social link's caption, audio or video, to read films out of a photo or screenshot you choose, and to turn a natural-language search ("a 90 minute horror film like X") into film suggestions. Content you paste, share or photograph for these purposes is sent to Google for processing. We use Gemini's paid tier, under which Google does not use what we send, or what it sends back, to train or improve its models.</li>
       <li><strong>Expo</strong> — delivers push notifications to your device, if enabled.</li>
+      <li><strong>Google Firebase Cloud Messaging</strong> — carries those push notifications the last step to an Android device. Expo hands it the notification and your device's push token; it is not used on iOS, which goes through Apple instead.</li>
+      <li><strong>Apify</strong> — reads the public content of an Instagram or Reddit link you paste, when the post cannot be read directly. It receives the link, and returns the post's text so a film can be identified from it. It is not sent anything about you.</li>
       <li><strong>Resend</strong> — delivers the email notification when you submit feedback.</li>
     </ul>
     <p>Each of these services processes data under its own privacy policy.</p>
