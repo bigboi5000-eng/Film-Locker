@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, ActivityIndicator, Platform, Switch, Linking, Share, Alert,
+  ScrollView, ActivityIndicator, Switch, Linking, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import { PRIVACY_URL, TERMS_URL, CONTACT_EMAIL } from '@/lib/legalLinks';
 import { useToast } from '@/components/ToastProvider';
 import { pushStatus } from '@/lib/pushNotifications';
 import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { webInputReset } from '@/lib/webInputReset';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -276,11 +277,30 @@ export default function ProfileScreen() {
       file.create();
       file.write(JSON.stringify(data, null, 2));
 
-      await Share.share(
-        Platform.OS === 'ios'
-          ? { url: file.uri }
-          : { message: `Film Locker export — ${stamp}`, url: file.uri },
-      );
+      // expo-sharing, not React Native's Share.
+      //
+      // Share.share takes a `url` and silently ignores it on Android --
+      // its implementation sends only `message` -- so the export arrived
+      // as a single line of text reading "Film Locker export" and no
+      // file at all. It also cannot hand another app a file:// URI from
+      // the cache directory, which needs a FileProvider; expo-sharing
+      // does that part.
+      if (!(await Sharing.isAvailableAsync())) {
+        showToast({
+          title: 'Sharing is not available on this device',
+          subtitle: `Your export is saved at ${file.uri}`,
+          variant: 'error',
+        });
+        return false;
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/json',
+        // Android reads mimeType, iOS reads UTI, and both are needed or
+        // the receiving app is offered the wrong kind of thing.
+        UTI: 'public.json',
+        dialogTitle: 'Save your Film Locker export',
+      });
       return true;
     } catch (err) {
       showToast({
