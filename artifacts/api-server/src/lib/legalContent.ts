@@ -30,14 +30,250 @@ function page(title: string, body: string): string {
 </html>`;
 }
 
-/**
- * The privacy policy and terms used to be generated here too. They are
- * on the website now — a single copy, which is the only arrangement that
- * does not drift — and /privacy and /terms on this server redirect to
- * it. Support stays here: it is the one legal-ish page with no website
- * equivalent, and it ships with the API it describes.
- */
+export function privacyPolicyHtml(): string {
+  return page(
+    "Privacy Policy",
+    `
+    <p>
+      Film Locker is a movie tracking and social recommendation app. This
+      page explains what information we collect, how it's used, and who
+      else can see it.
+    </p>
 
+    <h2>Information we collect</h2>
+    <ul>
+      <li><strong>Account info:</strong> your email address, an account ID that identifies you to us, the date you joined, and optionally a username, display initials, and avatar. Sign-in itself is handled by our authentication provider, Clerk — we never see or store your password. We never ask you for your real name; if you sign in with Google or Apple, that provider passes your name along with it, and it is kept against your sign-in record. The app does not display it to anyone or use it for anything.</li>
+      <li><strong>Sign-in security records:</strong> Clerk keeps a record of your sign-ins so it can run your session and flag suspicious activity — the device and browser used, the IP address it came from, and when each session started. This is held by Clerk rather than by us, and is used for account security only.</li>
+      <li><strong>Your locker:</strong> films you add to your watchlist or mark as watched, and any star ratings you give them.</li>
+      <li><strong>Your playlists:</strong> the playlists you create, the films in them, whether each one is public or private, and which other people's playlists you follow.</li>
+      <li><strong>Social activity:</strong> who you follow and who follows you, your account's public/private setting, comments you post on films, the community star ratings you give (these are public and counted into each film's average, unlike the private rating in your own locker), films you recommend to people you follow, and reactions/messages exchanged with people you follow each other with (a fixed set of emoji and phrases — there is no freeform messaging in this app).</li>
+      <li><strong>Content you share for lookup:</strong> if you paste a social media link or caption to identify a film, that text (and, where needed, audio or video extracted from the link) is processed to figure out what film you mean. The caption, audio and video are not kept beyond that lookup. <strong>The link itself is kept</strong> against any film you then save from it, so the app can show you where the film came from and take you back to the original post; it is visible only to you, and it goes when you remove the film or delete your account.</li>
+      <li><strong>Photos you choose to identify films from:</strong> if you take a photo or pick an image from your device to find the films in it — a poster, a cinema listing, a screenshot of a post — that image is sent to Google Gemini to be read. We do not store the image: it is held only for as long as the lookup takes, then deleted. Google does not use it to train its models — see the note on Gemini's paid tier below. The app only ever accesses the camera or a photo you specifically select; it never browses your photo library on its own.</li>
+      <li><strong>Feedback:</strong> anything you submit through the in-app feedback form, along with the email on your account.</li>
+      <li><strong>Push notification token:</strong> only if you enable notifications, so we can deliver them to your device.</li>
+    </ul>
+
+    <h2>How we use it</h2>
+    <p>
+      Solely to operate the app's features described above: showing you
+      your locker, running the social/recommendation features, and
+      improving the app based on feedback. We do not sell your data, and we
+      do not run advertising or third-party analytics/tracking inside the app.
+    </p>
+
+    <h2>Third-party services we rely on</h2>
+    <ul>
+      <li><strong>Clerk</strong> — authentication and account sign-in.</li>
+      <li><strong>The Movie Database (TMDB)</strong> — film details, posters, and where-to-watch info. Search terms you enter are sent to TMDB to look up matching films.</li>
+      <li><strong>Google Gemini</strong> — used to identify films from a shared social link's caption, audio or video, to read films out of a photo or screenshot you choose, and to turn a natural-language search ("a 90 minute horror film like X") into film suggestions. Content you paste, share or photograph for these purposes is sent to Google for processing. We use Gemini's paid tier, under which Google does not use what we send, or what it sends back, to train or improve its models.</li>
+      <li><strong>Expo</strong> — delivers push notifications to your device, if enabled.</li>
+      <li><strong>Google Firebase Cloud Messaging</strong> — carries those push notifications the last step to an Android device. Expo hands it the notification and your device's push token; it is not used on iOS, which goes through Apple instead.</li>
+      <li><strong>Apify</strong> — reads the public content of an Instagram or Reddit link you paste, when the post cannot be read directly. It receives the link, and returns the post's text so a film can be identified from it. It is not sent anything about you.</li>
+      <li><strong>Resend</strong> — delivers the email notification when you submit feedback.</li>
+    </ul>
+    <p>Each of these services processes data under its own privacy policy.</p>
+
+    <h2>What other users can see</h2>
+    <p>
+      If your account is <strong>public</strong>, anyone can follow you
+      without approval and see your comments on films. If your account is
+      <strong>private</strong>, people need your approval to follow you, and
+      only approved followers can see your comments, your public playlists,
+      or send you film recommendations. Your account's setting is shown on
+      your profile, so anyone looking at it can see which applies.
+    </p>
+    <p>
+      <strong>Messaging is separate, and needs to go both ways.</strong> You
+      can only exchange messages with someone once you each follow the other
+      — what the app calls being Film Pals. Following someone who has not
+      followed you back does not let either of you message, on a public
+      account or a private one. Unfollowing ends it in both directions.
+    </p>
+    <p>
+      Anyone who opens your profile can see your username, avatar, and three
+      headline numbers: how many films you have marked as watched, how many
+      comments you have posted, and how many public playlists you have. These
+      counts are visible whether or not they follow you. The films, comments
+      and playlists behind those numbers are not.
+    </p>
+    <p>
+      <strong>Playlists</strong> are private unless you choose to make them
+      public. A public playlist can be found by its name or by the films in
+      it, and other people can follow it — meaning they see its current
+      contents, including changes you make later. A public playlist belonging
+      to a private account is only visible to that account's approved
+      followers.
+    </p>
+    <p>
+      <strong>Your watched films</strong> can be opened from your profile only
+      by people you follow who also follow you back. Following someone one way
+      is not enough.
+    </p>
+    <p>
+      Your email address is never shown to other users under any setting. You
+      can block anyone at any time, which immediately removes any follow
+      relationship between you and prevents them from following, messaging, or
+      seeing your comments going forward.
+    </p>
+
+    <h2>Data retention & deletion</h2>
+    <p>
+      You can permanently delete your account at any time from Account
+      Management in the app. Doing so removes your locker, ratings, comments,
+      playlists, follows, blocks, messages, and feedback from our database
+      immediately — this cannot be undone. One exception: if someone has
+      reported you, we retain that report as a safety record even if your
+      account is later deleted.
+    </p>
+    <p>
+      Photos you use to identify films are never part of this, because they
+      are never stored in the first place.
+    </p>
+
+    <h2>Children's privacy</h2>
+    <p>
+      Film Locker is not directed at children under 13, and we do not
+      knowingly collect information from them.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      If this policy changes materially, we'll update the date at the top
+      of this page.
+    </p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy or your data: <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
+
+    <div class="note">
+      Film Locker is an independently developed app. This policy describes
+      our practices in plain terms; it is not a substitute for legal advice.
+    </div>
+    `
+  );
+}
+
+export function termsOfServiceHtml(): string {
+  return page(
+    "Terms of Service",
+    `
+    <p>
+      These terms govern your use of Film Locker. By creating an account,
+      you agree to them.
+    </p>
+
+    <h2>The service</h2>
+    <p>
+      Film Locker lets you track films you want to watch or have watched,
+      rate and comment on them, organise them into playlists, and recommend
+      them to people you follow. It can identify films from a social media
+      link you share, or from a photo or screenshot you choose. Film data is
+      sourced from The Movie Database (TMDB); Film Locker is not affiliated
+      with or endorsed by TMDB, IMDb, or any streaming service referenced in
+      the app, nor by any social media platform whose links you share into it.
+    </p>
+
+    <h2>Your account</h2>
+    <p>
+      You're responsible for the accuracy of the information on your
+      account and for activity that happens under it. One account per
+      person. You must be old enough to use this app under the laws of
+      your country (13 or older in most places).
+    </p>
+
+    <h2>Acceptable use</h2>
+    <p>
+      <strong>There is no tolerance for objectionable content or abusive
+      users.</strong> Comments are checked automatically before they are
+      posted, and anything objectionable is refused. Anything reported to us
+      is reviewed within 24 hours; content that breaks these rules is
+      removed and the account that posted it is suspended or deleted.
+    </p>
+    <p>You agree not to:</p>
+    <ul>
+      <li>Harass, impersonate, or abuse other users;</li>
+      <li>Post comments, playlist names or descriptions that are illegal, hateful, or infringe someone else's rights;</li>
+      <li>Upload photos you do not have the right to use, or images of other people who have not agreed to it;</li>
+      <li>Attempt to scrape, reverse-engineer, or overload the service;</li>
+      <li>Use the feedback form for anything other than genuine feedback.</li>
+    </ul>
+    <p>
+      You can block anyone directly from the app, and report a user or a
+      specific comment for us to review. You can delete your own comments at
+      any time, which removes them for everyone immediately. Reports come
+      straight to us rather than to a queue, and you can always reach us at
+      <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.
+    </p>
+
+    <h2>Your content</h2>
+    <p>
+      You own the comments, ratings, playlists, and messages you post. By
+      posting them, you allow Film Locker to display them to other users
+      according to your account's privacy setting, each playlist's own
+      public/private setting, and — for messages — the mutual follow they
+      require, as described in our Privacy Policy. Making a
+      playlist public allows other people to find it and follow it; if you
+      later make it private or delete it, it stops being visible to them.
+    </p>
+
+    <h2>Film data & AI-generated content</h2>
+    <p>
+      Film details come from TMDB and may be incomplete or inaccurate.
+      Recommendations, film identification from shared links, and reading
+      films out of a photo all use Google Gemini, and may occasionally be
+      wrong — a film may be misidentified, or missed entirely. Where a film
+      has been matched incorrectly you can correct it yourself before saving
+      it. Always verify before relying on any of it.
+    </p>
+
+    <h2>No warranty</h2>
+    <p>
+      Film Locker is provided "as is," without warranties of any kind. We
+      don't guarantee the service will be uninterrupted, error-free, or
+      permanently available.
+    </p>
+
+    <h2>Limitation of liability</h2>
+    <p>
+      To the fullest extent permitted by law, Film Locker and its developer
+      aren't liable for indirect, incidental, or consequential damages
+      arising from your use of the app.
+    </p>
+
+    <h2>Termination</h2>
+    <p>
+      You may delete your account at any time from Account Management. We
+      may suspend or terminate accounts that violate these terms.
+    </p>
+
+    <h2>Changes to these terms</h2>
+    <p>
+      If these terms change materially, we'll update the date at the top of
+      this page.
+    </p>
+
+    <h2>Contact</h2>
+    <p><a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
+
+    <div class="note">
+      Film Locker is an independently developed app. These terms are
+      written in plain language to be genuinely useful; they are not a
+      substitute for formal legal advice, and a proper legal review is
+      recommended before wide public launch.
+    </div>
+    `
+  );
+}
+
+/**
+ * A support page, because App Store review rejected the app under
+ * guideline 1.5 for a Support URL that did not resolve.
+ *
+ * Served from here rather than built as a separate site: the privacy and
+ * terms pages already live on this server, Apple needs one working page
+ * with a way to get help, and a page that ships with the API cannot fall
+ * out of step with it or quietly stop being deployed.
+ */
 export function supportHtml(): string {
   return page(
     "Support",

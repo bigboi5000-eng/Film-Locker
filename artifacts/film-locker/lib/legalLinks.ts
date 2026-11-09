@@ -13,10 +13,18 @@
  * (three occurrences), which is how they came to be pointing at a Replit
  * domain long after the backend had moved to Railway.
  *
- * The API also serves its own copies at /privacy and /terms. The website is
- * the canonical version; those remain as a fallback. If the wording changes,
- * it has to change in both — artifacts/api-server/src/lib/legalContent.ts is
- * the other one.
+ * These are the addresses, not the pages. The text lives in one place and
+ * one only: artifacts/api-server/src/lib/legalContent.ts, served at
+ * api.film-locker.com/privacy and /terms. The website forwards these two
+ * paths there.
+ *
+ * It was the other way round, with the website holding the text and the
+ * API keeping a copy, and a comment here saying both had to be changed
+ * together. They were not. The copy people actually read sat two months
+ * stale, still saying a shared link was not stored, after the behaviour
+ * had changed. The policy is generated from the code whose behaviour it
+ * describes now, and deploys with it, so there is nothing to remember and
+ * no second version to disagree.
  */
 
 const SITE = 'https://film-locker.com';
