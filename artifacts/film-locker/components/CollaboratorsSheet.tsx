@@ -32,7 +32,7 @@ import {
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
-import { collaboratorColor, badgeInitials } from '@/lib/collaboratorColors';
+import { collaboratorColorMap, badgeInitials } from '@/lib/collaboratorColors';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
 import type { Palette } from '@/constants/colors';
@@ -106,6 +106,13 @@ export function CollaboratorsSheet({
   const { mutateAsync: removeCollaborator } = useRemoveCollaborator();
 
   const onList = useMemo(() => new Set(collaborators.map((c) => c.clerkId)), [collaborators]);
+  // The same mapping the grid uses, from the same function — the swatches
+  // here are the legend FOR those badges, so a second way of working the
+  // colours out is a second chance for the two to disagree.
+  const colorById = useMemo(
+    () => collaboratorColorMap(collaborators, myClerkId),
+    [collaborators, myClerkId]
+  );
   const invited = collaborators.filter((c) => !c.isOwner);
   // Undefined until the request lands. Treated as "room for more" rather
   // than as zero, so the invite list is not hidden for the moment before
@@ -214,8 +221,8 @@ export function CollaboratorsSheet({
             {/* The legend for the badges on the posters. Every person here
                 keeps the colour they have on the grid, which is why the
                 order of this list is the server's and not sorted here. */}
-            {collaborators.map((person, index) => {
-              const color = collaboratorColor(index);
+            {collaborators.map((person) => {
+              const color = colorById.get(person.clerkId) ?? colors.primary;
               const isMe = person.clerkId === myClerkId;
               const canRemove = !person.isOwner && (isOwner || isMe);
               return (

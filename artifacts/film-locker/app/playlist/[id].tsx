@@ -37,7 +37,7 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
 import { CollaboratorsSheet } from '@/components/CollaboratorsSheet';
-import { collaboratorColor, badgeInitials } from '@/lib/collaboratorColors';
+import { collaboratorColorMap, badgeInitials } from '@/lib/collaboratorColors';
 import { applySort, type SortState } from '@/components/SortSheet';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
@@ -420,19 +420,24 @@ export default function PlaylistScreen() {
 
   /**
    * clerkId → the colour and initials that clerkId wears everywhere on this
-   * screen. Built from the server's order, which is the whole reason a
-   * person's colour does not move when somebody else is invited.
+   * screen.
+   *
+   * Keyed off the server's order, which is the whole reason a person's
+   * colour does not move when somebody else is invited — and off who is
+   * looking, because you are always blue. See lib/collaboratorColors.
    */
-  const personStyleById = useMemo(
-    () =>
-      new Map(
-        collaborators.map((person, index) => [
-          person.clerkId,
-          { color: collaboratorColor(index), label: badgeInitials(person) },
-        ])
-      ),
-    [collaborators]
-  );
+  const personStyleById = useMemo(() => {
+    const colorById = collaboratorColorMap(collaborators, myClerkId);
+    return new Map(
+      collaborators.map((person) => [
+        person.clerkId,
+        {
+          color: colorById.get(person.clerkId) ?? colors.primary,
+          label: badgeInitials(person),
+        },
+      ])
+    );
+  }, [collaborators, myClerkId, colors.primary]);
 
   const { mutateAsync: followPlaylist } = useFollowPlaylist();
   const { mutateAsync: unfollowPlaylist } = useUnfollowPlaylist();
@@ -693,30 +698,60 @@ export default function PlaylistScreen() {
           the people on it — a stranger looking at a public list sees the
           badges too, and without this they would be unexplained dots.
 
+          Each name is its own tap, to that person's profile. A shared list
+          is the main way you meet the owner's friends rather than your own,
+          and until now they were two letters and a colour with no way to
+          find out who they were or to follow them. Your own chip does not
+          navigate: it is the one person here who needs no introduction.
+
           Hidden on a solo list, where there are no badges to explain. */}
       {collaborators.length > 1 && (
-        <TouchableOpacity
-          style={styles.collabStrip}
-          onPress={() => setCollabVisible(canEdit)}
-          activeOpacity={canEdit ? 0.7 : 1}
-          disabled={!canEdit}
-        >
+        <View style={styles.collabStrip}>
           <Ionicons name="people-outline" size={14} color={colors.textFaint} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collabChips}>
-            {collaborators.map((person, index) => (
-              <View
-                key={person.clerkId}
-                style={[styles.collabChip, { borderColor: collaboratorColor(index) }]}
-              >
-                <View style={[styles.collabDot, { backgroundColor: collaboratorColor(index) }]} />
-                <Text style={styles.collabChipText} numberOfLines={1}>
-                  {person.clerkId === myClerkId ? 'You' : (person.username ?? badgeInitials(person))}
-                </Text>
-              </View>
-            ))}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.collabChips}
+          >
+            {collaborators.map((person) => {
+              const isMe = person.clerkId === myClerkId;
+              const color = personStyleById.get(person.clerkId)?.color ?? colors.primary;
+              return (
+                <TouchableOpacity
+                  key={person.clerkId}
+                  style={[styles.collabChip, { borderColor: color }]}
+                  onPress={() => router.push(`/user/${person.clerkId}`)}
+                  disabled={isMe}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    isMe ? 'You' : `See ${person.username ?? 'this person'}'s profile`
+                  }
+                >
+                  <View style={[styles.collabDot, { backgroundColor: color }]} />
+                  <Text style={styles.collabChipText} numberOfLines={1}>
+                    {isMe ? 'You' : (person.username ?? badgeInitials(person))}
+                  </Text>
+                  {!isMe && (
+                    <Ionicons name="chevron-forward" size={10} color={colors.textFaint} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
-          {canEdit && <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />}
-        </TouchableOpacity>
+          {/* Managing who is on the list is a separate thing from looking
+              somebody up, so it gets its own target rather than sharing the
+              strip's. */}
+          {canEdit && (
+            <TouchableOpacity
+              onPress={() => setCollabVisible(true)}
+              hitSlop={8}
+              activeOpacity={0.7}
+              accessibilityLabel="Manage collaborators"
+            >
+              <Ionicons name="settings-outline" size={15} color={colors.textFaint} />
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       {isLoading ? (
