@@ -88,6 +88,27 @@ interface FilmDetailModalProps {
    * from. This is how a shared list keeps its link back to the post.
    */
   sourceUrl?: string | null;
+  /**
+   * Called after a film has been added to the locker, once the sheet has
+   * closed.
+   *
+   * This used to be a `router.push('/(tabs)/watchlist')` right here, which
+   * made adding a film from anywhere teleport you to the Films tab. Three
+   * things were wrong with that. It pushed a route rather than selecting a
+   * tab, so Back went somewhere a tab never should. The Films screen keeps
+   * its watchlist/watched toggle in local state and takes no parameter, so
+   * "Add to Watched" landed on the Watchlist toggle — a list that filters
+   * the film out, which is to say it sent you to a screen that provably
+   * did not contain what you had just added. And it was one of six places
+   * that add a film, the only one that moved you, and the one most likely
+   * to be reached from a list you were part-way through reading.
+   *
+   * The toast already says where the film went. So the sheet now does
+   * nothing but close, and the caller decides whether anything else should
+   * happen — which is how the search flows get to clear their own query
+   * without this component knowing anything about them.
+   */
+  onAdded?: (opts: { asWatched: boolean }) => void;
 }
 
 
@@ -1177,6 +1198,7 @@ export function FilmDetailModal({
   overview: overviewProp,
   savedMovie: savedMovieProp,
   sourceUrl: sourceUrlProp,
+  onAdded,
 }: FilmDetailModalProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -1421,14 +1443,14 @@ export function FilmDetailModal({
         variant: 'success',
       });
       handleClose();
-      // Land on whichever list it went to, rather than always the watchlist.
-      // One tab now, with a toggle. Both lists live behind the same route,
-      // so there is no longer a second path to send anyone down.
-      router.push('/(tabs)/watchlist');
+      // Whatever should happen next is the caller's business, not this
+      // sheet's — see onAdded. Most callers want nothing: the toast has
+      // already said where the film went, and you stay where you were.
+      onAdded?.({ asWatched });
     } catch {
       showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
     }
-  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, router]);
+  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, onAdded]);
 
   return (
     <Modal

@@ -572,6 +572,25 @@ export default function HomeScreen() {
           releaseYear={selectedMovie.releaseYear}
           overview={selectedMovie.overview}
           savedMovie={savedVersion}
+          /**
+           * Adding a film from a search result closes the search, so you
+           * land back on the home screen you were on rather than on a
+           * results list for a question you have finished answering.
+           *
+           * Clearing the box is all it takes: the results only replace the
+           * browse sections while there is a query, so emptying it puts
+           * Trending, New Releases and the rest back. It is also safe
+           * unconditionally — while a search is running the results cover
+           * those sections, so a film opened from this screen during a
+           * search can only have come from the results.
+           *
+           * The AI recommendation panel is deliberately NOT closed. It
+           * answers with six films meant to be considered together, and
+           * dismissing the other five because you took one would be the
+           * opposite of helpful. It lives in its own state anyway, which
+           * this does not touch.
+           */
+          onAdded={() => setSearchQuery('')}
         />
       )}
 

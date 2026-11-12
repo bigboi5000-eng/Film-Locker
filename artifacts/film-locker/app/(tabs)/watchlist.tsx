@@ -727,6 +727,24 @@ export default function WatchlistScreen() {
           releaseYear={modalTarget.releaseYear}
           overview={modalTarget.overview}
           savedMovie={modalTarget.savedMovie}
+          /**
+           * Adding a film from a search result closes the search, which on
+           * this screen means the film you just added is the thing you are
+           * looking at: the saved grid comes back, and the film is in it.
+           *
+           * Safe to do unconditionally, because the search results replace
+           * the saved grid rather than sitting beside it — so a film opened
+           * from this screen while a search was running came from the
+           * results, and a film opened from the grid cannot have, since
+           * there was no query to clear.
+           *
+           * It does leave one rough edge: added to Watched while the
+           * toggle says Watchlist, the grid comes back without it. The
+           * toast says "Added to Watched", so it is at least explained,
+           * and moving the toggle under somebody as a side effect of
+           * adding seemed the worse of the two.
+           */
+          onAdded={() => setSearchQuery('')}
         />
       )}
 
