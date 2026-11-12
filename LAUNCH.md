@@ -58,10 +58,12 @@ absorbed before real users existed; it is not a live concern now.
   Roles are per-branch, so a reset on one branch leaves every other branch on
   the old password. Only the password segment of the connection string
   changes; the host and database name stay as they are.
-- Migrations apply on container start (see `Dockerfile`), and the server logs
-  `schemaUpToDate` on boot. If that ever reads `false`, the deploy is running
-  against a schema the code does not match and endpoints touching new columns
-  will 500.
+- **Railway auto-deploys**, so pushing is the deploy — there is no separate
+  step to remember. Migrations apply on container start (see `Dockerfile`),
+  which means a schema change ships with the push that contains it.
+- The server logs `schemaUpToDate` on boot. If that ever reads `false`, the
+  deploy is running against a schema the code does not match and endpoints
+  touching new columns will 500.
 - Use `migrate`, never `drizzle-kit push`, against this database. Push
   reshapes the schema and records nothing in the migrations ledger; that is
   how the two fell out of step once already.
