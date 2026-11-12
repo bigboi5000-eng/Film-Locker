@@ -117,6 +117,11 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                       <Text style={[styles.plName, { color: colors.foreground }]} numberOfLines={1}>{pl.name}</Text>
                       <Text style={[styles.plCount, { color: colors.mutedForeground }]}>
                         {pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}
+                        {/* A list somebody invited this person to edit. It
+                            belongs here — they really can add to it — but
+                            silently putting a film on a friend's list
+                            without saying whose it is would be a surprise. */}
+                        {pl.isCollaboration ? ` · ${pl.ownerUsername ?? 'shared'}'s list` : ''}
                       </Text>
                     </View>
                     {addingId === pl.id ? (

@@ -24,6 +24,8 @@ import {
   filmCommunityRatingsTable,
   playlistsTable,
   playlistFollowsTable,
+  playlistSharesTable,
+  playlistCollaboratorsTable,
   feedbackTable,
   blocksTable,
   reportsTable,
@@ -74,6 +76,30 @@ export async function deleteUserData(clerkUserId: string): Promise<void> {
     // Follows of other people's playlists. Follows OF this user's playlists
     // go with the playlists themselves, which cascade on delete below.
     await tx.delete(playlistFollowsTable).where(eq(playlistFollowsTable.userId, clerkUserId));
+    // Lists other people sent this user, and lists this user sent other
+    // people. Only the second kind cascades with the playlist, so the
+    // first was being left behind pointing at a user that no longer
+    // exists — the same shape of gap the file comment warns about.
+    await tx
+      .delete(playlistSharesTable)
+      .where(
+        or(
+          eq(playlistSharesTable.fromUserId, clerkUserId),
+          eq(playlistSharesTable.toUserId, clerkUserId)
+        )
+      );
+    // Seats this user holds on other people's playlists. Seats on their
+    // OWN go with the playlist. Films they added to somebody else's list
+    // stay there, which is the same as what happens when they simply
+    // leave it: the list belongs to its owner.
+    await tx
+      .delete(playlistCollaboratorsTable)
+      .where(
+        or(
+          eq(playlistCollaboratorsTable.userId, clerkUserId),
+          eq(playlistCollaboratorsTable.invitedBy, clerkUserId)
+        )
+      );
     await tx.delete(filmCommentsTable).where(eq(filmCommentsTable.userId, clerkUserId));
     await tx.delete(filmCommunityRatingsTable).where(eq(filmCommunityRatingsTable.userId, clerkUserId));
     await tx.delete(playlistsTable).where(eq(playlistsTable.userId, clerkUserId));

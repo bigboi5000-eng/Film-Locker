@@ -49,6 +49,20 @@ export const GRID_HORIZONTAL_PADDING = HORIZONTAL_PADDING;
 export const GRID_CARD_WIDTH = CARD_WIDTH;
 export const GRID_CARD_RADIUS = CARD_RADIUS;
 
+/**
+ * A small coloured circle drawn on the poster, one per person.
+ *
+ * Used on a shared playlist to show which of the people on it have seen
+ * this film. The card knows nothing about collaborators — it draws what it
+ * is handed, in the order it is handed them.
+ */
+export interface MovieCardBadge {
+  key: string;
+  /** One or two letters. Longer is unreadable at this size. */
+  label: string;
+  color: string;
+}
+
 export interface MovieCardProps {
   id: number;
   title: string;
@@ -60,6 +74,13 @@ export interface MovieCardProps {
   isWatched?: boolean;
   /** Star rating 1–5 */
   rating?: number | null;
+  /**
+   * People to mark on this poster, drawn top-left in the order given.
+   *
+   * Top-left because the watched tick is top-right, and a row that grew
+   * leftwards from there would collide with it on the third person.
+   */
+  badges?: MovieCardBadge[];
 }
 
 export function MovieCard({
@@ -71,6 +92,7 @@ export function MovieCard({
   onLongPress,
   isWatched,
   rating,
+  badges,
 }: MovieCardProps) {
   const styles = useThemedStyles(makeStyles);
   const handlePress = useCallback(() => onPress?.(id), [id, onPress]);
@@ -112,6 +134,24 @@ export function MovieCard({
       {isWatched && (
         <View style={styles.watchedBadge}>
           <Text style={styles.watchedBadgeText}>✓</Text>
+        </View>
+      )}
+
+      {/* Who else has seen it. Capped at four with a +n, because five
+          circles across a poster this wide covers the artwork and the
+          fifth is unreadable anyway. */}
+      {badges && badges.length > 0 && (
+        <View style={styles.badgeRow}>
+          {badges.slice(0, 4).map((b) => (
+            <View key={b.key} style={[styles.personBadge, { backgroundColor: b.color }]}>
+              <Text style={styles.personBadgeText} numberOfLines={1}>{b.label}</Text>
+            </View>
+          ))}
+          {badges.length > 4 && (
+            <View style={[styles.personBadge, styles.personBadgeOverflow]}>
+              <Text style={styles.personBadgeText} numberOfLines={1}>+{badges.length - 4}</Text>
+            </View>
+          )}
         </View>
       )}
     </TouchableOpacity>
@@ -181,5 +221,33 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
   },
   watchedBadgeText: { color: c.onColor, fontSize: 12, fontFamily: 'Inter_700Bold' },
+  badgeRow: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    // Overlapped rather than spaced, the way a group of faces is shown
+    // elsewhere: four circles at full width would reach the watched tick.
+    alignItems: 'center',
+  },
+  personBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -5,
+    // A ring in the card's own colour, so adjacent badges stay separate
+    // circles instead of reading as one blob where they overlap.
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.35)',
+  },
+  personBadgeOverflow: { backgroundColor: 'rgba(0,0,0,0.72)' },
+  personBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    lineHeight: 10,
+    fontFamily: 'Inter_700Bold',
+  },
   skeleton: { alignItems: 'center', justifyContent: 'center' },
 });

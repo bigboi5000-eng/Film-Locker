@@ -639,7 +639,9 @@ export interface Playlist {
   coverPosters: string[];
   createdAt: string;
   updatedAt: string;
-  /** Only populated by GET /playlists/public (Discover search results need to show whose playlist it is) */
+  /** True on a playlist GET /playlists returns because the caller was invited to edit it, rather than because they own it. The list is "playlists you can add films to", and a collaboration is one — but it is somebody else's, so renaming, sending and deleting are not on offer. */
+  isCollaboration?: boolean;
+  /** Populated by GET /playlists/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET /playlists, where it is whose list you are editing. */
   ownerUsername?: string | null;
   ownerDisplayInitials?: string | null;
   ownerAvatarUrl?: string | null;
@@ -702,6 +704,8 @@ export type DataExportFilmsItem = { [key: string]: unknown };
 
 export type DataExportPlaylistsItem = { [key: string]: unknown };
 
+export type DataExportCollaborationsItem = { [key: string]: unknown };
+
 export type DataExportCommentsItem = { [key: string]: unknown };
 
 export type DataExportCommunityRatingsItem = { [key: string]: unknown };
@@ -723,6 +727,8 @@ export interface DataExport {
   films: DataExportFilmsItem[];
   /** Playlists owned by this user, each with its films. */
   playlists: DataExportPlaylistsItem[];
+  /** Playlists somebody else owns that this account was invited to edit — the name, whose it is and when the invitation was accepted. Not their films: the list is its owner's, and the seat is the only part of it that is this account's. */
+  collaborations?: DataExportCollaborationsItem[];
   comments?: DataExportCommentsItem[];
   communityRatings?: DataExportCommunityRatingsItem[];
   /** Who this account follows and who follows it. */
@@ -812,6 +818,22 @@ export interface UpdatePushTokenBody {
   expoPushToken: string;
 }
 
+export interface Collaborator {
+  clerkId: string;
+  username?: string | null;
+  avatarUrl?: string | null;
+  displayInitials?: string | null;
+  /** True for the one person who can invite, rename and delete. */
+  isOwner: boolean;
+}
+
+export interface CollaboratorsResponse {
+  /** The owner first, then anyone invited in the order they were added. The order is stable so each person keeps the same colour on the films they have watched. */
+  collaborators: Collaborator[];
+  /** How many people may be invited, not counting the owner. */
+  maxCollaborators: number;
+}
+
 export interface PlaylistItem {
   id: number;
   playlistId: number;
@@ -821,6 +843,8 @@ export interface PlaylistItem {
   /** The social post this film was added to the playlist from. Unlike a locker film's sourceUrl this is not owner-private: a playlist may be public, and where a list came from is part of the list. */
   sourceUrl?: string | null;
   addedAt: string;
+  /** clerkIds of the people on this playlist who have marked this film watched — the owner and any collaborators, nobody else. Present only where the list has collaborators, since on a solo list it would say what the tick on the poster already says. */
+  watchedBy?: string[];
 }
 
 export type PlaylistWithItems = Playlist & {
@@ -829,6 +853,12 @@ export type PlaylistWithItems = Playlist & {
   isOwner: boolean;
   /** Whether the caller follows this playlist. Always false for the owner, who does not follow their own. */
   isFollowed: boolean;
+  /** Whether the caller may add or remove films. True for the owner and for anyone invited to collaborate. Renaming, deleting and inviting stay with the owner, so a client still needs isOwner for those. */
+  canEdit: boolean;
+  /** The owner first, then anyone invited in the order they were added, so each person keeps the same colour across every film on the list. Omitted on a list nobody has been invited to, where there is no second person to distinguish. */
+  collaborators?: Collaborator[];
+  /** How many people may be invited, not counting the owner. */
+  maxCollaborators?: number;
 };
 
 export interface FollowPlaylistResponse {
@@ -949,5 +979,10 @@ export type SearchPublicPlaylistsParams = {
 q?: string;
 tmdbId?: number;
 userId?: string;
+};
+
+export type AddCollaboratorBody = {
+  /** clerkId of the Film Pal to invite. */
+  userId: string;
 };
 

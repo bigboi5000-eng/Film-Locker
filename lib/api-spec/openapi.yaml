@@ -1461,6 +1461,87 @@ paths:
         "404":
           description: Playlist not found
 
+  /playlists/{id}/collaborators:
+    get:
+      operationId: listCollaborators
+      tags: [playlists]
+      summary: Who can edit this playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The owner and anyone invited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaboratorsResponse"
+        "403":
+          description: Not visible to you
+        "404":
+          description: Playlist not found
+    post:
+      operationId: addCollaborator
+      tags: [playlists]
+      summary: Invite a Film Pal to edit this playlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  description: clerkId of the Film Pal to invite.
+              required: [userId]
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaboratorsResponse"
+        "400":
+          description: Not a Film Pal, or the playlist is full
+        "403":
+          description: Only the owner can invite
+        "404":
+          description: Playlist not found
+
+  /playlists/{id}/collaborators/{userId}:
+    delete:
+      operationId: removeCollaborator
+      tags: [playlists]
+      summary: Remove a collaborator, or leave a playlist yourself
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaboratorsResponse"
+        "403":
+          description: Only the owner can remove somebody else
+        "404":
+          description: Playlist not found
+
   /playlists/{id}/share:
     post:
       operationId: sharePlaylist
@@ -2919,6 +3000,15 @@ components:
           description: Playlists owned by this user, each with its films.
           items:
             type: object
+        collaborations:
+          type: array
+          description: >
+            Playlists somebody else owns that this account was invited to
+            edit — the name, whose it is and when the invitation was
+            accepted. Not their films: the list is its owner's, and the
+            seat is the only part of it that is this account's.
+          items:
+            type: object
         comments:
           type: array
           items:
@@ -3090,6 +3180,34 @@ components:
       required:
         - expoPushToken
 
+    Collaborator:
+      type: object
+      properties:
+        clerkId: { type: string }
+        username: { type: string, nullable: true }
+        avatarUrl: { type: string, nullable: true }
+        displayInitials: { type: string, nullable: true }
+        isOwner:
+          type: boolean
+          description: True for the one person who can invite, rename and delete.
+      required: [clerkId, isOwner]
+
+    CollaboratorsResponse:
+      type: object
+      properties:
+        collaborators:
+          type: array
+          description: >
+            The owner first, then anyone invited in the order they were
+            added. The order is stable so each person keeps the same
+            colour on the films they have watched.
+          items:
+            $ref: "#/components/schemas/Collaborator"
+        maxCollaborators:
+          type: integer
+          description: How many people may be invited, not counting the owner.
+      required: [collaborators, maxCollaborators]
+
     PlaylistItem:
       type: object
       properties:
@@ -3113,6 +3231,16 @@ components:
         addedAt:
           type: string
           format: date-time
+        watchedBy:
+          type: array
+          description: >
+            clerkIds of the people on this playlist who have marked this
+            film watched — the owner and any collaborators, nobody else.
+            Present only where the list has collaborators, since on a
+            solo list it would say what the tick on the poster already
+            says.
+          items:
+            type: string
       required:
         - id
         - playlistId
@@ -3148,10 +3276,21 @@ components:
         updatedAt:
           type: string
           format: date-time
+        isCollaboration:
+          type: boolean
+          description: >
+            True on a playlist GET /playlists returns because the caller was
+            invited to edit it, rather than because they own it. The list is
+            "playlists you can add films to", and a collaboration is one —
+            but it is somebody else's, so renaming, sending and deleting are
+            not on offer.
         ownerUsername:
           type: string
           nullable: true
-          description: Only populated by GET /playlists/public (Discover search results need to show whose playlist it is)
+          description: >
+            Populated by GET /playlists/public, where Discover results need
+            to show whose playlist it is, and on a collaboration returned by
+            GET /playlists, where it is whose list you are editing.
         ownerDisplayInitials:
           type: string
           nullable: true
@@ -3187,10 +3326,30 @@ components:
               description: >
                 Whether the caller follows this playlist. Always false for the
                 owner, who does not follow their own.
+            canEdit:
+              type: boolean
+              description: >
+                Whether the caller may add or remove films. True for the
+                owner and for anyone invited to collaborate. Renaming,
+                deleting and inviting stay with the owner, so a client
+                still needs isOwner for those.
+            collaborators:
+              type: array
+              description: >
+                The owner first, then anyone invited in the order they were
+                added, so each person keeps the same colour across every
+                film on the list. Omitted on a list nobody has been invited
+                to, where there is no second person to distinguish.
+              items:
+                $ref: "#/components/schemas/Collaborator"
+            maxCollaborators:
+              type: integer
+              description: How many people may be invited, not counting the owner.
           required:
             - items
             - isOwner
             - isFollowed
+            - canEdit
 
     FollowPlaylistResponse:
       type: object

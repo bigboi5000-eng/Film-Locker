@@ -12,6 +12,7 @@ import {
   SendConversationMessageBody,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { areFilmPals } from "../lib/filmPals";
 import { sendPush } from "../lib/push";
 import { logger } from "../lib/logger";
 import { isBlockedEitherWay, getMutualBlockSet } from "../lib/blocks";
@@ -474,39 +475,10 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
   );
 });
 
-// ── Shared helper — may these two message each other? ───────────────────────
-
-/**
- * Messaging requires a mutual follow: both people have an accepted row
- * pointing at the other. This is what the app calls being Film Pals.
- *
- * It used to accept a follow in *either* direction, which meant following
- * someone was enough to start messaging them whether or not they had ever
- * followed back. That is a one-sided channel into a stranger's inbox, and it
- * also made the interface incoherent — Film Pals was presented as the thing
- * that connects two people while conferring no actual permission.
- *
- * Two accepted rows are required, and the unique index on
- * (follower_id, followee_id) is what makes counting them safe: neither
- * direction can be present twice, so two rows always means one each way.
- */
-async function canMessage(userA: string, userB: string): Promise<boolean> {
-  if (await isBlockedEitherWay(userA, userB)) return false;
-
-  const rows = await db
-    .select({ followerId: followsTable.followerId })
-    .from(followsTable)
-    .where(
-      and(
-        eq(followsTable.status, "accepted"),
-        or(
-          and(eq(followsTable.followerId, userA), eq(followsTable.followeeId, userB)),
-          and(eq(followsTable.followerId, userB), eq(followsTable.followeeId, userA))
-        )
-      )
-    );
-  return rows.length === 2;
-}
+// Messaging requires the two people to be Film Pals. That check moved to
+// lib/filmPals.ts, because collaborating on somebody's playlist asks the
+// same question and two copies of it is how one of them gains a rule the
+// other never gets. Its reasoning lives there now.
 
 // ── GET /notifications/thread/:userId ─────────────────────────────────────────
 // Merged, chronological chat feed with a specific user — recommendations sent
@@ -726,7 +698,7 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
     .where(eq(usersTable.clerkId, otherUserId));
   if (!recipient) { res.status(404).json({ error: "User not found." }); return; }
 
-  if (!(await canMessage(clerkUserId, otherUserId))) {
+  if (!(await areFilmPals(clerkUserId, otherUserId))) {
     res.status(403).json({ error: "You can only message Film Pals — people you follow who follow you back." });
     return;
   }

@@ -35,6 +35,15 @@ export function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPres
             color={colors.textFaint}
           />
           <Text style={styles.metaText}>{playlist.itemCount} film{playlist.itemCount !== 1 ? 's' : ''}</Text>
+          {/* A list somebody invited you to edit, sitting in Mine alongside
+              your own. Without this it reads as one of yours, and it is
+              not — you cannot rename it, send it or delete it. */}
+          {playlist.isCollaboration && (
+            <View style={styles.sharedChip}>
+              <Ionicons name="people" size={9} color={colors.primary} />
+              <Text style={styles.sharedChipText}>Shared</Text>
+            </View>
+          )}
         </View>
         {playlist.ownerUsername ? (
           <Text style={styles.owner} numberOfLines={1}>by {playlist.ownerUsername}</Text>
@@ -57,4 +66,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
   owner: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint, marginTop: 2 },
+  sharedChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    paddingHorizontal: 5, paddingVertical: 1,
+    borderRadius: 7, backgroundColor: c.primarySoft,
+  },
+  sharedChipText: { fontSize: 9, fontFamily: 'Inter_600SemiBold', color: c.primary },
 });

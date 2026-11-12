@@ -13,6 +13,7 @@ import {
   playlistsTable,
   playlistItemsTable,
   playlistFollowsTable,
+  playlistCollaboratorsTable,
   feedbackTable,
   blocksTable,
   reportsTable,
@@ -236,7 +237,7 @@ router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [films, ownPlaylists, comments, communityRatings, following, followers] =
+  const [films, ownPlaylists, collaborations, comments, communityRatings, following, followers] =
     await Promise.all([
       db
         .select({
@@ -266,6 +267,19 @@ router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
         })
         .from(playlistsTable)
         .where(eq(playlistsTable.userId, clerkUserId)),
+      // Seats on other people's lists. The seat is this account's; the
+      // list is not, so its films are not here — they are in the owner's
+      // own export, which is where they belong.
+      db
+        .select({
+          name: playlistsTable.name,
+          owner: usersTable.username,
+          joinedAt: playlistCollaboratorsTable.createdAt,
+        })
+        .from(playlistCollaboratorsTable)
+        .innerJoin(playlistsTable, eq(playlistsTable.id, playlistCollaboratorsTable.playlistId))
+        .leftJoin(usersTable, eq(usersTable.clerkId, playlistsTable.userId))
+        .where(eq(playlistCollaboratorsTable.userId, clerkUserId)),
       db
         .select({
           tmdbId: filmCommentsTable.tmdbId,
@@ -324,6 +338,7 @@ router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
       createdAt: pl.createdAt,
       films: (byPlaylist.get(pl.id) ?? []).map(({ playlistId: _pid, ...film }) => film),
     })),
+    collaborations,
     comments,
     communityRatings,
     follows: { following, followers },

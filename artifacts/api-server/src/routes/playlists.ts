@@ -1,9 +1,18 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { and, eq, ilike, desc, count, sql, or, isNull } from "drizzle-orm";
-import { db, playlistsTable, playlistItemsTable, playlistFollowsTable, playlistSharesTable, usersTable, followsTable } from "@workspace/db";
+import { and, eq, ilike, desc, count, sql, or, isNull, inArray } from "drizzle-orm";
+import { db, playlistsTable, playlistItemsTable, playlistFollowsTable, playlistSharesTable, playlistCollaboratorsTable, usersTable, followsTable, moviesTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
+import { areFilmPals } from "../lib/filmPals";
+import { sendPush } from "../lib/push";
+import {
+  canEditPlaylist,
+  getCollaboratorIds,
+  listCollaboratorProfiles,
+  type CollaboratorProfile,
+  MAX_PLAYLIST_COLLABORATORS,
+} from "../lib/playlistCollaborators";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -31,6 +40,10 @@ const SharePlaylistBody = z.object({
   toUserIds: z.array(z.string().min(1)).min(1).max(50),
 });
 
+const AddCollaboratorBody = z.object({
+  userId: z.string().min(1),
+});
+
 const AddItemBody = z.object({
   tmdbId: z.number().int(),
   filmTitle: z.string().min(1),
@@ -39,10 +52,29 @@ const AddItemBody = z.object({
 });
 
 // ── GET /playlists ─────────────────────────────────────────────────────────
-// Returns the authenticated user's own playlists (with item count).
+// Every playlist the caller can add films TO: their own, and any they have
+// been invited to collaborate on.
+//
+// Collaborations belong here rather than beside the followed lists, because
+// what this endpoint is for — and the only reason GET /playlists/followed
+// exists separately — is that it must not offer a destination that 403s on
+// use. A followed list is read-only; a collaboration is not.
+//
+// They are flagged, not hidden: the client needs to know whose list it is,
+// since the owner keeps renaming, sending and deleting.
 
 router.get("/playlists", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
+
+  /**
+   * A subquery rather than a join, because this query already left-joins
+   * the items table to count them. A second join would fan each playlist
+   * out by its number of collaborators and inflate that count.
+   */
+  const collaboratingOn = db
+    .select({ playlistId: playlistCollaboratorsTable.playlistId })
+    .from(playlistCollaboratorsTable)
+    .where(eq(playlistCollaboratorsTable.userId, clerkUserId));
 
   const rows = await db
     .select({
@@ -61,18 +93,32 @@ router.get("/playlists", requireAuth, async (req, res): Promise<void> => {
         array_agg(${playlistItemsTable.posterUrl} ORDER BY ${playlistItemsTable.addedAt} DESC)
         FILTER (WHERE ${playlistItemsTable.id} IS NOT NULL)
       `.as("cover_posters"),
+      // Whose list it is, for the ones that are not the caller's. Null for
+      // their own, which the client already labels as theirs.
+      ownerUsername: usersTable.username,
     })
     .from(playlistsTable)
     .leftJoin(playlistItemsTable, eq(playlistItemsTable.playlistId, playlistsTable.id))
-    .where(eq(playlistsTable.userId, clerkUserId))
-    .groupBy(playlistsTable.id)
+    .leftJoin(usersTable, eq(usersTable.clerkId, playlistsTable.userId))
+    .where(
+      or(
+        eq(playlistsTable.userId, clerkUserId),
+        inArray(playlistsTable.id, collaboratingOn)
+      )
+    )
+    .groupBy(playlistsTable.id, usersTable.username)
     .orderBy(desc(playlistsTable.updatedAt));
 
   res.json({
-    playlists: rows.map((r) => ({
-      ...r,
-      coverPosters: (r.coverPosters ?? []).slice(0, 4),
-    })),
+    playlists: rows.map((r) => {
+      const isCollaboration = r.userId !== clerkUserId;
+      return {
+        ...r,
+        coverPosters: (r.coverPosters ?? []).slice(0, 4),
+        isCollaboration,
+        ownerUsername: isCollaboration ? r.ownerUsername : null,
+      };
+    }),
   });
 });
 
@@ -310,8 +356,20 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
         .limit(1)
     ).length > 0;
 
+  /**
+   * Who has been invited to edit this list, oldest invite first.
+   *
+   * Fetched before the visibility gate because being invited is a grant in
+   * its own right, exactly like having been sent the list: an invitation to
+   * edit something you cannot open is not an invitation. It is also needed
+   * further down for the watched badges, so fetching it here costs nothing
+   * extra.
+   */
+  const collaboratorIds = await getCollaboratorIds(id);
+  const isCollaborating = clerkUserId !== null && collaboratorIds.includes(clerkUserId);
+
   if (!isOwner) {
-    if (!playlist.isPublic && !sharedWithMe) {
+    if (!playlist.isPublic && !sharedWithMe && !isCollaborating) {
       res.status(403).json({ error: "Private playlist" });
       return;
     }
@@ -335,7 +393,7 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
             )
         : [];
 
-      if (accepted.length === 0 && !sharedWithMe) {
+      if (accepted.length === 0 && !sharedWithMe && !isCollaborating) {
         res.status(403).json({ error: "This account is private." });
         return;
       }
@@ -361,7 +419,73 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
       : Promise.resolve([]),
   ]);
 
-  res.json({ ...playlist, items, isOwner, isFollowed: followRows.length > 0 });
+  /**
+   * The people on the list, and which of them has seen each film.
+   *
+   * Both are skipped entirely on a solo list. There is nobody to tell apart,
+   * and a watchedBy naming only the owner would repeat what the tick on
+   * their own poster already says — while costing two queries on every view
+   * of every public playlist in the app.
+   *
+   * The order of `everyone` is the contract the badge colours rest on:
+   * owner first, then collaborators by invite date. The client colours by
+   * position, so this list must not be re-ordered and a new invitee must
+   * land at the end.
+   */
+  let collaborators: CollaboratorProfile[] | undefined;
+  let watchedBy: Map<number, string[]> | undefined;
+
+  if (collaboratorIds.length > 0) {
+    const everyone = [playlist.userId, ...collaboratorIds];
+    const tmdbIds = items.map((i) => i.tmdbId);
+
+    const [profiles, watchedRows] = await Promise.all([
+      listCollaboratorProfiles(id, playlist.userId),
+      tmdbIds.length > 0
+        ? db
+            .select({ tmdbId: moviesTable.tmdbId, clerkUserId: moviesTable.clerkUserId })
+            .from(moviesTable)
+            .where(
+              and(
+                inArray(moviesTable.clerkUserId, everyone),
+                inArray(moviesTable.tmdbId, tmdbIds),
+                eq(moviesTable.isWatched, true)
+              )
+            )
+        : Promise.resolve([] as { tmdbId: number; clerkUserId: string }[]),
+    ]);
+
+    collaborators = profiles;
+
+    // Collected into sets first and then emitted in `everyone` order, so
+    // the badges on a poster come back in the same order as the avatars at
+    // the top of the screen however the rows happened to arrive.
+    const seen = new Map<number, Set<string>>();
+    for (const r of watchedRows) {
+      const set = seen.get(r.tmdbId) ?? new Set<string>();
+      set.add(r.clerkUserId);
+      seen.set(r.tmdbId, set);
+    }
+    watchedBy = new Map(
+      [...seen.entries()].map(([tmdbId, set]) => [tmdbId, everyone.filter((u) => set.has(u))])
+    );
+  }
+
+  res.json({
+    ...playlist,
+    items: watchedBy
+      ? items.map((i) => ({ ...i, watchedBy: watchedBy.get(i.tmdbId) ?? [] }))
+      : items,
+    isOwner,
+    isFollowed: followRows.length > 0,
+    // Films are the shared part; the list itself is not. A collaborator
+    // adds and removes, but renaming, deleting, inviting and sending stay
+    // with the owner, which is why the client still needs isOwner.
+    canEdit: isOwner || isCollaborating,
+    ...(collaborators
+      ? { collaborators, maxCollaborators: MAX_PLAYLIST_COLLABORATORS }
+      : {}),
+  });
 });
 
 // ── POST /playlists/:id/follow ─────────────────────────────────────────────
@@ -471,6 +595,213 @@ router.delete("/playlists/:id", requireAuth, async (req, res): Promise<void> => 
   res.status(204).send();
 });
 
+// ── Collaborators ─────────────────────────────────────────────────────────
+//
+// Editing somebody else's playlist, which is a narrower grant than it looks:
+// a collaborator adds and removes FILMS. The list itself — its name, its
+// privacy, who else is on it, whether it exists — stays with the owner.
+//
+// There is no pending/accept step. A collaborator must already be a Film
+// Pal, which is two accepted follows and a relationship both people opted
+// into, and anyone added can remove themselves at any time. Asking for a
+// second yes to the same question would only mean lists sitting unusable
+// in an invite queue.
+
+/**
+ * GET /playlists/:id/collaborators
+ *
+ * Owner and collaborators only. This is the management view — who is on the
+ * list, so somebody can be removed, and how many seats are left. A plain
+ * viewer of a public list gets the same people, with no seat count, inlined
+ * in GET /playlists/:id, which is all they need to read the badges.
+ */
+router.get("/playlists/:id/collaborators", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [playlist] = await db
+    .select({ userId: playlistsTable.userId })
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+  if (!(await canEditPlaylist(id, playlist.userId, clerkUserId))) {
+    res.status(403).json({ error: "Not your playlist" });
+    return;
+  }
+
+  res.json({
+    collaborators: await listCollaboratorProfiles(id, playlist.userId),
+    maxCollaborators: MAX_PLAYLIST_COLLABORATORS,
+  });
+});
+
+/**
+ * POST /playlists/:id/collaborators
+ *
+ * Owner invites one Film Pal.
+ *
+ * Also sends them the list, by writing the same playlist_shares row that
+ * POST /playlists/:id/share writes. Without it the invitation would be
+ * invisible: nothing in their inbox, and a private list would not even
+ * appear in a search. The share row and the collaborator row answer
+ * different questions — "did somebody put this in front of me" and "may I
+ * change it" — and an invite is both.
+ */
+router.post("/playlists/:id/collaborators", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const parsed = AddCollaboratorBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const { userId } = parsed.data;
+
+  const [playlist] = await db
+    .select({ userId: playlistsTable.userId, name: playlistsTable.name })
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+  if (playlist.userId !== clerkUserId) {
+    res.status(403).json({ error: "Only the owner can invite people to a playlist." });
+    return;
+  }
+  if (userId === clerkUserId) {
+    res.status(400).json({ error: "It is already your playlist." });
+    return;
+  }
+  if (!(await areFilmPals(clerkUserId, userId))) {
+    res.status(400).json({ error: "You can only invite Film Pals to edit a playlist." });
+    return;
+  }
+
+  /**
+   * The seat count and the insert, under a lock on the playlist row.
+   *
+   * Counting and then inserting without one lets two invites sent at the
+   * same moment both see four seats taken and both take the fifth. The lock
+   * is on the playlist rather than the collaborator rows because the thing
+   * being protected is a count of rows that do not exist yet, which no row
+   * lock on that table can cover.
+   */
+  const outcome = await db.transaction(async (tx) => {
+    await tx.select({ id: playlistsTable.id }).from(playlistsTable).where(eq(playlistsTable.id, id)).for("update");
+
+    const existing = await tx
+      .select({ userId: playlistCollaboratorsTable.userId })
+      .from(playlistCollaboratorsTable)
+      .where(eq(playlistCollaboratorsTable.playlistId, id));
+
+    // Inviting somebody already on the list is a no-op, not an error and
+    // not a second seat: the owner tapping twice gets what they wanted.
+    if (existing.some((c) => c.userId === userId)) return "already" as const;
+    if (existing.length >= MAX_PLAYLIST_COLLABORATORS) return "full" as const;
+
+    await tx
+      .insert(playlistCollaboratorsTable)
+      .values({ playlistId: id, userId, invitedBy: clerkUserId })
+      .onConflictDoNothing();
+
+    return "added" as const;
+  });
+
+  if (outcome === "full") {
+    res.status(400).json({
+      error: `A playlist can have ${MAX_PLAYLIST_COLLABORATORS} collaborators. Remove someone first.`,
+    });
+    return;
+  }
+
+  if (outcome === "added") {
+    await db
+      .insert(playlistSharesTable)
+      .values({ playlistId: id, fromUserId: clerkUserId, toUserId: userId })
+      .onConflictDoUpdate({
+        target: [playlistSharesTable.playlistId, playlistSharesTable.fromUserId, playlistSharesTable.toUserId],
+        set: { createdAt: new Date(), isRead: false },
+      });
+
+    await db.update(playlistsTable).set({ updatedAt: new Date() }).where(eq(playlistsTable.id, id));
+
+    const [[invitee], [owner]] = await Promise.all([
+      db
+        .select({ expoPushToken: usersTable.expoPushToken, notifyPals: usersTable.notifyPals })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, userId)),
+      db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.clerkId, clerkUserId)),
+    ]);
+
+    if (invitee?.notifyPals) {
+      void sendPush({
+        token: invitee.expoPushToken,
+        title: "You can edit a playlist",
+        body: `${owner?.username ?? "A Film Pal"} invited you to add films to ${playlist.name}`,
+        screen: `/playlist/${id}`,
+      });
+    }
+
+    req.log.info({ playlistId: id, invited: userId }, "playlist collaborator added");
+  }
+
+  res.status(201).json({
+    collaborators: await listCollaboratorProfiles(id, playlist.userId),
+    maxCollaborators: MAX_PLAYLIST_COLLABORATORS,
+  });
+});
+
+/**
+ * DELETE /playlists/:id/collaborators/:userId
+ *
+ * The owner removes anyone; anyone removes themselves. Leaving is the
+ * other half of there being no accept step: the way out has to be in the
+ * invitee's own hands, or an invitation becomes something done TO them.
+ *
+ * Films the leaver added stay. They were added to somebody else's list,
+ * which is what collaborating means, and pulling them back out would turn
+ * leaving into a way to gut the list on the way through.
+ */
+router.delete("/playlists/:id/collaborators/:userId", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const id = Number(req.params.id);
+  // String() rather than the raw param: Express types a path param as
+  // string | string[], and a clerkId that arrived as an array would reach
+  // the query builder as one.
+  const userId = Array.isArray(req.params.userId) ? "" : String(req.params.userId ?? "");
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (!userId) { res.status(400).json({ error: "Invalid userId" }); return; }
+
+  const [playlist] = await db
+    .select({ userId: playlistsTable.userId })
+    .from(playlistsTable)
+    .where(eq(playlistsTable.id, id));
+
+  if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
+
+  const isOwner = playlist.userId === clerkUserId;
+  if (!isOwner && userId !== clerkUserId) {
+    res.status(403).json({ error: "Only the owner can remove somebody else." });
+    return;
+  }
+
+  await db
+    .delete(playlistCollaboratorsTable)
+    .where(
+      and(
+        eq(playlistCollaboratorsTable.playlistId, id),
+        eq(playlistCollaboratorsTable.userId, userId)
+      )
+    );
+
+  req.log.info({ playlistId: id, removed: userId, byOwner: isOwner }, "playlist collaborator removed");
+
+  res.json({
+    collaborators: await listCollaboratorProfiles(id, playlist.userId),
+    maxCollaborators: MAX_PLAYLIST_COLLABORATORS,
+  });
+});
+
 // ── POST /playlists/:id/items ─────────────────────────────────────────────
 
 router.post("/playlists/:id/items", requireAuth, async (req, res): Promise<void> => {
@@ -481,14 +812,17 @@ router.post("/playlists/:id/items", requireAuth, async (req, res): Promise<void>
   const parsed = AddItemBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  // Ownership check
+  // The owner, or anyone they invited to collaborate.
   const [playlist] = await db
     .select({ userId: playlistsTable.userId })
     .from(playlistsTable)
     .where(eq(playlistsTable.id, id));
 
   if (!playlist) { res.status(404).json({ error: "Playlist not found" }); return; }
-  if (playlist.userId !== clerkUserId) { res.status(403).json({ error: "Not your playlist" }); return; }
+  if (!(await canEditPlaylist(id, playlist.userId, clerkUserId))) {
+    res.status(403).json({ error: "Not your playlist" });
+    return;
+  }
 
   const [item] = await db
     .insert(playlistItemsTable)
@@ -602,13 +936,15 @@ router.delete("/playlists/:id/items/:tmdbId", requireAuth, async (req, res): Pro
     return;
   }
 
-  // Ownership check via join
+  // The owner, or anyone they invited to collaborate. A collaborator who
+  // can add but not remove cannot plan a watch together — fixing a wrong
+  // film would mean asking the owner to do it.
   const [playlist] = await db
     .select({ userId: playlistsTable.userId })
     .from(playlistsTable)
     .where(eq(playlistsTable.id, id));
 
-  if (!playlist || playlist.userId !== clerkUserId) {
+  if (!playlist || !(await canEditPlaylist(id, playlist.userId, clerkUserId))) {
     res.status(403).json({ error: "Not your playlist" });
     return;
   }

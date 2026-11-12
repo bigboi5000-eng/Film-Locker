@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, or } from "drizzle-orm";
-import { db, blocksTable, reportsTable, followsTable, filmCommentsTable, usersTable } from "@workspace/db";
+import { and, eq, or, inArray } from "drizzle-orm";
+import { db, blocksTable, reportsTable, followsTable, filmCommentsTable, usersTable, playlistsTable, playlistCollaboratorsTable } from "@workspace/db";
 import { BlockUserBody, SubmitReportBody } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { sendReportEmail } from "../lib/email";
@@ -31,6 +31,13 @@ router.get("/blocks", requireAuth, async (req, res): Promise<void> => {
 // Blocking also removes any existing follow relationship between the two
 // people, in either direction — including a still-pending request, so this
 // doubles as "cancel this request" when the target hasn't responded yet.
+//
+// And it takes back any playlist either of them can edit of the other's. A
+// collaborator seat is a standing write grant, and the Film Pal check that
+// hands one out is only made when inviting — so without this, blocking
+// someone would leave them able to go on adding and removing films from
+// your list. The follow rows this same transaction deletes are what the
+// check reads, so afterwards neither of them could be invited again.
 
 router.post("/blocks", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
@@ -54,6 +61,34 @@ router.post("/blocks", requireAuth, async (req, res): Promise<void> => {
         or(
           and(eq(followsTable.followerId, clerkUserId), eq(followsTable.followeeId, blockedId)),
           and(eq(followsTable.followerId, blockedId), eq(followsTable.followeeId, clerkUserId))
+        )
+      );
+
+    // Their seat on my lists, and mine on theirs. Expressed as two
+    // subqueries over the playlists each owns rather than one join,
+    // because the seat rows carry only the playlist id and the grant
+    // being revoked is "can edit something of mine".
+    const myPlaylists = tx
+      .select({ id: playlistsTable.id })
+      .from(playlistsTable)
+      .where(eq(playlistsTable.userId, clerkUserId));
+    const theirPlaylists = tx
+      .select({ id: playlistsTable.id })
+      .from(playlistsTable)
+      .where(eq(playlistsTable.userId, blockedId));
+
+    await tx
+      .delete(playlistCollaboratorsTable)
+      .where(
+        or(
+          and(
+            eq(playlistCollaboratorsTable.userId, blockedId),
+            inArray(playlistCollaboratorsTable.playlistId, myPlaylists)
+          ),
+          and(
+            eq(playlistCollaboratorsTable.userId, clerkUserId),
+            inArray(playlistCollaboratorsTable.playlistId, theirPlaylists)
+          )
         )
       );
   });

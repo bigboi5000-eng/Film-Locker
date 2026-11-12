@@ -1250,6 +1250,9 @@ export const ExportMyDataResponse = zod.object({
   "playlists": zod.array(zod.object({
 
 }).passthrough()).describe('Playlists owned by this user, each with its films.'),
+  "collaborations": zod.array(zod.object({
+
+}).passthrough()).optional().describe('Playlists somebody else owns that this account was invited to edit — the name, whose it is and when the invitation was accepted. Not their films: the list is its owner\'s, and the seat is the only part of it that is this account\'s.\n'),
   "comments": zod.array(zod.object({
 
 }).passthrough()).optional(),
@@ -1339,7 +1342,8 @@ export const GetUserProfileResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 })).nullable().describe('Null when the account is private and the caller isn\'t an accepted follower (and isn\'t the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them.\n'),
@@ -1654,7 +1658,8 @@ export const GetMyPlaylistsResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 }))
@@ -1686,7 +1691,8 @@ export const CreatePlaylistResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 })
@@ -1713,7 +1719,8 @@ export const SearchPublicPlaylistsResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 }))
@@ -1735,7 +1742,8 @@ export const GetFollowedPlaylistsResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 }))
@@ -1783,7 +1791,8 @@ export const GetPlaylistResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 }).and(zod.object({
@@ -1794,10 +1803,20 @@ export const GetPlaylistResponse = zod.object({
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "sourceUrl": zod.string().nullish().describe('The social post this film was added to the playlist from. Unlike a locker film\'s sourceUrl this is not owner-private: a playlist may be public, and where a list came from is part of the list.\n'),
-  "addedAt": zod.coerce.date()
+  "addedAt": zod.coerce.date(),
+  "watchedBy": zod.array(zod.string()).optional().describe('clerkIds of the people on this playlist who have marked this film watched — the owner and any collaborators, nobody else. Present only where the list has collaborators, since on a solo list it would say what the tick on the poster already says.\n')
 })),
   "isOwner": zod.boolean().describe('Whether the caller owns this playlist. Only the owner may edit it, add or remove films, or delete it.\n'),
-  "isFollowed": zod.boolean().describe('Whether the caller follows this playlist. Always false for the owner, who does not follow their own.\n')
+  "isFollowed": zod.boolean().describe('Whether the caller follows this playlist. Always false for the owner, who does not follow their own.\n'),
+  "canEdit": zod.boolean().describe('Whether the caller may add or remove films. True for the owner and for anyone invited to collaborate. Renaming, deleting and inviting stay with the owner, so a client still needs isOwner for those.\n'),
+  "collaborators": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
+  "isOwner": zod.boolean().describe('True for the one person who can invite, rename and delete.')
+})).optional().describe('The owner first, then anyone invited in the order they were added, so each person keeps the same colour across every film on the list. Omitted on a list nobody has been invited to, where there is no second person to distinguish.\n'),
+  "maxCollaborators": zod.number().optional().describe('How many people may be invited, not counting the owner.')
 }))
 
 
@@ -1830,7 +1849,8 @@ export const UpdatePlaylistResponse = zod.object({
   "coverPosters": zod.array(zod.string()).describe('Up to 4 poster URLs for the cover collage'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "ownerUsername": zod.string().nullish().describe('Only populated by GET \/playlists\/public (Discover search results need to show whose playlist it is)'),
+  "isCollaboration": zod.boolean().optional().describe('True on a playlist GET \/playlists returns because the caller was invited to edit it, rather than because they own it. The list is \"playlists you can add films to\", and a collaboration is one — but it is somebody else\'s, so renaming, sending and deleting are not on offer.\n'),
+  "ownerUsername": zod.string().nullish().describe('Populated by GET \/playlists\/public, where Discover results need to show whose playlist it is, and on a collaboration returned by GET \/playlists, where it is whose list you are editing.\n'),
   "ownerDisplayInitials": zod.string().nullish(),
   "ownerAvatarUrl": zod.string().nullish()
 })
@@ -1861,6 +1881,68 @@ export const AddPlaylistItemBody = zod.object({
 })
 
 export const AddPlaylistItemResponse = zod.void()
+
+
+/**
+ * @summary Who can edit this playlist
+ */
+export const ListCollaboratorsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCollaboratorsResponse = zod.object({
+  "collaborators": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
+  "isOwner": zod.boolean().describe('True for the one person who can invite, rename and delete.')
+})).describe('The owner first, then anyone invited in the order they were added. The order is stable so each person keeps the same colour on the films they have watched.\n'),
+  "maxCollaborators": zod.number().describe('How many people may be invited, not counting the owner.')
+})
+
+
+/**
+ * @summary Invite a Film Pal to edit this playlist
+ */
+export const AddCollaboratorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AddCollaboratorBody = zod.object({
+  "userId": zod.string().describe('clerkId of the Film Pal to invite.')
+})
+
+export const AddCollaboratorResponse = zod.object({
+  "collaborators": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
+  "isOwner": zod.boolean().describe('True for the one person who can invite, rename and delete.')
+})).describe('The owner first, then anyone invited in the order they were added. The order is stable so each person keeps the same colour on the films they have watched.\n'),
+  "maxCollaborators": zod.number().describe('How many people may be invited, not counting the owner.')
+})
+
+
+/**
+ * @summary Remove a collaborator, or leave a playlist yourself
+ */
+export const RemoveCollaboratorParams = zod.object({
+  "id": zod.coerce.number(),
+  "userId": zod.coerce.string()
+})
+
+export const RemoveCollaboratorResponse = zod.object({
+  "collaborators": zod.array(zod.object({
+  "clerkId": zod.string(),
+  "username": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "displayInitials": zod.string().nullish(),
+  "isOwner": zod.boolean().describe('True for the one person who can invite, rename and delete.')
+})).describe('The owner first, then anyone invited in the order they were added. The order is stable so each person keeps the same colour on the films they have watched.\n'),
+  "maxCollaborators": zod.number().describe('How many people may be invited, not counting the owner.')
+})
 
 
 /**

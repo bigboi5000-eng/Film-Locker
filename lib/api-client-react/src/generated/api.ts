@@ -20,12 +20,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddCollaboratorBody,
   AddMovieBody,
   AddPlaylistItemBody,
   AiExtractBody,
   AiExtractResponse,
   BlockUserBody,
   BlockUserResponse,
+  CollaboratorsResponse,
   ConversationFeedItem,
   ConversationsResponse,
   CreatePlaylistBody,
@@ -4866,6 +4868,226 @@ export const useAddPlaylistItem = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAddPlaylistItemMutationOptions(options));
+    }
+
+export const getListCollaboratorsUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/collaborators`
+}
+
+/**
+ * @summary Who can edit this playlist
+ */
+export const listCollaborators = async (id: number, options?: RequestInit): Promise<CollaboratorsResponse> => {
+
+  return customFetch<CollaboratorsResponse>(getListCollaboratorsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCollaboratorsQueryKey = (id: number,) => {
+    return [
+    `/api/playlists/${id}/collaborators`
+    ] as const;
+    }
+
+
+export const getListCollaboratorsQueryOptions = <TData = Awaited<ReturnType<typeof listCollaborators>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCollaborators>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCollaboratorsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCollaborators>>> = ({ signal }) => listCollaborators(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCollaborators>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCollaboratorsQueryResult = NonNullable<Awaited<ReturnType<typeof listCollaborators>>>
+export type ListCollaboratorsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Who can edit this playlist
+ */
+
+export function useListCollaborators<TData = Awaited<ReturnType<typeof listCollaborators>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCollaborators>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCollaboratorsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddCollaboratorUrl = (id: number,) => {
+
+
+
+
+  return `/api/playlists/${id}/collaborators`
+}
+
+/**
+ * @summary Invite a Film Pal to edit this playlist
+ */
+export const addCollaborator = async (id: number,
+    addCollaboratorBody: AddCollaboratorBody, options?: RequestInit): Promise<CollaboratorsResponse> => {
+
+  return customFetch<CollaboratorsResponse>(getAddCollaboratorUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(addCollaboratorBody)
+  }
+);}
+
+
+
+
+export const getAddCollaboratorMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCollaborator>>, TError,{id: number;data: BodyType<AddCollaboratorBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addCollaborator>>, TError,{id: number;data: BodyType<AddCollaboratorBody>}, TContext> => {
+
+const mutationKey = ['addCollaborator'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCollaborator>>, {id: number;data: BodyType<AddCollaboratorBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addCollaborator(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCollaboratorMutationResult = NonNullable<Awaited<ReturnType<typeof addCollaborator>>>
+    export type AddCollaboratorMutationBody = BodyType<AddCollaboratorBody>
+    export type AddCollaboratorMutationError = ErrorType<void>
+
+    /**
+ * @summary Invite a Film Pal to edit this playlist
+ */
+export const useAddCollaborator = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCollaborator>>, TError,{id: number;data: BodyType<AddCollaboratorBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addCollaborator>>,
+        TError,
+        {id: number;data: BodyType<AddCollaboratorBody>},
+        TContext
+      > => {
+      return useMutation(getAddCollaboratorMutationOptions(options));
+    }
+
+export const getRemoveCollaboratorUrl = (id: number,
+    userId: string,) => {
+
+
+
+
+  return `/api/playlists/${id}/collaborators/${userId}`
+}
+
+/**
+ * @summary Remove a collaborator, or leave a playlist yourself
+ */
+export const removeCollaborator = async (id: number,
+    userId: string, options?: RequestInit): Promise<CollaboratorsResponse> => {
+
+  return customFetch<CollaboratorsResponse>(getRemoveCollaboratorUrl(id,userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveCollaboratorMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeCollaborator>>, TError,{id: number;userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeCollaborator>>, TError,{id: number;userId: string}, TContext> => {
+
+const mutationKey = ['removeCollaborator'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeCollaborator>>, {id: number;userId: string}> = (props) => {
+          const {id,userId} = props ?? {};
+
+          return  removeCollaborator(id,userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveCollaboratorMutationResult = NonNullable<Awaited<ReturnType<typeof removeCollaborator>>>
+
+    export type RemoveCollaboratorMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove a collaborator, or leave a playlist yourself
+ */
+export const useRemoveCollaborator = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeCollaborator>>, TError,{id: number;userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeCollaborator>>,
+        TError,
+        {id: number;userId: string},
+        TContext
+      > => {
+      return useMutation(getRemoveCollaboratorMutationOptions(options));
     }
 
 export const getSharePlaylistUrl = (id: number,) => {

@@ -29,13 +29,15 @@ import {
   type Movie,
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
-import { MovieCard, MovieCardSkeleton } from '@/components/MovieCard';
+import { MovieCard, MovieCardSkeleton, type MovieCardBadge } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
 import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
+import { CollaboratorsSheet } from '@/components/CollaboratorsSheet';
+import { collaboratorColor, badgeInitials } from '@/lib/collaboratorColors';
 import { applySort, type SortState } from '@/components/SortSheet';
 import { confirmDestructive } from '@/lib/confirm';
 import { webInputReset } from '@/lib/webInputReset';
@@ -307,6 +309,48 @@ const makeEditStyles = (c: Palette) => StyleSheet.create({
   addedRow: { flexDirection: 'row', alignItems: 'center' },
 });
 
+/**
+ * Adding films, for somebody who is not the owner.
+ *
+ * The owner adds films from inside the edit sheet, next to the name and the
+ * privacy switch, because for them it is all one screen of "this is my
+ * list". A collaborator has none of that — they cannot rename it, cannot
+ * make it public and cannot delete it — so handing them the edit sheet
+ * would be a sheet of controls that mostly do not apply to them.
+ */
+function AddFilmsSheet({ visible, onClose, playlistId, playlistName, existingTmdbIds, onFilmAdded }: {
+  visible: boolean;
+  onClose: () => void;
+  playlistId: number;
+  playlistName: string;
+  existingTmdbIds: Set<number>;
+  onFilmAdded: () => void;
+}) {
+  const editStyles = useThemedStyles(makeEditStyles);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={editStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity style={editStyles.backdrop} onPress={onClose} activeOpacity={1} />
+        <View style={editStyles.sheet}>
+          <View style={editStyles.handle} />
+          <ScrollView contentContainerStyle={editStyles.scrollContent} keyboardShouldPersistTaps="handled">
+            <Text style={editStyles.title}>Add to {playlistName}</Text>
+            <AddFilmsSection
+              playlistId={playlistId}
+              existingTmdbIds={existingTmdbIds}
+              onAdded={onFilmAdded}
+            />
+            <TouchableOpacity style={editStyles.saveBtn} onPress={onClose} activeOpacity={0.8}>
+              <Text style={editStyles.saveBtnText}>Done</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ModalTarget {
@@ -353,6 +397,42 @@ export default function PlaylistScreen() {
   // ids while the response is still loading.
   const isOwner = playlist?.isOwner ?? Boolean(playlist && myClerkId && playlist.userId === myClerkId);
   const [shareVisible, setShareVisible] = useState(false);
+  const [collabVisible, setCollabVisible] = useState(false);
+  const [addVisible, setAddVisible] = useState(false);
+
+  /**
+   * Adding and removing films, which is wider than ownership now: a
+   * collaborator does both. Everything else on this screen — the pencil,
+   * the send button, deleting, inviting — stays on isOwner, and the server
+   * enforces the same split.
+   *
+   * The fallback keeps an owner's controls working while the response is
+   * still in flight; a collaborator has no way to know before it arrives,
+   * and showing them a disabled list for a moment is better than showing
+   * everyone "Hold to remove" and finding out later.
+   */
+  const canEdit = playlist?.canEdit ?? isOwner;
+
+  // Present only on a list that has collaborators. The sheet asks the
+  // server for both itself, so the cap is never a number kept here.
+  const collaborators = playlist?.collaborators ?? [];
+  const maxCollaborators = playlist?.maxCollaborators;
+
+  /**
+   * clerkId → the colour and initials that clerkId wears everywhere on this
+   * screen. Built from the server's order, which is the whole reason a
+   * person's colour does not move when somebody else is invited.
+   */
+  const personStyleById = useMemo(
+    () =>
+      new Map(
+        collaborators.map((person, index) => [
+          person.clerkId,
+          { color: collaboratorColor(index), label: badgeInitials(person) },
+        ])
+      ),
+    [collaborators]
+  );
 
   const { mutateAsync: followPlaylist } = useFollowPlaylist();
   const { mutateAsync: unfollowPlaylist } = useUnfollowPlaylist();
@@ -445,17 +525,33 @@ export default function PlaylistScreen() {
     });
   }, [savedByTmdbId]);
 
-  const renderItem = useCallback(({ item }: { item: PlaylistItem }) => (
-    <MovieCard
-      id={item.tmdbId}
-      title={item.filmTitle}
-      releaseYear={savedByTmdbId.get(item.tmdbId)?.releaseYear ?? ''}
-      posterUrl={item.posterUrl}
-      onPress={() => openItemModal(item)}
-      onLongPress={isOwner ? () => handleRemove(item.tmdbId, item.filmTitle) : undefined}
-      isWatched={watchedTmdbIds.has(item.tmdbId)}
-    />
-  ), [savedByTmdbId, openItemModal, handleRemove, isOwner, watchedTmdbIds]);
+  const renderItem = useCallback(({ item }: { item: PlaylistItem }) => {
+    /**
+     * Who on this list has seen this film.
+     *
+     * Only present on a shared list — the server leaves watchedBy off a
+     * solo one, where a badge saying "you have seen it" next to the tick
+     * saying the same thing would be noise. personStyleById is empty then
+     * too, so this is an empty array and the card draws nothing.
+     */
+    const badges: MovieCardBadge[] = (item.watchedBy ?? []).flatMap((clerkId) => {
+      const style = personStyleById.get(clerkId);
+      return style ? [{ key: clerkId, label: style.label, color: style.color }] : [];
+    });
+
+    return (
+      <MovieCard
+        id={item.tmdbId}
+        title={item.filmTitle}
+        releaseYear={savedByTmdbId.get(item.tmdbId)?.releaseYear ?? ''}
+        posterUrl={item.posterUrl}
+        onPress={() => openItemModal(item)}
+        onLongPress={canEdit ? () => handleRemove(item.tmdbId, item.filmTitle) : undefined}
+        isWatched={watchedTmdbIds.has(item.tmdbId)}
+        badges={badges}
+      />
+    );
+  }, [savedByTmdbId, openItemModal, handleRemove, canEdit, watchedTmdbIds, personStyleById]);
 
   const items = playlist?.items ?? [];
   const existingTmdbIds = useMemo(() => new Set(items.map((item) => item.tmdbId)), [items]);
@@ -529,6 +625,14 @@ export default function PlaylistScreen() {
           // owner does repeatedly and editing is the thing they did once.
           <View style={styles.ownerActions}>
             <TouchableOpacity
+              onPress={() => setCollabVisible(true)}
+              style={styles.editBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Manage who can edit this playlist"
+            >
+              <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => setShareVisible(true)}
               style={styles.editBtn}
               activeOpacity={0.7}
@@ -538,6 +642,28 @@ export default function PlaylistScreen() {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setEditVisible(true)} style={styles.editBtn} activeOpacity={0.7}>
               <Ionicons name="pencil-outline" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        ) : canEdit && playlist ? (
+          // A collaborator: adding films and seeing who else is on the list,
+          // and nothing else. No Follow button — they are already on it,
+          // which is more than following.
+          <View style={styles.ownerActions}>
+            <TouchableOpacity
+              onPress={() => setCollabVisible(true)}
+              style={styles.editBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="See who can edit this playlist"
+            >
+              <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAddVisible(true)}
+              style={styles.editBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Add films to this playlist"
+            >
+              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
             </TouchableOpacity>
           </View>
         ) : playlist ? (
@@ -561,6 +687,37 @@ export default function PlaylistScreen() {
           <View style={styles.editBtn} />
         )}
       </View>
+
+      {/* The key to the badges on the posters: who is on this list and what
+          colour they are. Shown to everyone who can see the list, not just
+          the people on it — a stranger looking at a public list sees the
+          badges too, and without this they would be unexplained dots.
+
+          Hidden on a solo list, where there are no badges to explain. */}
+      {collaborators.length > 1 && (
+        <TouchableOpacity
+          style={styles.collabStrip}
+          onPress={() => setCollabVisible(canEdit)}
+          activeOpacity={canEdit ? 0.7 : 1}
+          disabled={!canEdit}
+        >
+          <Ionicons name="people-outline" size={14} color={colors.textFaint} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collabChips}>
+            {collaborators.map((person, index) => (
+              <View
+                key={person.clerkId}
+                style={[styles.collabChip, { borderColor: collaboratorColor(index) }]}
+              >
+                <View style={[styles.collabDot, { backgroundColor: collaboratorColor(index) }]} />
+                <Text style={styles.collabChipText} numberOfLines={1}>
+                  {person.clerkId === myClerkId ? 'You' : (person.username ?? badgeInitials(person))}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          {canEdit && <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />}
+        </TouchableOpacity>
+      )}
 
       {isLoading ? (
         <View style={styles.skeletonGrid}>
@@ -607,7 +764,7 @@ export default function PlaylistScreen() {
               <Text style={styles.sectionLabel}>
                 {filteredItems.length} FILM{filteredItems.length === 1 ? '' : 'S'}
               </Text>
-              {isOwner && <Text style={styles.sectionHint}>Hold to remove</Text>}
+              {canEdit && <Text style={styles.sectionHint}>Hold to remove</Text>}
             </View>
           )}
 
@@ -639,6 +796,34 @@ export default function PlaylistScreen() {
           onClose={() => setShareVisible(false)}
           playlistId={playlist.id}
           playlistName={playlist.name}
+        />
+      )}
+
+      {playlist && canEdit && (
+        <CollaboratorsSheet
+          visible={collabVisible}
+          onClose={() => setCollabVisible(false)}
+          playlistId={playlist.id}
+          playlistName={playlist.name}
+          collaborators={collaborators}
+          maxCollaborators={maxCollaborators}
+          isOwner={isOwner}
+          myClerkId={myClerkId}
+          onChanged={invalidate}
+          // Leaving a private list means it is no longer visible, so staying
+          // on it would mean sitting on a screen that reloads into a 403.
+          onLeft={() => router.back()}
+        />
+      )}
+
+      {playlist && canEdit && !isOwner && (
+        <AddFilmsSheet
+          visible={addVisible}
+          onClose={() => setAddVisible(false)}
+          playlistId={numericId}
+          playlistName={playlist.name}
+          existingTmdbIds={existingTmdbIds}
+          onFilmAdded={invalidate}
         />
       )}
 
@@ -730,5 +915,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingBottom: 10,
   },
   sectionLabel: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: c.textFaint, letterSpacing: 1.5 },
+
+  collabStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: HORIZONTAL_PADDING, paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
+  },
+  collabChips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 4 },
+  collabChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 11, borderWidth: 1,
+    maxWidth: 140,
+  },
+  collabDot: { width: 8, height: 8, borderRadius: 4 },
+  collabChipText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: c.textMuted },
   sectionHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: c.textFaint },
 });

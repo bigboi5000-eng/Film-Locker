@@ -77,6 +77,49 @@ export const playlistSharesTable = pgTable(
 
 export type PlaylistShare = typeof playlistSharesTable.$inferSelect;
 
+/**
+ * People who can edit somebody else's playlist.
+ *
+ * Distinct from a follow (keeping up with a list) and from a share
+ * (being handed one): a collaborator changes what is in it. The owner
+ * stays the owner — only they can invite, remove people, rename or
+ * delete the list — but a collaborator can add and remove films, which
+ * is the whole point of planning a watch together.
+ *
+ * No pending state. A collaborator has to be a Film Pal already, which
+ * means two accepted follows and a relationship both people opted into,
+ * and anyone added can remove themselves. An acceptance step on top of
+ * that would be a second yes for the same question.
+ */
+export const playlistCollaboratorsTable = pgTable(
+  "playlist_collaborators",
+  {
+    id: serial("id").primaryKey(),
+    playlistId: integer("playlist_id")
+      .notNull()
+      .references(() => playlistsTable.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(), // clerkUserId of the collaborator
+    invitedBy: text("invited_by").notNull(), // always the owner
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // One row per person per list. Inviting someone already on it is a
+    // no-op rather than a second seat against the cap.
+    uniqueCollaborator: unique().on(t.playlistId, t.userId),
+  })
+);
+
+export type PlaylistCollaborator = typeof playlistCollaboratorsTable.$inferSelect;
+
+/**
+ * How many people can be invited to one playlist, not counting its owner.
+ *
+ * Here rather than in the route because the cap is a property of the
+ * feature, and the client needs the same number to say "3 of 5" without
+ * inventing its own.
+ */
+export const MAX_PLAYLIST_COLLABORATORS = 5;
+
 export const playlistItemsTable = pgTable(
   "playlist_items",
   {
