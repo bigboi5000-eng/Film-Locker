@@ -50,6 +50,7 @@ import { runMoviePipeline, enrichAndSaveMatches } from "../../lib/moviePipeline"
 import { processSocialLink } from "../../lib/processSocialLink";
 import { extractMoviesFromImage } from "../../lib/imageExtractor";
 import { getRecommendations } from "../../lib/geminiRecommender";
+import { pickSeeds, RECENCY_HALF_LIFE_DAYS } from "../../lib/recommendationSeeds";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -165,7 +166,16 @@ router.get("/people/:personId", async (req, res): Promise<void> => {
 
 // ── Protected locker routes (require Clerk auth) ──────────────────────────────
 
-// GET /movies/recommendations — personalised from user's watchlist
+// GET /movies/recommendations — personalised from the user's locker
+//
+// Built by asking TMDB what is similar to a handful of your films. Which
+// films those are is the whole of the personalisation, and lives in
+// lib/recommendationSeeds.ts — it weights what you have watched above what
+// you have merely saved, scales by your rating, and decays with age so the
+// rail follows what you have been watching lately rather than freezing on
+// whatever you rated highest when you joined.
+const SEED_COUNT = 5;
+
 router.get("/movies/recommendations", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
   try {
@@ -181,24 +191,25 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
     }
 
     const savedTmdbIds = new Set(watchlist.map((m) => m.tmdbId));
-
-    const scored = watchlist
-      .map((m) => ({
-        tmdbId: m.tmdbId,
-        score: 1 + (m.rating ?? 0) + (m.isWatched ? 2 : 0),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+    const seeds = pickSeeds(watchlist, SEED_COUNT);
 
     const results = await Promise.allSettled(
-      scored.map((s) => fetchTmdbRecommendations(s.tmdbId))
+      seeds.map((s) => fetchTmdbRecommendations(s.tmdbId))
     );
 
     const seen = new Set<number>();
     const recommendations: TmdbCandidate[] = [];
+    const failures: { tmdbId: number; err: unknown }[] = [];
 
-    for (const result of results) {
-      if (result.status === "rejected") continue;
+    for (const [i, result] of results.entries()) {
+      if (result.status === "rejected") {
+        // Collected rather than skipped. A rejected seed is a fifth of the
+        // rail gone, and all five rejecting is an EMPTY rail served as a
+        // perfectly ordinary 200 — which is how this failing looked exactly
+        // like this working, for as long as nobody was watching TMDB.
+        failures.push({ tmdbId: seeds[i]!.tmdbId, err: result.reason });
+        continue;
+      }
       for (const movie of result.value) {
         if (savedTmdbIds.has(movie.tmdbId)) continue;
         if (seen.has(movie.tmdbId)) continue;
@@ -207,8 +218,41 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
       }
     }
 
+    if (failures.length > 0) {
+      req.log.warn(
+        {
+          failed: failures.length,
+          of: seeds.length,
+          seeds: failures.map((f) => f.tmdbId),
+          err: failures[0]!.err,
+          pooled: recommendations.length,
+        },
+        "recommendations: some seeds failed at TMDB",
+      );
+    }
+
+    // Every seed failed, so there is nothing to show and no reason to
+    // pretend otherwise. An empty 200 means "your locker suggests nothing",
+    // and the client hides the rail on it — which for a TMDB outage is the
+    // wrong answer given silently. A 502 lets it offer Retry instead.
+    if (failures.length === seeds.length) {
+      res.status(502).json({ error: "Could not fetch recommendations" });
+      return;
+    }
+
     const region = normalizeRegion(req.query.region);
     const enriched = await enrichCandidates(recommendations.slice(0, 20), region);
+
+    req.log.info(
+      {
+        seeds: seeds.map((s) => s.tmdbId),
+        halfLifeDays: RECENCY_HALF_LIFE_DAYS,
+        pooled: recommendations.length,
+        returned: enriched.length,
+      },
+      "recommendations: served",
+    );
+
     res.json(GetRecommendationsResponse.parse({ movies: enriched }));
   } catch (err) {
     req.log.error({ err }, "recommendations: failed");

@@ -712,11 +712,21 @@ export async function fetchNowPlaying(region: string = DEFAULT_REGION): Promise<
  * Fetch TMDB recommendations for a given movie (the "More like this" list).
  * Returns up to 20 poster-bearing results sorted by popularity.
  */
+/**
+ * What TMDB thinks is similar to one film.
+ *
+ * Goes through tmdbFetch like every other call in this file. It used to use
+ * a bare fetch, which meant no retry on a throttle — and the rail that
+ * depends on it asks for five of these at once, which is precisely the
+ * burst TMDB answers with 429. A throttled seed came back as a thrown
+ * promise that the caller discarded, so the rail quietly lost a fifth of
+ * its pool, or all of it, with nothing said anywhere.
+ */
 export async function fetchTmdbRecommendations(
   tmdbId: number
 ): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
-  const res = await fetch(
+  const res = await tmdbFetch(
     `${TMDB_BASE}/movie/${tmdbId}/recommendations?api_key=${apiKey}&language=en-US&page=1`
   );
   if (!res.ok) {
