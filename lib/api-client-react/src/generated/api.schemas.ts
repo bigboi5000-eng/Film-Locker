@@ -361,6 +361,8 @@ export interface NotificationUser {
   username?: string | null;
   displayInitials?: string | null;
   avatarUrl?: string | null;
+  /** Whether this person follows the caller back, making them Film Pals. The list itself is everyone the caller follows, which is the right set for recommending a film — that only needs the one direction. Collaborating on a playlist needs both, so the sheet that offers it filters on this rather than offering people the server will refuse. */
+  isFilmPal?: boolean;
 }
 
 export interface NotificationUsersResponse {

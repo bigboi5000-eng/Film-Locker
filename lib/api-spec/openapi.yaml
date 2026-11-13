@@ -2400,6 +2400,15 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        isFilmPal:
+          type: boolean
+          description: >
+            Whether this person follows the caller back, making them Film
+            Pals. The list itself is everyone the caller follows, which is
+            the right set for recommending a film — that only needs the
+            one direction. Collaborating on a playlist needs both, so the
+            sheet that offers it filters on this rather than offering
+            people the server will refuse.
       required:
         - clerkId
 

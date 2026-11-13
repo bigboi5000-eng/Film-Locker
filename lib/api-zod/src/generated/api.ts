@@ -949,7 +949,8 @@ export const GetNotificationUsersResponse = zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().nullish(),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "isFilmPal": zod.boolean().optional().describe('Whether this person follows the caller back, making them Film Pals. The list itself is everyone the caller follows, which is the right set for recommending a film — that only needs the one direction. Collaborating on a playlist needs both, so the sheet that offers it filters on this rather than offering people the server will refuse.\n')
 }))
 })
 
@@ -991,7 +992,8 @@ export const GetConversationsResponse = zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().nullish(),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "isFilmPal": zod.boolean().optional().describe('Whether this person follows the caller back, making them Film Pals. The list itself is everyone the caller follows, which is the right set for recommending a film — that only needs the one direction. Collaborating on a playlist needs both, so the sheet that offers it filters on this rather than offering people the server will refuse.\n')
 }),
   "lastItem": zod.object({
   "type": zod.enum(['recommendation', 'message', 'playlist']),
@@ -1029,7 +1031,8 @@ export const GetNotificationThreadResponse = zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().nullish(),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "isFilmPal": zod.boolean().optional().describe('Whether this person follows the caller back, making them Film Pals. The list itself is everyone the caller follows, which is the right set for recommending a film — that only needs the one direction. Collaborating on a playlist needs both, so the sheet that offers it filters on this rather than offering people the server will refuse.\n')
 }).nullish(),
   "feed": zod.array(zod.object({
   "type": zod.enum(['recommendation', 'message', 'playlist']),
@@ -1117,7 +1120,8 @@ export const GetFeedResponse = zod.object({
   "clerkId": zod.string(),
   "username": zod.string().nullish(),
   "displayInitials": zod.string().nullish(),
-  "avatarUrl": zod.string().nullish()
+  "avatarUrl": zod.string().nullish(),
+  "isFilmPal": zod.boolean().optional().describe('Whether this person follows the caller back, making them Film Pals. The list itself is everyone the caller follows, which is the right set for recommending a film — that only needs the one direction. Collaborating on a playlist needs both, so the sheet that offers it filters on this rather than offering people the server will refuse.\n')
 }),
   "tmdbId": zod.number().nullish().describe('The film, on everything but a \"playlist\" item.'),
   "title": zod.string().nullish(),

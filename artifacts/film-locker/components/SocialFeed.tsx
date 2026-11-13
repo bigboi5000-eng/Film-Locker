@@ -48,6 +48,8 @@ import { StarRating, formatStars } from '@/components/StarRating';
 import { ShareToFriendSheet } from '@/components/ShareToFriendSheet';
 import { LoadError } from '@/components/LoadError';
 import { useToast } from '@/components/ToastProvider';
+import { useRequireAccount } from '@/hooks/useRequireAccount';
+import { describeApiError } from '@/lib/apiErrors';
 import {
   useLockerStatusByTmdbId,
   furtherLockerStatus,
@@ -114,6 +116,7 @@ function FeedCard({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const { mutateAsync: addMovie } = useAddMovie();
+  const requireAccount = useRequireAccount();
 
   /**
    * What has been tapped on this card, which is only ever AHEAD of the
@@ -145,6 +148,7 @@ function FeedCard({
   const save = useCallback(
     async (asWatched: boolean) => {
       if (!canSave || busy) return;
+      if (!requireAccount('save films to your watchlist')) return;
       setBusy(true);
       try {
         await addMovie({
@@ -166,13 +170,14 @@ function FeedCard({
           subtitle: item.title ?? undefined,
         });
         void queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-      } catch {
-        showToast({ title: 'Could not save that film', variant: 'error' });
+      } catch (err) {
+        const described = describeApiError(err, { action: 'save that film' });
+        showToast({ title: described.title, subtitle: described.message, variant: 'error' });
       } finally {
         setBusy(false);
       }
     },
-    [addMovie, busy, canSave, item, queryClient, showToast]
+    [addMovie, busy, canSave, item, queryClient, requireAccount, showToast]
   );
 
   return (

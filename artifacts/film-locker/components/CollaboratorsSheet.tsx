@@ -6,9 +6,14 @@
  * off it or invite a Film Pal; a collaborator sees the same people, cannot
  * change them, and can leave. Nobody else opens this.
  *
- * The invite list is the same one the send sheet uses — the people you can
- * message — because that is already the set of Film Pals, and the server
- * re-checks it anyway. Offering a wider list would only produce rejections.
+ * The invite list is drawn from the same request the send sheet uses, but
+ * NOT the same set. That list is everyone you follow, which is the right
+ * bar for recommending a film and the wrong one here: collaborating needs
+ * the follow to go both ways. Taking it unfiltered put up names the server
+ * then refused with "You can only invite Film Pals", which is a picker
+ * offering somebody and the invite saying no — with nothing to tell you
+ * which of your friends would have worked. So it filters on isFilmPal,
+ * which the server marks, and says so where the list comes up short.
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -34,6 +39,7 @@ import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
 import { collaboratorColorMap, badgeInitials } from '@/lib/collaboratorColors';
 import { confirmDestructive } from '@/lib/confirm';
+import { describeApiError } from '@/lib/apiErrors';
 import { webInputReset } from '@/lib/webInputReset';
 import type { Palette } from '@/constants/colors';
 
@@ -121,12 +127,27 @@ export function CollaboratorsSheet({
     ? null
     : Math.max(0, maxCollaborators - invited.length);
 
+  const followed = data?.users ?? [];
+  /**
+   * Only people who follow back, because only they can be invited.
+   *
+   * Kept separate from `followed` so the empty state can tell the two
+   * cases apart: "you follow nobody" and "nobody you follow follows you
+   * back" need completely different advice, and lumping them together as
+   * "no Film Pals" leaves somebody staring at a list they can see is not
+   * empty.
+   */
+  const invitable = useMemo(
+    () => followed.filter((u) => u.isFilmPal && !onList.has(u.clerkId)),
+    [followed, onList]
+  );
   const candidates = useMemo(() => {
-    const users = (data?.users ?? []).filter((u) => !onList.has(u.clerkId));
-    if (!query.trim()) return users;
+    if (!query.trim()) return invitable;
     const q = query.trim().toLowerCase();
-    return users.filter((u) => (u.username ?? u.clerkId).toLowerCase().includes(q));
-  }, [data, onList, query]);
+    return invitable.filter((u) => (u.username ?? u.clerkId).toLowerCase().includes(q));
+  }, [invitable, query]);
+  /** People you follow who have not followed back — why the list is short. */
+  const notMutualCount = followed.filter((u) => !u.isFilmPal && !onList.has(u.clerkId)).length;
 
   const close = useCallback(() => {
     setQuery('');
@@ -148,12 +169,29 @@ export function CollaboratorsSheet({
       showToast({ title: `${user.username ?? 'They'} can edit this playlist`, subtitle: playlistName });
       await onChanged();
     } catch (err: unknown) {
-      // The server's own words where it has any: "You can only invite Film
-      // Pals" and "a playlist can have 5 collaborators" both say something
-      // the person can act on, and replacing them with "could not invite"
-      // throws that away.
-      const detail = err instanceof Error ? err.message : '';
-      Alert.alert('Could not invite', detail || 'Please try again.');
+      /**
+       * The server's own words where it has any: "You can only invite Film
+       * Pals to edit a playlist" and "a playlist can have 5 collaborators"
+       * both say something the person can act on.
+       *
+       * This used to pass err.message straight through, which reads
+       * "HTTP 400 Bad Request: You can only invite Film Pals…" — the right
+       * sentence with four words of protocol bolted to the front of it.
+       *
+       * A 404 here is the interesting one. Every other failure means the
+       * invite was understood and refused; a 404 on this route means the
+       * SERVER has no such endpoint, which is what an app talking to a
+       * deployment older than itself looks like. Worth naming, because
+       * from the outside it is indistinguishable from the playlist having
+       * been deleted.
+       */
+      const described = describeApiError(err, {
+        action: 'invite them',
+        notFound:
+          'This playlist, or collaboration itself, is not available on the server yet. ' +
+          'If collaboration is new, the server may still be catching up — try again shortly.',
+      });
+      Alert.alert(described.title, described.message);
     } finally {
       setBusyId(null);
     }
@@ -185,8 +223,11 @@ export function CollaboratorsSheet({
           } else {
             await onChanged();
           }
-        } catch {
-          Alert.alert('Error', leaving ? 'Could not leave this playlist.' : `Could not remove ${name}.`);
+        } catch (err) {
+          const described = describeApiError(err, {
+            action: leaving ? 'leave this playlist' : `remove ${name}`,
+          });
+          Alert.alert(described.title, described.message);
         } finally {
           setBusyId(null);
         }
@@ -293,7 +334,13 @@ export function CollaboratorsSheet({
                       <Text style={styles.emptyText}>
                         {query.trim()
                           ? 'No Film Pals match that.'
-                          : 'Film Pals are people who follow each other. Follow somebody back to collaborate with them.'}
+                          : notMutualCount > 0
+                            ? `Only Film Pals can edit a playlist — people you follow who follow you back. ${
+                                notMutualCount === 1
+                                  ? 'The person you follow has'
+                                  : `The ${notMutualCount} people you follow have`
+                              } not followed you back yet.`
+                            : 'Film Pals are people who follow each other. Follow somebody, and once they follow you back you can build a list together.'}
                       </Text>
                     ) : (
                       candidates.map((user) => (

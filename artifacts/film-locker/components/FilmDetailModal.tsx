@@ -58,6 +58,8 @@ import { CONTACT_EMAIL } from '@/lib/legalLinks';
 import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
 import { useToast } from '@/components/ToastProvider';
+import { useRequireAccount } from '@/hooks/useRequireAccount';
+import { describeApiError } from '@/lib/apiErrors';
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -1291,6 +1293,7 @@ export function FilmDetailModal({
   const { mutateAsync: patchRating, isPending: isRatingPending } = usePatchRating();
   const { mutateAsync: addMovie, isPending: isAddingPending } = useAddMovie();
   const { showToast } = useToast();
+  const requireAccount = useRequireAccount();
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
@@ -1470,6 +1473,11 @@ export function FilmDetailModal({
   }, [handleClose, router]);
 
   const handleAdd = useCallback(async (asWatched: boolean) => {
+    // Asked before the request, not after a 401 comes back. The buttons
+    // are deliberately visible signed out — browsing is open — so this is
+    // the first moment an account is actually needed, and the right moment
+    // to say so.
+    if (!requireAccount('save films to your watchlist')) return;
     try {
       await addMovie({
         data: {
@@ -1493,10 +1501,14 @@ export function FilmDetailModal({
       // sheet's — see onAdded. Most callers want nothing: the toast has
       // already said where the film went, and you stay where you were.
       onAdded?.({ asWatched });
-    } catch {
-      showToast({ title: 'Could not add this film', subtitle: 'Please try again.', variant: 'error' });
+    } catch (err) {
+      // The server usually knows exactly what went wrong. Saying "please
+      // try again" to somebody whose session has expired, or who has no
+      // signal, is three words of nothing.
+      const described = describeApiError(err, { action: 'add this film' });
+      showToast({ title: described.title, subtitle: described.message, variant: 'error' });
     }
-  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, onAdded]);
+  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, onAdded, requireAccount]);
 
   return (
     <Modal

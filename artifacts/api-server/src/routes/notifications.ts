@@ -21,8 +21,20 @@ import { isBlockedEitherWay, getMutualBlockSet } from "../lib/blocks";
 const router: IRouter = Router();
 
 // ── GET /notifications/users ─────────────────────────────────────────────────
-// Returns only users the caller follows. Must be registered before
-// /notifications/:id/read to avoid route collision.
+// Everyone the caller follows, each marked with whether they follow back.
+//
+// One direction is the right bar for this list's original job — you can
+// recommend a film to somebody you follow, whether or not they follow you.
+// Collaborating on a playlist needs BOTH directions (see lib/filmPals),
+// and the sheet offering that was using this list unfiltered, so it put up
+// names the server then refused with "You can only invite Film Pals". The
+// picker offered somebody and the invite said no: a dead end with no way
+// for the person to tell which of their friends would work.
+//
+// Marked here rather than filtered here, because the two callers want
+// different sets and the one that needs the narrower one can say so.
+//
+// Must be registered before /notifications/:id/read to avoid route collision.
 
 router.get("/notifications/users", requireAuth, async (req, res): Promise<void> => {
   const { clerkUserId } = req as AuthedRequest;
@@ -42,7 +54,26 @@ router.get("/notifications/users", requireAuth, async (req, res): Promise<void> 
     .where(and(eq(followsTable.followerId, clerkUserId), eq(followsTable.status, "accepted")))
     .orderBy(usersTable.username);
 
-  res.json(GetNotificationUsersResponse.parse({ users }));
+  // The other direction, in one query rather than one per person.
+  const backRows = users.length
+    ? await db
+        .select({ followerId: followsTable.followerId })
+        .from(followsTable)
+        .where(
+          and(
+            eq(followsTable.followeeId, clerkUserId),
+            eq(followsTable.status, "accepted"),
+            inArray(followsTable.followerId, users.map((u) => u.clerkId))
+          )
+        )
+    : [];
+  const followsMeBack = new Set(backRows.map((r) => r.followerId));
+
+  res.json(
+    GetNotificationUsersResponse.parse({
+      users: users.map((u) => ({ ...u, isFilmPal: followsMeBack.has(u.clerkId) })),
+    })
+  );
 });
 
 // ── GET /notifications/conversations ─────────────────────────────────────────
