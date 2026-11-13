@@ -69,7 +69,12 @@ export function FilmCommentsSheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // 'height' on Android, NOT undefined. Undefined means the view does
+        // nothing at all, so the sheet stayed where it was and the keyboard
+        // was drawn straight over the box you were typing into. Every other
+        // sheet in this app already says this; I wrote the broken spelling
+        // anyway.
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* The feed stays visible behind it — the point of not using the
             full film sheet. */}
@@ -101,6 +106,7 @@ export function FilmCommentsSheet({
               renderItem={({ item }) => (
                 <CommentRow comment={item} onDelete={thread.remove} onReport={thread.setReportTarget} />
               )}
+              style={styles.list}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
@@ -189,6 +195,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     textAlign: 'center', marginTop: 2, paddingHorizontal: 20, paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
   },
+  // flex: 1 is right HERE, unlike the share sheet's list: this sheet has a
+  // definite height, so there is real space to divide between the thread
+  // and the composer pinned below it.
+  list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, flexGrow: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 32 },
   emptyTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.textStrong },

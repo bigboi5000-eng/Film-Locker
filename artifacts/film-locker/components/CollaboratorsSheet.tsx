@@ -403,7 +403,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   sheetTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: c.text },
   sheetSubtitle: { fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted, marginTop: 2, lineHeight: 18 },
   closeBtn: { padding: 4 },
-  body: { paddingHorizontal: 20, paddingTop: 8 },
+  body: { paddingHorizontal: 20, paddingTop: 8, flexShrink: 1 },
   divider: { height: 1, backgroundColor: c.surfaceAlt, marginVertical: 16 },
   label: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.textMuted, marginBottom: 8 },
 

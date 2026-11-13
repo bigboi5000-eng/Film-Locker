@@ -307,7 +307,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text, ...webInputReset },
 
-  list: { flex: 1 },
+  /**
+   * flexShrink, NOT flex.
+   *
+   * The sheet above has maxHeight and no height, so it sizes to its
+   * content. `flex: 1` inside a container whose height comes FROM its
+   * children resolves to zero — the parent waits on the child, the child
+   * waits on the parent, and the list renders 0px tall. The sheet still
+   * opened with its handle, header and search box, so it looked like a
+   * share sheet that had simply found no friends.
+   *
+   * flexShrink: 1 takes the content's height when it fits and gives way
+   * when the sheet hits its cap, which is also what makes it scroll.
+   */
+  list: { flexShrink: 1 },
 
   userRow: {
     flexDirection: 'row', alignItems: 'center',

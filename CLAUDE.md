@@ -87,6 +87,17 @@ script, running it with `tsx`, reading the output, and deleting it.
   under the finger on every `ACTION_MOVE`. Only `ACTION_DOWN`'s is
   trustworthy — use `pageX` minus a captured origin for drags.
 - `Share.share` ignores `url` on Android; use `expo-sharing`.
+- **`KeyboardAvoidingView` needs `behavior="height"` on Android**, never
+  `undefined` — undefined makes it do nothing, so the keyboard is drawn
+  straight over whatever is being typed into. iOS wants `"padding"`.
+- **`flex: 1` inside a container that has only `maxHeight` collapses to
+  zero.** A bottom sheet styled `maxHeight: '75%'` with no height sizes to
+  its content, so a `flex: 1` list inside it waits on a parent that is
+  waiting on it, and renders 0px tall — the sheet opens, its header and
+  search box show, and the list is simply absent. Use `flexShrink: 1` for
+  a sheet that grows to content and caps, or give the sheet a definite
+  `height` and then `flex: 1` works. This has now caused two separate
+  "the list doesn't appear" bugs.
 - A component declared inside a render body is a new function every render,
   so React unmounts and remounts its whole subtree.
 - `eas-cli` is pinned to **26.0.0** in the build workflows. `latest`

@@ -256,7 +256,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.surfaceAlt, borderRadius: 10,
   },
   searchInput: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: c.text, padding: 0 },
-  list: { paddingHorizontal: 12 },
+  // flexShrink so the list gives way at the sheet's cap and scrolls —
+  // see ShareToFriendSheet, which had the sharper version of this.
+  list: { paddingHorizontal: 12, flexShrink: 1 },
   userRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 10, paddingHorizontal: 8, borderRadius: 10,
