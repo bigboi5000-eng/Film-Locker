@@ -25,6 +25,7 @@ import {
 import { useToast } from '@/components/ToastProvider';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
+import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
 import type { Palette } from '@/constants/colors';
 
 interface WatchedFilmsSheetProps {
@@ -34,13 +35,31 @@ interface WatchedFilmsSheetProps {
   onClose: () => void;
 }
 
-function WatchedFilmRow({ movie, onAdded }: { movie: Movie; onAdded: () => void }) {
+function WatchedFilmRow({
+  movie,
+  alreadyInLocker,
+  onAdded,
+}: {
+  movie: Movie;
+  /**
+   * Whether the VIEWER already has this film, watchlist or watched.
+   *
+   * This list is somebody else's watched films, so a good share of it is
+   * normally already in your own locker — and without this the row offered
+   * to add every one of them, including the ones you had seen yourself.
+   */
+  alreadyInLocker: boolean;
+  onAdded: () => void;
+}) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const { mutateAsync: addMovie, isPending } = useAddMovie();
-  const [added, setAdded] = useState(false);
+  // Only ever ahead of the server, for the moment between the write and
+  // the refetch; alreadyInLocker covers everything this session did not do.
+  const [justAdded, setJustAdded] = useState(false);
+  const added = justAdded || alreadyInLocker;
 
   const handleAdd = useCallback(async () => {
     if (added || isPending) return;
@@ -55,7 +74,7 @@ function WatchedFilmRow({ movie, onAdded }: { movie: Movie; onAdded: () => void 
         },
       });
       await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-      setAdded(true);
+      setJustAdded(true);
       onAdded();
     } catch {
       showToast({ title: 'Could not add film', subtitle: 'Check your connection and try again.', variant: 'error' });
@@ -101,6 +120,8 @@ export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: Watch
     query: { queryKey: getGetUserWatchedQueryKey(clerkId), enabled: visible && Boolean(clerkId) },
   });
   const movies = data?.movies ?? [];
+  // One shared read of the viewer's own locker for the whole sheet.
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -119,7 +140,13 @@ export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: Watch
             data={movies}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-            renderItem={({ item }) => <WatchedFilmRow movie={item} onAdded={() => {}} />}
+            renderItem={({ item }) => (
+              <WatchedFilmRow
+                movie={item}
+                alreadyInLocker={lockerStatusByTmdbId.has(item.tmdbId)}
+                onAdded={() => {}}
+              />
+            )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
               <View style={styles.empty}>

@@ -48,6 +48,11 @@ import { StarRating, formatStars } from '@/components/StarRating';
 import { ShareToFriendSheet } from '@/components/ShareToFriendSheet';
 import { LoadError } from '@/components/LoadError';
 import { useToast } from '@/components/ToastProvider';
+import {
+  useLockerStatusByTmdbId,
+  furtherLockerStatus,
+  type LockerStatus,
+} from '@/hooks/useWatchedTmdbIds';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
@@ -84,11 +89,18 @@ function verbFor(item: FeedItem): string {
 
 function FeedCard({
   item,
+  lockerStatus,
   onOpenFilm,
   onOpenUser,
   onShare,
 }: {
   item: FeedItem;
+  /**
+   * Where this film already sits in the VIEWER's locker — not the feed
+   * author's. Passed in rather than looked up here so the whole list reads
+   * one shared copy of the locker instead of a card's worth each.
+   */
+  lockerStatus: LockerStatus;
   onOpenFilm: () => void;
   onOpenUser: () => void;
   onShare: () => void;
@@ -99,9 +111,24 @@ function FeedCard({
   const queryClient = useQueryClient();
   const { mutateAsync: addMovie } = useAddMovie();
 
-  /** Which of the two save actions has been taken on this card. */
-  const [saved, setSaved] = useState<'watchlist' | 'watched' | null>(null);
+  /**
+   * What has been tapped on this card, which is only ever AHEAD of the
+   * server for the moment between the write and the refetch landing.
+   *
+   * This used to be the whole story — the card started at null and nothing
+   * ever told it otherwise, so a film already on your watchlist still read
+   * "Watchlist" and one you had seen still offered "Mark watched". The feed
+   * was the one place in the app that did not know your own locker.
+   */
+  const [justSaved, setJustSaved] = useState<LockerStatus>(null);
   const [busy, setBusy] = useState(false);
+
+  // The tap wins while the refetch is in flight; the server wins when it
+  // knows about a film this session never touched. Neither action moves a
+  // film backwards, so the further of the two is always the truth.
+  const saved = furtherLockerStatus(justSaved, lockerStatus);
+  const inLocker = saved !== null;
+  const isWatched = saved === 'watched';
 
   const initials = (item.user.displayInitials || item.user.username || '?')
     .slice(0, 5)
@@ -126,7 +153,7 @@ function FeedCard({
             isWatched: asWatched,
           },
         });
-        setSaved(asWatched ? 'watched' : 'watchlist');
+        setJustSaved(asWatched ? 'watched' : 'watchlist');
         if (Platform.OS !== 'web') {
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
@@ -230,47 +257,56 @@ function FeedCard({
           and has nothing to save. */}
       {isPlaylist ? null : (
         <View style={styles.actions}>
+          {/* Saved once it is in the locker at ALL, watched included — a
+              film you have seen is not one still to be saved, and offering
+              to save it again would be a button with nothing to do. */}
           <TouchableOpacity
             style={styles.action}
             onPress={() => save(false)}
-            disabled={!canSave || busy || saved !== null}
+            disabled={!canSave || busy || inLocker}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={saved === 'watchlist' ? 'bookmark' : 'bookmark-outline'}
+              name={inLocker ? 'bookmark' : 'bookmark-outline'}
               size={19}
-              color={saved === 'watchlist' ? colors.primary : canSave ? colors.textMuted : colors.iconFaint}
+              color={inLocker ? colors.primary : canSave ? colors.textMuted : colors.iconFaint}
             />
             <Text
               style={[
                 styles.actionText,
-                saved === 'watchlist' && styles.actionTextDone,
+                inLocker && styles.actionTextDone,
                 !canSave && styles.actionTextOff,
               ]}
             >
-              {saved === 'watchlist' ? 'Saved' : 'Watchlist'}
+              {inLocker ? 'Saved' : 'Watchlist'}
             </Text>
           </TouchableOpacity>
 
+          {/* Still live for a film on the watchlist, so "I have finally seen
+              this" works straight from the feed. The server treats adding
+              something already saved AS watched as a promotion, so there is
+              nothing to do here beyond leaving the button enabled — which
+              it was not: both actions locked together the moment either was
+              taken. */}
           <TouchableOpacity
             style={styles.action}
             onPress={() => save(true)}
-            disabled={!canSave || busy || saved !== null}
+            disabled={!canSave || busy || isWatched}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={saved === 'watched' ? 'checkmark-circle' : 'checkmark-circle-outline'}
+              name={isWatched ? 'checkmark-circle' : 'checkmark-circle-outline'}
               size={19}
-              color={saved === 'watched' ? colors.success : canSave ? colors.textMuted : colors.iconFaint}
+              color={isWatched ? colors.success : canSave ? colors.textMuted : colors.iconFaint}
             />
             <Text
               style={[
                 styles.actionText,
-                saved === 'watched' && styles.actionTextDone,
+                isWatched && styles.actionTextDone,
                 !canSave && styles.actionTextOff,
               ]}
             >
-              {saved === 'watched' ? 'Watched' : 'Mark watched'}
+              {isWatched ? 'Watched' : 'Mark watched'}
             </Text>
           </TouchableOpacity>
 
@@ -309,6 +345,14 @@ export function SocialFeedView() {
 
   const items = data?.items ?? [];
   const newCount = data?.newCount ?? 0;
+
+  /**
+   * The viewer's own locker, read once for the whole list.
+   *
+   * The feed is full of films you may already have saved or seen — that is
+   * rather the point of it — and the cards had no way to know.
+   */
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
 
   const open = useCallback(
     (item: FeedItem) => {
@@ -385,6 +429,9 @@ export function SocialFeedView() {
           {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
           <FeedCard
             item={item}
+            lockerStatus={
+              item.tmdbId != null ? lockerStatusByTmdbId.get(item.tmdbId) ?? null : null
+            }
             onOpenFilm={() => open(item)}
             onOpenUser={() => router.push(`/user/${item.user.clerkId}`)}
             onShare={() => setSharing(item)}
@@ -392,7 +439,7 @@ export function SocialFeedView() {
         </>
       );
     },
-    [items, labelFor, open, router, styles.sectionLabel]
+    [items, labelFor, lockerStatusByTmdbId, open, router, styles.sectionLabel]
   );
 
   if (isLoading) {
