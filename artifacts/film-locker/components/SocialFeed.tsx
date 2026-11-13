@@ -34,6 +34,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetFeed,
@@ -44,6 +45,7 @@ import {
   type FeedItem,
 } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { FilmCommentsSheet } from '@/components/FilmCommentsSheet';
 import { StarRating, formatStars } from '@/components/StarRating';
 import { ShareToFriendSheet } from '@/components/ShareToFriendSheet';
 import { LoadError } from '@/components/LoadError';
@@ -360,17 +362,14 @@ function FeedCard({
 
 export function SocialFeedView() {
   const router = useRouter();
+  const { isSignedIn } = useAuth();
   const styles = useThemedStyles(makeStyles);
   const colors = useColors();
 
   /** Only ever a film item — a playlist card navigates instead. */
   const [selected, setSelected] = useState<FeedItem | null>(null);
-  /**
-   * Whether the sheet was opened by the Comment button rather than the
-   * poster, in which case it scrolls to the comments instead of landing on
-   * the synopsis with them three screens down.
-   */
-  const [openAtComments, setOpenAtComments] = useState(false);
+  /** The film whose comments are open, over the feed. */
+  const [commentsFor, setCommentsFor] = useState<FeedItem | null>(null);
   const [sharing, setSharing] = useState<FeedItem | null>(null);
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useGetFeed(undefined, {
@@ -397,19 +396,19 @@ export function SocialFeedView() {
         }
         return;
       }
-      if (item.tmdbId != null) {
-        setOpenAtComments(false);
-        setSelected(item);
-      }
+      if (item.tmdbId != null) setSelected(item);
     },
     [router]
   );
 
-  /** The same sheet, but landing on the comments. */
+  /**
+   * Comments, in a sheet over the feed rather than inside the film's own
+   * screen. Tapping a comment icon should not cost you your place in the
+   * list — see FilmCommentsSheet.
+   */
   const openComments = useCallback((item: FeedItem) => {
     if (item.tmdbId == null) return;
-    setOpenAtComments(true);
-    setSelected(item);
+    setCommentsFor(item);
   }, []);
 
   /**
@@ -536,7 +535,22 @@ export function SocialFeedView() {
           posterUrl={selected.posterUrl ?? ''}
           releaseYear={selected.releaseYear ?? ''}
           overview=""
-          focusComments={openAtComments}
+        />
+      )}
+
+      {commentsFor?.tmdbId != null && (
+        <FilmCommentsSheet
+          visible
+          tmdbId={commentsFor.tmdbId}
+          filmTitle={commentsFor.title ?? 'This film'}
+          isLoggedIn={Boolean(isSignedIn)}
+          onClose={() => {
+            setCommentsFor(null);
+            // The count on the card comes down with the feed, so a comment
+            // just posted would otherwise not show up in it until the next
+            // refetch for some other reason.
+            void refetch();
+          }}
         />
       )}
 

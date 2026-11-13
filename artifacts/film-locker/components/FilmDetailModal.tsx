@@ -64,6 +64,12 @@ import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import { StarRating } from '@/components/StarRating';
+import {
+  CommentRow,
+  ReportSheet,
+  formatRelative,
+  useFilmCommentThread,
+} from '@/components/filmComments';
 import type { Palette } from '@/constants/colors';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -112,15 +118,6 @@ interface FilmDetailModalProps {
    * without this component knowing anything about them.
    */
   onAdded?: (opts: { asWatched: boolean }) => void;
-  /**
-   * Open with the comments in view rather than the synopsis.
-   *
-   * For a caller whose button was specifically "comments" — the feed's,
-   * today. The comments live near the bottom of a long sheet, so arriving
-   * at the top after tapping a comment icon means scrolling past the cast
-   * and the providers to reach what you asked for.
-   */
-  focusComments?: boolean;
 }
 
 
@@ -277,211 +274,9 @@ function CommunityStars({ value }: { value: number | null | undefined }) {
   return <StarRating value={value ? Math.round(value * 2) / 2 : null} size={18} gap={2} />;
 }
 
-// ── Comment row ────────────────────────────────────────────────────────────────
 
-function CommentRow({
-  comment,
-  onDelete,
-  onReport,
-}: {
-  comment: FilmComment;
-  onDelete: (id: number) => void;
-  onReport: (comment: FilmComment) => void;
-}) {
-  const colors = useColors();
-  const commentStyles = useThemedStyles(makeCommentStyles);
-  const router = useRouter();
-  const initials = (comment.username ?? comment.userId.slice(0, 2)).slice(0, 2).toUpperCase();
-  const timeAgo = formatRelative(new Date(comment.createdAt));
-  const goToProfile = () => router.push(`/user/${comment.userId}`);
 
-  return (
-    <View style={commentStyles.row}>
-      {/* Avatar */}
-      <TouchableOpacity onPress={goToProfile} activeOpacity={0.7}>
-        {comment.avatarUrl ? (
-          <Image
-            source={{ uri: comment.avatarUrl }}
-            style={commentStyles.avatar}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={[commentStyles.avatar, commentStyles.avatarFallback]}>
-            <Text style={commentStyles.avatarText}>{initials}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
 
-      {/* Body */}
-      <View style={{ flex: 1 }}>
-        <View style={commentStyles.metaRow}>
-          <TouchableOpacity onPress={goToProfile} activeOpacity={0.7}>
-            <Text style={commentStyles.username}>
-              {comment.username ?? 'Anonymous'}
-            </Text>
-          </TouchableOpacity>
-          {comment.rating != null && (
-            <View style={commentStyles.ratingRow}>
-              <StarRating value={comment.rating} size={11} gap={1} />
-            </View>
-          )}
-          <Text style={commentStyles.time}>{timeAgo}</Text>
-          {comment.isOwn ? (
-            <TouchableOpacity
-              onPress={() => onDelete(comment.id)}
-              hitSlop={10}
-              style={commentStyles.deleteBtn}
-            >
-              <Ionicons name="trash-outline" size={14} color={colors.textFaint} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => onReport(comment)}
-              hitSlop={10}
-              style={commentStyles.deleteBtn}
-            >
-              <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
-            </TouchableOpacity>
-          )}
-        </View>
-        <Text style={commentStyles.body}>{comment.body}</Text>
-      </View>
-    </View>
-  );
-}
-
-// ── Report sheet — lets you report a comment/user with a reason, or block
-// the user outright. No in-app moderation queue yet; a report is emailed to
-// hello@film-locker.com best-effort and always saved server-side.
-//
-// The sheet states the review commitment and gives the contact address as a
-// fallback, because the email delivery is best-effort — sendEmail never
-// throws — and someone reporting abuse should not be left with no way to
-// follow up if the notification silently fails to arrive. ──
-
-function ReportSheet({
-  visible,
-  targetUsername,
-  onSubmit,
-  onBlock,
-  onClose,
-  submitting,
-}: {
-  visible: boolean;
-  targetUsername: string;
-  onSubmit: (reason: string) => void;
-  onBlock: () => void;
-  onClose: () => void;
-  submitting: boolean;
-}) {
-  const colors = useColors();
-  const reportStyles = useThemedStyles(makeReportStyles);
-  const [reason, setReason] = useState('');
-
-  const handleClose = useCallback(() => {
-    setReason('');
-    onClose();
-  }, [onClose]);
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={reportStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <TouchableOpacity style={reportStyles.backdrop} onPress={handleClose} activeOpacity={1} />
-        <View style={reportStyles.sheet}>
-          <View style={reportStyles.handle} />
-          <Text style={reportStyles.title}>Report {targetUsername}</Text>
-          <TextInput
-            style={reportStyles.input}
-            value={reason}
-            onChangeText={(t) => setReason(t.slice(0, 1000))}
-            placeholder="What's wrong with this? (required)"
-            placeholderTextColor={colors.textFaint}
-            multiline
-            maxLength={1000}
-            textAlignVertical="top"
-          />
-          <Text style={reportStyles.assurance}>
-            We review every report within 24 hours. You can also email{' '}
-            <Text
-              style={reportStyles.assuranceLink}
-              onPress={() =>
-                Linking.openURL(
-                  `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Film Locker report: ${targetUsername}`)}`
-                )
-              }
-            >
-              {CONTACT_EMAIL}
-            </Text>
-            .
-          </Text>
-
-          <TouchableOpacity
-            style={[reportStyles.submitBtn, (!reason.trim() || submitting) && reportStyles.btnDisabled]}
-            onPress={() => onSubmit(reason.trim())}
-            disabled={!reason.trim() || submitting}
-            activeOpacity={0.85}
-          >
-            {submitting ? <ActivityIndicator color={colors.onColor} /> : <Text style={reportStyles.submitBtnText}>Submit Report</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={reportStyles.blockBtn} onPress={onBlock} activeOpacity={0.85}>
-            <Text style={reportStyles.blockBtnText}>Block {targetUsername}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleClose} style={reportStyles.cancelBtn} activeOpacity={0.7}>
-            <Text style={reportStyles.cancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-const makeReportStyles = (c: Palette) => StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: {
-    backgroundColor: c.background, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 17, fontFamily: 'Inter_700Bold', color: c.text, marginBottom: 12 },
-  input: {
-    minHeight: 80, maxHeight: 140, borderWidth: 1, borderColor: c.border, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontFamily: 'Inter_400Regular',
-    color: c.text, backgroundColor: c.surfaceSubtle, marginBottom: 12,
-    ...webInputReset,
-  },
-  assurance: {
-    fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textMuted,
-    lineHeight: 17, marginBottom: 12,
-  },
-  assuranceLink: { color: c.primary, fontFamily: 'Inter_600SemiBold' },
-  submitBtn: {
-    backgroundColor: c.primary, borderRadius: 10, paddingVertical: 13,
-    alignItems: 'center', marginBottom: 10,
-  },
-  btnDisabled: { opacity: 0.5 },
-  submitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
-  blockBtn: {
-    borderRadius: 10, paddingVertical: 13, alignItems: 'center',
-    borderWidth: 1, borderColor: '#FCA5A5', marginBottom: 10,
-  },
-  blockBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.destructiveStrong },
-  cancelBtn: { alignItems: 'center', paddingVertical: 8 },
-  cancelBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.textMuted },
-});
-
-function formatRelative(date: Date): string {
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-}
 
 function formatVoteCount(count: number): string {
   if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
@@ -504,18 +299,6 @@ function formatRuntime(minutes: number | null | undefined): string | null {
   return `${hrs}h ${mins}m`;
 }
 
-const makeCommentStyles = (c: Palette) => StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  avatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
-  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 13, fontFamily: 'Inter_700Bold', color: c.avatarFg },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
-  username: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.text },
-  ratingRow: { flexDirection: 'row', gap: 1 },
-  time: { fontSize: 12, fontFamily: 'Inter_400Regular', color: c.textFaint },
-  deleteBtn: { marginLeft: 'auto' },
-  body: { fontSize: 14, fontFamily: 'Inter_400Regular', color: c.textStrong, lineHeight: 20 },
-});
 
 // ── Community section ─────────────────────────────────────────────────────────
 
@@ -544,14 +327,14 @@ function CommunitySection({
   const communityStyles = useThemedStyles(makeCommunityStyles);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const [commentText, setCommentText] = useState('');
-  const [page, setPage] = useState(1);
-  // Accumulated comments across all loaded pages
-  const [allComments, setAllComments] = useState<FilmComment[]>([]);
-  const [reportTarget, setReportTarget] = useState<FilmComment | null>(null);
+  /**
+   * The thread itself — rows, pagination, posting, reporting, blocking —
+   * from the shared hook rather than a copy kept here. The feed's comment
+   * sheet runs the same one, so a rule added to either is added to both.
+   */
+  const thread = useFilmCommentThread(tmdbId);
 
   const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId);
-  const { data: commentsData, isLoading: commentsLoading } = useGetFilmComments(tmdbId, { page });
   // Declared here rather than beside the stars it feeds, because
   // handleCommunityRating closes over it below: a dependency array is
   // evaluated during render, so a later `const` would be in its temporal
@@ -560,29 +343,8 @@ function CommunitySection({
 
   const { mutateAsync: submitRating, isPending: ratingPending } = useSetFilmCommunityRating();
   const { mutateAsync: deleteRating, isPending: ratingDeleting } = useDeleteFilmCommunityRating();
-  const { mutateAsync: postComment, isPending: commentPending } = usePostFilmComment();
-  const { mutateAsync: deleteComment } = useDeleteFilmComment();
-  const { mutateAsync: submitReport, isPending: reportPending } = useSubmitReport();
-  const { mutateAsync: blockUser } = useBlockUser();
-
-  // Append newly fetched page into accumulated list (dedup by id)
-  React.useEffect(() => {
-    if (!commentsData?.comments) return;
-    setAllComments((prev) => {
-      const existingIds = new Set(prev.map((c) => c.id));
-      const fresh = commentsData.comments.filter((c) => !existingIds.has(c.id));
-      return page === 1 ? commentsData.comments : [...prev, ...fresh];
-    });
-  }, [commentsData, page]);
-
   const invalidateScore = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: getGetFilmCommunityScoreQueryKey(tmdbId) });
-  }, [queryClient, tmdbId]);
-
-  const resetComments = useCallback(async () => {
-    setPage(1);
-    setAllComments([]);
-    await queryClient.invalidateQueries({ queryKey: getGetFilmCommentsQueryKey(tmdbId) });
   }, [queryClient, tmdbId]);
 
   const handleCommunityRating = useCallback(
@@ -635,73 +397,8 @@ function CommunitySection({
     [isLoggedIn, submitRating, deleteRating, tmdbId, invalidateScore, userRating, onRatingChanged]
   );
 
-  const handlePostComment = useCallback(async () => {
-    const text = commentText.trim();
-    if (!text) return;
-    try {
-      await postComment({ tmdbId, data: { body: text } });
-      setCommentText('');
-      Keyboard.dismiss();
-      await resetComments();
-    } catch {
-      Alert.alert('Error', 'Could not post your comment.');
-    }
-  }, [commentText, postComment, tmdbId, resetComments]);
-
-  const handleDeleteComment = useCallback(
-    async (id: number) => {
-      confirmDestructive('Remove this comment?', 'Delete', async () => {
-        try {
-          await deleteComment({ tmdbId, id });
-          await resetComments();
-        } catch {
-          Alert.alert('Error', 'Could not delete comment.');
-        }
-      });
-    },
-    [deleteComment, tmdbId, resetComments]
-  );
-
-  const handleSubmitReport = useCallback(
-    async (reason: string) => {
-      if (!reportTarget || !reason.trim()) return;
-      try {
-        await submitReport({
-          data: { reportedUserId: reportTarget.userId, reason, commentId: reportTarget.id },
-        });
-        setReportTarget(null);
-        showToast({ title: 'Report submitted', subtitle: "Thanks for flagging it — we'll take a look.", variant: 'success' });
-      } catch {
-        showToast({ title: 'Could not submit report', variant: 'error' });
-      }
-    },
-    [reportTarget, submitReport, showToast]
-  );
-
-  const handleBlockFromReport = useCallback(() => {
-    if (!reportTarget) return;
-    const username = reportTarget.username ?? 'this user';
-    confirmDestructive(
-      `Block ${username}? They won't be able to follow, message, or see your comments, and you won't see theirs.`,
-      'Block',
-      async () => {
-        try {
-          await blockUser({ data: { blockedId: reportTarget.userId } });
-          setReportTarget(null);
-          await resetComments();
-          await queryClient.invalidateQueries({ queryKey: getGetFollowsQueryKey() });
-          showToast({ title: `Blocked ${username}`, variant: 'success' });
-        } catch {
-          showToast({ title: 'Could not block this user', variant: 'error' });
-        }
-      }
-    );
-  }, [reportTarget, blockUser, resetComments, queryClient, showToast]);
-
   const average = score?.average ?? null;
   const ratingCount = score?.count ?? 0;
-  const comments = allComments;
-  const hasMore = commentsData?.hasMore ?? false;
 
   return (
     <View style={communityStyles.container}>
@@ -753,26 +450,26 @@ function CommunitySection({
             style={communityStyles.input}
             placeholder="Share your thoughts… (280 chars)"
             placeholderTextColor={colors.textFaint}
-            value={commentText}
-            onChangeText={(t) => setCommentText(t.slice(0, COMMENT_MAX))}
+            value={thread.commentText}
+            onChangeText={(t) => thread.setCommentText(t.slice(0, COMMENT_MAX))}
             multiline
             maxLength={COMMENT_MAX}
             textAlignVertical="top"
           />
           <View style={communityStyles.composeFooter}>
             <Text style={communityStyles.charCount}>
-              {commentText.length}/{COMMENT_MAX}
+              {thread.commentText.length}/{COMMENT_MAX}
             </Text>
             <TouchableOpacity
               style={[
                 communityStyles.postBtn,
-                (!commentText.trim() || commentPending) && communityStyles.postBtnDisabled,
+                (!thread.commentText.trim() || thread.posting) && communityStyles.postBtnDisabled,
               ]}
-              onPress={handlePostComment}
-              disabled={!commentText.trim() || commentPending}
+              onPress={thread.post}
+              disabled={!thread.commentText.trim() || thread.posting}
               activeOpacity={0.8}
             >
-              {commentPending ? (
+              {thread.posting ? (
                 <ActivityIndicator size="small" color={colors.onColor} />
               ) : (
                 <Text style={communityStyles.postBtnText}>Post</Text>
@@ -792,21 +489,24 @@ function CommunitySection({
       </Text>
 
       {/* Comments list */}
-      {commentsLoading ? (
+      {/* `&& none yet`, because each page is its own query and so reports
+          isLoading afresh — without it, Load more replaced the comments
+          you were reading with a spinner. */}
+      {thread.isLoading && thread.comments.length === 0 ? (
         <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 12 }} />
-      ) : comments.length === 0 ? (
+      ) : thread.comments.length === 0 ? (
         <Text style={communityStyles.emptyText}>
           No comments yet. Be the first to share your thoughts!
         </Text>
       ) : (
         <>
-          {comments.map((c) => (
-            <CommentRow key={c.id} comment={c} onDelete={handleDeleteComment} onReport={setReportTarget} />
+          {thread.comments.map((c) => (
+            <CommentRow key={c.id} comment={c} onDelete={thread.remove} onReport={thread.setReportTarget} />
           ))}
-          {hasMore && (
+          {thread.hasMore && (
             <TouchableOpacity
               style={communityStyles.loadMoreBtn}
-              onPress={() => setPage((p) => p + 1)}
+              onPress={thread.loadMore}
             >
               <Text style={communityStyles.loadMoreText}>Load more comments</Text>
             </TouchableOpacity>
@@ -815,12 +515,12 @@ function CommunitySection({
       )}
 
       <ReportSheet
-        visible={reportTarget !== null}
-        targetUsername={reportTarget?.username ?? 'this user'}
-        onSubmit={handleSubmitReport}
-        onBlock={handleBlockFromReport}
-        onClose={() => setReportTarget(null)}
-        submitting={reportPending}
+        visible={thread.reportTarget !== null}
+        targetUsername={thread.reportTarget?.username ?? 'this user'}
+        onSubmit={thread.sendReport}
+        onBlock={thread.blockFromReport}
+        onClose={() => thread.setReportTarget(null)}
+        submitting={thread.reportPending}
       />
     </View>
   );
@@ -1211,7 +911,6 @@ export function FilmDetailModal({
   savedMovie: savedMovieProp,
   sourceUrl: sourceUrlProp,
   onAdded,
-  focusComments,
 }: FilmDetailModalProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -1334,40 +1033,6 @@ export function FilmDetailModal({
    */
   const [starActive, setStarActive] = useState(false);
 
-  /**
-   * Scrolling to the comments when the caller asked for them.
-   *
-   * Driven by onLayout rather than a timer: the comments sit below the
-   * cast, the providers and the similar-films rail, so their y is not
-   * known until those have measured — and several of them grow when their
-   * own requests land. A fixed delay would be a guess that is wrong on a
-   * slow connection, which is precisely when it matters.
-   *
-   * Fires once per opening. `done` stops a later re-layout — a poster
-   * loading, a rail filling in — from yanking the sheet back down while
-   * somebody is reading.
-   */
-  const scrollRef = useRef<ScrollView>(null);
-  const commentsY = useRef<number | null>(null);
-  const scrolledToComments = useRef(false);
-
-  useEffect(() => {
-    if (!visible) {
-      scrolledToComments.current = false;
-      commentsY.current = null;
-    }
-  }, [visible]);
-
-  const handleCommentsLayout = useCallback((e: LayoutChangeEvent) => {
-    commentsY.current = e.nativeEvent.layout.y;
-    if (!focusComments || scrolledToComments.current) return;
-    scrolledToComments.current = true;
-    // A frame's grace so the ScrollView has its content height, without
-    // which scrollTo past the current end is clamped and goes nowhere.
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: commentsY.current ?? 0, animated: true });
-    });
-  }, [focusComments]);
 
   const handleRating = useCallback(
     async (n: number, viaDrag: boolean) => {
@@ -1531,7 +1196,6 @@ export function FilmDetailModal({
           </TouchableOpacity>
 
           <ScrollView
-            ref={scrollRef}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
             keyboardShouldPersistTaps="handled"
@@ -1720,7 +1384,6 @@ export function FilmDetailModal({
                   this is the only place actual written opinions live. ── */}
               <SimilarFilms tmdbId={tmdbId} visible={visible} onPick={onSimilarPick} />
 
-              <View onLayout={handleCommentsLayout}>
               <CommunitySection
                 tmdbId={tmdbId}
                 isLoggedIn={isLoggedIn}
@@ -1735,7 +1398,6 @@ export function FilmDetailModal({
                   void invalidate();
                 }}
               />
-              </View>
 
               {/* Divider */}
               <View style={styles.divider} />

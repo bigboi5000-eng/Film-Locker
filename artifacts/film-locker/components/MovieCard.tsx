@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -83,18 +84,34 @@ export interface MovieCardProps {
   badges?: MovieCardBadge[];
 }
 
+const STAR_SIZE = 11;
+
 /**
- * A rating as star glyphs, halves included: 3.5 → "★★★½".
+ * The rating as stars, halves drawn as half a star.
  *
- * Glyphs rather than the StarRating component, which draws five outlines
- * and a clipped overlay — right for a control you can drag, far too much
- * furniture for the corner of a 110px card where the only job is to say
- * "you gave this four and a half".
+ * The first fix for `'★'.repeat(rating)` dropping halves put a "½"
+ * character after the glyphs — correct, compact, and reading as a
+ * fraction rather than as a star. These are icons instead, so four and a
+ * half looks like four and a half stars.
+ *
+ * Still not the StarRating component, which also draws the empty
+ * outlines: five slots is the right frame for a control you drag to pick
+ * a score, and too much furniture in the corner of a 110px poster, where
+ * the job is only to say what you gave it.
  */
-function starGlyphs(rating: number): string {
+function CardStars({ rating }: { rating: number }) {
+  const colors = useColors();
   const whole = Math.floor(rating);
   const half = rating - whole >= 0.5;
-  return '★'.repeat(whole) + (half ? '½' : '');
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+      {Array.from({ length: whole }, (_, i) => (
+        <Ionicons key={i} name="star" size={STAR_SIZE} color={colors.star} />
+      ))}
+      {half && <Ionicons name="star-half" size={STAR_SIZE} color={colors.star} />}
+    </View>
+  );
 }
 
 export function MovieCard({
@@ -138,14 +155,7 @@ export function MovieCard({
             {title}
           </Text>
           {releaseYear ? <Text style={styles.year}>{releaseYear}</Text> : null}
-          {typeof rating === 'number' && rating > 0 && (
-            // `'★'.repeat(rating)` silently dropped the half: repeat()
-            // floors its argument, so 3.5 drew three stars and looked
-            // identical to a flat 3. The stars that WRITE this value offer
-            // ten positions, so half of every rating a person can give was
-            // being rounded away on the card.
-            <Text style={styles.stars}>{starGlyphs(rating)}</Text>
-          )}
+          {typeof rating === 'number' && rating > 0 && <CardStars rating={rating} />}
         </View>
       </View>
 
@@ -221,11 +231,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     color: c.star,
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    marginTop: 2,
-  },
-  stars: {
-    color: c.star,
-    fontSize: 11,
     marginTop: 2,
   },
   watchedBadge: {
