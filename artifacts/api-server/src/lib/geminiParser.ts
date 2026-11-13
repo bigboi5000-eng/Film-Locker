@@ -8,6 +8,21 @@ export interface GeminiMovieMatch {
   confidence_score: number;
   /** One-sentence hook — only populated by geminiRecommender.ts, absent elsewhere. */
   synopsis?: string;
+  /**
+   * How the film was identified, where the source could tell.
+   *
+   * "text" means a title was written down somewhere — printed on a poster,
+   * burned into a still, typed in a caption. "imagery" means nothing named
+   * it and the model recognised the film from what it could see.
+   *
+   * The two are not equally reliable and the confidence score does not
+   * separate them: a scene recognised wrongly comes back as a real film
+   * with a high score, because the model IS confident, and the TMDB lookup
+   * cannot catch it either — the title resolves, it is simply the wrong
+   * film. Only the image path fills this in; everything else leaves it
+   * undefined, which means "not known" rather than "read from text".
+   */
+  identified_from?: "text" | "imagery";
 }
 
 export interface GeminiExtractionResult {

@@ -74,6 +74,11 @@ const IMAGE_PROMPT =
   "(empty string if unknown), and a confidence_score from 0.0 to 1.0 " +
   "reflecting how certain you are this is a real film reference rather than " +
   "a song, book, or unrelated phrase. Exclude TV series and short films. " +
+  "Also set identified_from: 'text' when the title was written somewhere in " +
+  "the image, and 'imagery' when nothing named it and you recognised the " +
+  "film from the picture itself. Be honest about which — a film recognised " +
+  "from a scene is a judgement, it will be shown to the user as one, and " +
+  "marking a guess as 'text' makes a wrong answer look certain. " +
   "If the image presents a themed or ranked collection (e.g. a decade, a " +
   "genre, a 'best of' countdown), set list_title to a short name suitable " +
   "for a playlist, e.g. 'Best Films of the 1930s'; otherwise set list_title " +

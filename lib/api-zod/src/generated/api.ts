@@ -172,7 +172,8 @@ export const AiExtractResponse = zod.object({
   "overview": zod.string().nullish(),
   "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
   "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
-  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.'),
+  "identified_from": zod.enum(['text', 'imagery']).optional().describe('How the film was identified, where the source could tell. \"text\" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. \"imagery\" means nothing named it and the model recognised the film from what it could see.\nThe two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means \"not known\" rather than \"read from text\".\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -234,7 +235,8 @@ export const ProcessSocialLinkResponse = zod.object({
   "overview": zod.string().nullish(),
   "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
   "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
-  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.'),
+  "identified_from": zod.enum(['text', 'imagery']).optional().describe('How the film was identified, where the source could tell. \"text\" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. \"imagery\" means nothing named it and the model recognised the film from what it could see.\nThe two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means \"not known\" rather than \"read from text\".\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -298,7 +300,8 @@ export const ExtractFromImageResponse = zod.object({
   "overview": zod.string().nullish(),
   "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
   "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
-  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.'),
+  "identified_from": zod.enum(['text', 'imagery']).optional().describe('How the film was identified, where the source could tell. \"text\" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. \"imagery\" means nothing named it and the model recognised the film from what it could see.\nThe two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means \"not known\" rather than \"read from text\".\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),
@@ -360,7 +363,8 @@ export const RecommendMoviesResponse = zod.object({
   "overview": zod.string().nullish(),
   "synopsis": zod.string().nullish().describe('Very short (one-sentence) hook written by Gemini specifically for recommend results — only populated by POST \/movies\/recommend, null everywhere else.\n'),
   "tv_series_name": zod.string().nullish().describe('Set when the title matched no film but does match a television series on TMDB. Never something to save, since Film Locker holds films — it is here so the app can say \"that is a TV series\" rather than showing an empty result, which is indistinguishable from having failed to read the post at all.\n'),
-  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.')
+  "tv_series_year": zod.string().nullish().describe('First-air year of tv_series_name, empty when TMDB has no date.'),
+  "identified_from": zod.enum(['text', 'imagery']).optional().describe('How the film was identified, where the source could tell. \"text\" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. \"imagery\" means nothing named it and the model recognised the film from what it could see.\nThe two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means \"not known\" rather than \"read from text\".\n')
 }).describe('Single movie reference extracted by Gemini, with confidence score')),
   "saved": zod.array(zod.object({
   "id": zod.number(),

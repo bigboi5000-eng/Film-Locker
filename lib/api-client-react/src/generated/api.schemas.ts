@@ -120,6 +120,18 @@ export interface TmdbMovieDetailsResponse {
 }
 
 /**
+ * How the film was identified, where the source could tell. "text" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. "imagery" means nothing named it and the model recognised the film from what it could see.
+ * The two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means "not known" rather than "read from text".
+ */
+export type GeminiMovieMatchIdentifiedFrom = typeof GeminiMovieMatchIdentifiedFrom[keyof typeof GeminiMovieMatchIdentifiedFrom];
+
+
+export const GeminiMovieMatchIdentifiedFrom = {
+  text: 'text',
+  imagery: 'imagery',
+} as const;
+
+/**
  * Single movie reference extracted by Gemini, with confidence score
  */
 export interface GeminiMovieMatch {
@@ -136,6 +148,11 @@ export interface GeminiMovieMatch {
   tv_series_name?: string | null;
   /** First-air year of tv_series_name, empty when TMDB has no date. */
   tv_series_year?: string | null;
+  /**
+     * How the film was identified, where the source could tell. "text" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. "imagery" means nothing named it and the model recognised the film from what it could see.
+     * The two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means "not known" rather than "read from text".
+     */
+  identified_from?: GeminiMovieMatchIdentifiedFrom;
 }
 
 export interface SearchMoviesResponse {

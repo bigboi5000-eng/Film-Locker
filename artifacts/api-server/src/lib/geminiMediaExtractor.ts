@@ -38,6 +38,16 @@ export const MEDIA_RESPONSE_SCHEMA = {
               "Confidence 0.0–1.0 that this is a genuine movie reference. " +
               "1.0 = unmistakably a film title. 0.0 = almost certainly not.",
           },
+          identified_from: {
+            type: Type.STRING,
+            enum: ["text", "imagery"],
+            description:
+              "How this film was identified. 'text' when a title was written " +
+              "somewhere in the media — printed, overlaid, captioned, spoken. " +
+              "'imagery' when nothing named it and you recognised the film " +
+              "from what you could see. Be honest about this: a recognised " +
+              "film is a judgement and will be shown to the user as one.",
+          },
         },
         required: ["movie_title", "release_year", "confidence_score"],
       },
@@ -157,6 +167,12 @@ export async function uploadAndAnalyzeMedia(
           const s = Number(m.confidence_score);
           return Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0;
         })(),
+        // Left undefined unless the model answered with one of the two
+        // values. An unasked-for or malformed answer is "not known", which
+        // the client shows as nothing rather than as "read from text".
+        ...(m.identified_from === "text" || m.identified_from === "imagery"
+          ? { identified_from: m.identified_from }
+          : {}),
       }));
 
     const list_title =

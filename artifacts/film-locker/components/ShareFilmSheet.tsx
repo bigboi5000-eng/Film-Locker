@@ -76,6 +76,39 @@ interface ShareFilmSheetProps {
 }
 
 const CONFIDENCE_THRESHOLD = 0.45;
+
+/**
+ * "This one was a guess", where the film was recognised rather than read.
+ *
+ * A misread TITLE fails loudly — it resolves to nothing on TMDB and gets
+ * dropped. A misrecognised SCENE fails quietly: it comes back as a real
+ * film, at a high confidence, because the model genuinely is confident,
+ * and TMDB cannot tell because the title it produced does exist. It is
+ * simply the wrong film.
+ *
+ * So the only honest thing to do is say which happened. Shown only for
+ * imagery — a title that was printed in the picture needs no caveat, and
+ * putting one on everything teaches people to ignore it.
+ */
+function RecognisedNote({ match }: { match: GeminiMovieMatch }) {
+  const colors = useColors();
+  if (match.identified_from !== 'imagery') return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+      <Ionicons name="eye-outline" size={12} color={colors.mutedForeground} />
+      <Text
+        style={{
+          flex: 1,
+          fontSize: 11,
+          fontFamily: 'Inter_400Regular',
+          color: colors.mutedForeground,
+        }}
+      >
+        Recognised from the picture, not read from it — worth a check
+      </Text>
+    </View>
+  );
+}
 const { height: SCREEN_H } = Dimensions.get('window');
 
 /** Single film card inside the sheet */
@@ -168,6 +201,7 @@ function FilmCard({
             </Text>
           ) : null}
         </TouchableOpacity>
+        <RecognisedNote match={match} />
         {match.overview ? (
           <Text style={[cardStyles.overview, { color: colors.mutedForeground }]} numberOfLines={3}>
             {match.overview}
@@ -326,6 +360,7 @@ function FilmSelectRow({
         {match.release_year ? (
           <Text style={[selectStyles.year, { color: colors.mutedForeground }]}>{match.release_year}</Text>
         ) : null}
+        <RecognisedNote match={match} />
         {/* The row itself toggles the checkbox, so opening the film needs
             its own target rather than the poster — a tap meant for
             selection must never open a sheet instead. */}

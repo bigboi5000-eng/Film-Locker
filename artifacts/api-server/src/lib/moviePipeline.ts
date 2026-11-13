@@ -27,6 +27,12 @@ export interface EnrichedMatch {
   /** Carried through from the raw match — only recommend results set this. */
   synopsis?: string | null;
   /**
+   * Carried through from the raw match — only the image path sets this.
+   * "imagery" marks a film nobody named, which the model recognised from
+   * the picture. See GeminiMovieMatch for why it matters.
+   */
+  identified_from?: "text" | "imagery";
+  /**
    * Set when the title matched no film but does match a television series.
    *
    * Film Locker holds films, so this is never something to save — it is

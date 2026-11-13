@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import type { GeminiMovieMatch, Movie } from '@workspace/api-client-react';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -101,9 +102,33 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
               {item.release_year}
             </Text>
           ) : null}
-          <Text style={[styles.geminiLabel, { color: colors.mutedForeground }]}>
-            Gemini confidence
-          </Text>
+          {/* Where the answer came from, not just how sure it is.
+              "Gemini confidence" against a number says nothing about
+              whether a title was read or a scene was recognised — and
+              those fail differently. A misread title gives nonsense that
+              TMDB throws away; a misrecognised scene gives a real film
+              that is the wrong one, at a high score, because the model
+              genuinely is confident. Only the second needs a second look,
+              so only the second says so. */}
+          {item.identified_from === 'imagery' ? (
+            <View style={styles.evidenceRow}>
+              <Ionicons name="eye-outline" size={11} color={colors.mutedForeground} />
+              <Text style={[styles.geminiLabel, { color: colors.mutedForeground }]}>
+                Recognised from the picture — worth checking
+              </Text>
+            </View>
+          ) : item.identified_from === 'text' ? (
+            <View style={styles.evidenceRow}>
+              <Ionicons name="text-outline" size={11} color={colors.mutedForeground} />
+              <Text style={[styles.geminiLabel, { color: colors.mutedForeground }]}>
+                Title read from the image
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.geminiLabel, { color: colors.mutedForeground }]}>
+              Gemini confidence
+            </Text>
+          )}
         </View>
 
         <View style={styles.matchRight}>
@@ -261,6 +286,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     marginTop: 2,
   },
+  evidenceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   geminiLabel: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
