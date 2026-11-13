@@ -13,7 +13,10 @@ import * as zod from 'zod';
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.string(),
+  "commit": zod.string().nullish().describe('The git commit this server is running, as the deployment platform reported it at boot. Null when the platform injects no git metadata, such as a local run.\n'),
+  "branch": zod.string().nullish().describe('The branch that commit was deployed from.'),
+  "startedAt": zod.string().nullish().describe('When this process started, ISO 8601. Together with commit it answers \"is the running server the code I just merged, and when did it last restart\" without reading deploy logs.\n')
 })
 
 

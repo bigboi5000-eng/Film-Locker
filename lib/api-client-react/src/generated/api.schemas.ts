@@ -7,6 +7,12 @@
  */
 export interface HealthStatus {
   status: string;
+  /** The git commit this server is running, as the deployment platform reported it at boot. Null when the platform injects no git metadata, such as a local run. */
+  commit?: string | null;
+  /** The branch that commit was deployed from. */
+  branch?: string | null;
+  /** When this process started, ISO 8601. Together with commit it answers "is the running server the code I just merged, and when did it last restart" without reading deploy logs. */
+  startedAt?: string | null;
 }
 
 /**
