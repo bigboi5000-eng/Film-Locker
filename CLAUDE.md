@@ -7,9 +7,12 @@ file is about working *in* the repo.
 
 ## Deploying
 
-- **Railway auto-deploys.** Pushing is the deploy — there is no manual step
-  to tell anyone to go and do. Migrations apply on container start (see
-  `Dockerfile`), so a schema change ships with the push that contains it.
+- **Railway auto-deploys from `main`, and only `main`.** Pushing to a
+  feature branch deploys nothing. Migrations apply on container start (see
+  `Dockerfile`), so a schema change ships with the merge that carries it.
+  Until a branch is merged, the app is talking to a server that does not
+  have its endpoints — which shows up as 404s on exactly the feature being
+  tested, and is easily mistaken for a bug in the feature.
 - The server logs `schemaUpToDate` on boot. `false` means the running code
   expects a schema the database does not have, and anything touching a new
   column will 500.

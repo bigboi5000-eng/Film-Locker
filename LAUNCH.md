@@ -58,9 +58,10 @@ absorbed before real users existed; it is not a live concern now.
   Roles are per-branch, so a reset on one branch leaves every other branch on
   the old password. Only the password segment of the connection string
   changes; the host and database name stay as they are.
-- **Railway auto-deploys**, so pushing is the deploy — there is no separate
-  step to remember. Migrations apply on container start (see `Dockerfile`),
-  which means a schema change ships with the push that contains it.
+- **Railway auto-deploys from `main`**, so merging is the deploy — there is
+  no separate step to remember, and nothing on a feature branch is live.
+  Migrations apply on container start (see `Dockerfile`), which means a
+  schema change ships with the merge that carries it.
 - The server logs `schemaUpToDate` on boot. If that ever reads `false`, the
   deploy is running against a schema the code does not match and endpoints
   touching new columns will 500.
