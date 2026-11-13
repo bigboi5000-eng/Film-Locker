@@ -507,6 +507,8 @@ export interface FeedItem {
   rating?: number | null;
   /** The review body, under "commented". */
   comment?: string | null;
+  /** How many comments this film has in total, so a card can say so without asking per film. Counted across every card on the page in one query, and null on a playlist card, which is not about one film. */
+  commentCount?: number | null;
   /** Set under "playlist" — the public playlist they made. */
   playlistId?: number | null;
   playlistName?: string | null;

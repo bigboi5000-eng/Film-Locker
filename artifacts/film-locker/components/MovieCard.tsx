@@ -72,7 +72,7 @@ export interface MovieCardProps {
   onLongPress?: (id: number) => void;
   /** Show a watched checkmark badge */
   isWatched?: boolean;
-  /** Star rating 1–5 */
+  /** The owner's own score, 0.5–5 in half-star steps. */
   rating?: number | null;
   /**
    * People to mark on this poster, drawn top-left in the order given.
@@ -81,6 +81,20 @@ export interface MovieCardProps {
    * leftwards from there would collide with it on the third person.
    */
   badges?: MovieCardBadge[];
+}
+
+/**
+ * A rating as star glyphs, halves included: 3.5 → "★★★½".
+ *
+ * Glyphs rather than the StarRating component, which draws five outlines
+ * and a clipped overlay — right for a control you can drag, far too much
+ * furniture for the corner of a 110px card where the only job is to say
+ * "you gave this four and a half".
+ */
+function starGlyphs(rating: number): string {
+  const whole = Math.floor(rating);
+  const half = rating - whole >= 0.5;
+  return '★'.repeat(whole) + (half ? '½' : '');
 }
 
 export function MovieCard({
@@ -125,7 +139,12 @@ export function MovieCard({
           </Text>
           {releaseYear ? <Text style={styles.year}>{releaseYear}</Text> : null}
           {typeof rating === 'number' && rating > 0 && (
-            <Text style={styles.stars}>{'★'.repeat(rating)}</Text>
+            // `'★'.repeat(rating)` silently dropped the half: repeat()
+            // floors its argument, so 3.5 drew three stars and looked
+            // identical to a flat 3. The stars that WRITE this value offer
+            // ten positions, so half of every rating a person can give was
+            // being rounded away on the card.
+            <Text style={styles.stars}>{starGlyphs(rating)}</Text>
           )}
         </View>
       </View>

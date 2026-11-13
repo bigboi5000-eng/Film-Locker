@@ -1125,6 +1125,7 @@ export const GetFeedResponse = zod.object({
   "releaseYear": zod.string().nullish(),
   "rating": zod.number().min(getFeedResponseItemsItemRatingMin).max(getFeedResponseItemsItemRatingMax).multipleOf(getFeedResponseItemsItemRatingMultipleOf).nullish().describe('Their community rating under \"rated\", and their own score under \"watched\" where they gave one. Half-star steps: both sources hold halves, so declaring this an integer rejected a feed item from anyone who had used them.\n'),
   "comment": zod.string().nullish().describe('The review body, under \"commented\".'),
+  "commentCount": zod.number().nullish().describe('How many comments this film has in total, so a card can say so without asking per film. Counted across every card on the page in one query, and null on a playlist card, which is not about one film.\n'),
   "playlistId": zod.number().nullish().describe('Set under \"playlist\" — the public playlist they made.'),
   "playlistName": zod.string().nullish(),
   "playlistItemCount": zod.number().nullish(),

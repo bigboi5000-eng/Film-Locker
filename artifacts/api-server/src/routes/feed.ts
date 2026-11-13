@@ -312,6 +312,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     releaseYear: string | null;
     rating: number | null;
     comment: string | null;
+    commentCount?: number | null;
     playlistId: number | null;
     playlistName: string | null;
     playlistItemCount: number | null;
@@ -493,9 +494,38 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
 
   const page = deduped.slice(0, limit);
 
+  /**
+   * How many comments each film on this page has.
+   *
+   * One grouped query over the page's films rather than a count per card:
+   * the alternative is the client asking /films/:id/comments twenty times
+   * to render twenty numbers, which is the sort of thing that is fine on a
+   * laptop and miserable on a train.
+   *
+   * Counted after the slice, so it covers exactly what is being sent and
+   * not the whole candidate set.
+   */
+  const pageTmdbIds = [...new Set(page.map((i) => i.tmdbId).filter((id): id is number => id != null))];
+  const commentCounts = pageTmdbIds.length
+    ? await db
+        .select({ tmdbId: filmCommentsTable.tmdbId, total: count(filmCommentsTable.id) })
+        .from(filmCommentsTable)
+        .where(inArray(filmCommentsTable.tmdbId, pageTmdbIds))
+        .groupBy(filmCommentsTable.tmdbId)
+    : [];
+  const countByTmdbId = new Map(commentCounts.map((r) => [r.tmdbId, Number(r.total)]));
+
+  const withCounts = page.map((item) => ({
+    ...item,
+    // Zero rather than null for a film nobody has commented on — the card
+    // draws the icon either way, and null would be "unknown" rather than
+    // "none". Playlist cards are not about one film and keep null.
+    commentCount: item.tmdbId == null ? null : countByTmdbId.get(item.tmdbId) ?? 0,
+  }));
+
   res.json(
     GetFeedResponse.parse({
-      items: page,
+      items: withCounts,
       newCount: page.filter((i) => i.isNew).length,
       followedCount: page.filter((i) => i.fromFollowed).length,
     })

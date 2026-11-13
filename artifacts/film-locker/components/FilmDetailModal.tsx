@@ -15,6 +15,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Keyboard,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -109,6 +110,15 @@ interface FilmDetailModalProps {
    * without this component knowing anything about them.
    */
   onAdded?: (opts: { asWatched: boolean }) => void;
+  /**
+   * Open with the comments in view rather than the synopsis.
+   *
+   * For a caller whose button was specifically "comments" — the feed's,
+   * today. The comments live near the bottom of a long sheet, so arriving
+   * at the top after tapping a comment icon means scrolling past the cast
+   * and the providers to reach what you asked for.
+   */
+  focusComments?: boolean;
 }
 
 
@@ -1199,6 +1209,7 @@ export function FilmDetailModal({
   savedMovie: savedMovieProp,
   sourceUrl: sourceUrlProp,
   onAdded,
+  focusComments,
 }: FilmDetailModalProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -1319,6 +1330,41 @@ export function FilmDetailModal({
    * the only reliable way to keep it.
    */
   const [starActive, setStarActive] = useState(false);
+
+  /**
+   * Scrolling to the comments when the caller asked for them.
+   *
+   * Driven by onLayout rather than a timer: the comments sit below the
+   * cast, the providers and the similar-films rail, so their y is not
+   * known until those have measured — and several of them grow when their
+   * own requests land. A fixed delay would be a guess that is wrong on a
+   * slow connection, which is precisely when it matters.
+   *
+   * Fires once per opening. `done` stops a later re-layout — a poster
+   * loading, a rail filling in — from yanking the sheet back down while
+   * somebody is reading.
+   */
+  const scrollRef = useRef<ScrollView>(null);
+  const commentsY = useRef<number | null>(null);
+  const scrolledToComments = useRef(false);
+
+  useEffect(() => {
+    if (!visible) {
+      scrolledToComments.current = false;
+      commentsY.current = null;
+    }
+  }, [visible]);
+
+  const handleCommentsLayout = useCallback((e: LayoutChangeEvent) => {
+    commentsY.current = e.nativeEvent.layout.y;
+    if (!focusComments || scrolledToComments.current) return;
+    scrolledToComments.current = true;
+    // A frame's grace so the ScrollView has its content height, without
+    // which scrollTo past the current end is clamped and goes nowhere.
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: commentsY.current ?? 0, animated: true });
+    });
+  }, [focusComments]);
 
   const handleRating = useCallback(
     async (n: number, viaDrag: boolean) => {
@@ -1473,6 +1519,7 @@ export function FilmDetailModal({
           </TouchableOpacity>
 
           <ScrollView
+            ref={scrollRef}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
             keyboardShouldPersistTaps="handled"
@@ -1661,6 +1708,7 @@ export function FilmDetailModal({
                   this is the only place actual written opinions live. ── */}
               <SimilarFilms tmdbId={tmdbId} visible={visible} onPick={onSimilarPick} />
 
+              <View onLayout={handleCommentsLayout}>
               <CommunitySection
                 tmdbId={tmdbId}
                 isLoggedIn={isLoggedIn}
@@ -1675,6 +1723,7 @@ export function FilmDetailModal({
                   void invalidate();
                 }}
               />
+              </View>
 
               {/* Divider */}
               <View style={styles.divider} />

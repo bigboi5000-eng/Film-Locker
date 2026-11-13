@@ -84,13 +84,16 @@ function verbFor(item: FeedItem): string {
   if (item.type === 'watched') return 'watched';
   if (item.type === 'rated') return 'rated';
   if (item.type === 'playlist') return 'made a playlist';
-  return 'reviewed';
+  // "commented on", not "reviewed": the row is a comment, the card shows
+  // the comment underneath, and the button that made it says Comment.
+  return 'commented on';
 }
 
 function FeedCard({
   item,
   lockerStatus,
   onOpenFilm,
+  onOpenComments,
   onOpenUser,
   onShare,
 }: {
@@ -102,6 +105,7 @@ function FeedCard({
    */
   lockerStatus: LockerStatus;
   onOpenFilm: () => void;
+  onOpenComments: () => void;
   onOpenUser: () => void;
   onShare: () => void;
 }) {
@@ -310,6 +314,26 @@ function FeedCard({
             </Text>
           </TouchableOpacity>
 
+          {/* The film's comments, with how many there are. The count comes
+              down on the feed item rather than being asked for per card —
+              twenty cards would otherwise be twenty requests to render
+              twenty numbers. */}
+          <TouchableOpacity
+            style={styles.action}
+            onPress={onOpenComments}
+            disabled={!canSave}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={18}
+              color={canSave ? colors.textMuted : colors.iconFaint}
+            />
+            <Text style={[styles.actionText, !canSave && styles.actionTextOff]}>
+              {item.commentCount && item.commentCount > 0 ? item.commentCount : 'Comment'}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.action}
             onPress={onShare}
@@ -336,6 +360,12 @@ export function SocialFeedView() {
 
   /** Only ever a film item — a playlist card navigates instead. */
   const [selected, setSelected] = useState<FeedItem | null>(null);
+  /**
+   * Whether the sheet was opened by the Comment button rather than the
+   * poster, in which case it scrolls to the comments instead of landing on
+   * the synopsis with them three screens down.
+   */
+  const [openAtComments, setOpenAtComments] = useState(false);
   const [sharing, setSharing] = useState<FeedItem | null>(null);
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useGetFeed(undefined, {
@@ -362,10 +392,20 @@ export function SocialFeedView() {
         }
         return;
       }
-      if (item.tmdbId != null) setSelected(item);
+      if (item.tmdbId != null) {
+        setOpenAtComments(false);
+        setSelected(item);
+      }
     },
     [router]
   );
+
+  /** The same sheet, but landing on the comments. */
+  const openComments = useCallback((item: FeedItem) => {
+    if (item.tmdbId == null) return;
+    setOpenAtComments(true);
+    setSelected(item);
+  }, []);
 
   /**
    * The high-water mark to report on the way out.
@@ -433,13 +473,14 @@ export function SocialFeedView() {
               item.tmdbId != null ? lockerStatusByTmdbId.get(item.tmdbId) ?? null : null
             }
             onOpenFilm={() => open(item)}
+            onOpenComments={() => openComments(item)}
             onOpenUser={() => router.push(`/user/${item.user.clerkId}`)}
             onShare={() => setSharing(item)}
           />
         </>
       );
     },
-    [items, labelFor, lockerStatusByTmdbId, open, router, styles.sectionLabel]
+    [items, labelFor, lockerStatusByTmdbId, open, openComments, router, styles.sectionLabel]
   );
 
   if (isLoading) {
@@ -490,6 +531,7 @@ export function SocialFeedView() {
           posterUrl={selected.posterUrl ?? ''}
           releaseYear={selected.releaseYear ?? ''}
           overview=""
+          focusComments={openAtComments}
         />
       )}
 

@@ -2614,6 +2614,14 @@ components:
           type: string
           nullable: true
           description: The review body, under "commented".
+        commentCount:
+          type: integer
+          nullable: true
+          description: >
+            How many comments this film has in total, so a card can say so
+            without asking per film. Counted across every card on the page
+            in one query, and null on a playlist card, which is not about
+            one film.
         playlistId:
           type: integer
           nullable: true
