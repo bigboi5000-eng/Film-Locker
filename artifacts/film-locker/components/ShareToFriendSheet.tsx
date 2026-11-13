@@ -108,6 +108,13 @@ interface ShareToFriendSheetProps {
   tmdbId: number;
   filmTitle: string;
   posterUrl: string;
+  /**
+   * Open the conversation with this person, for a caller that needs to do
+   * more than route — the film sheet renders this one INSIDE itself, so
+   * closing only this sheet would open the chat under a film still
+   * covering the screen. Left out, the sheet routes there itself.
+   */
+  onOpenChat?: (user: NotificationUser) => void;
 }
 
 export function ShareToFriendSheet({
@@ -116,6 +123,7 @@ export function ShareToFriendSheet({
   tmdbId,
   filmTitle,
   posterUrl,
+  onOpenChat,
 }: ShareToFriendSheetProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -168,12 +176,18 @@ export function ShareToFriendSheet({
       // Shut the sheet before routing, or the conversation opens behind a
       // modal that is still sitting on top of it.
       handleClose();
+      // A caller that sits inside another modal has a second one to close
+      // and does its own routing — see onOpenChat.
+      if (onOpenChat) {
+        onOpenChat(user);
+        return;
+      }
       router.push({
         pathname: '/inbox/[userId]',
         params: { userId: user.clerkId, username: user.username ?? '' },
       });
     },
-    [handleClose, router]
+    [handleClose, onOpenChat, router]
   );
 
   return (

@@ -64,6 +64,7 @@ import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import { StarRating } from '@/components/StarRating';
+import { ShareToFriendSheet } from '@/components/ShareToFriendSheet';
 import {
   CommentRow,
   ReportSheet,
@@ -642,206 +643,6 @@ const makeCommunityStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: c.primary,
   },
-});
-
-// ── Recommend sheet ───────────────────────────────────────────────────────────
-
-function RecommendSheet({
-  visible,
-  onClose,
-  onOpenChat,
-  tmdbId,
-  filmTitle,
-  posterUrl,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  /** Tapping the person rather than the Send button. */
-  onOpenChat: (user: NotificationUser) => void;
-  tmdbId: number;
-  filmTitle: string;
-  posterUrl: string;
-}) {
-  const colors = useColors();
-  const rsStyles = useThemedStyles(makeRsStyles);
-  const insets = useSafeAreaInsets();
-  const { data, isLoading } = useGetNotificationUsers({ query: { queryKey: getGetNotificationUsersQueryKey(), enabled: visible } });
-  const { mutateAsync: sendNotification, isPending } = useSendNotification();
-  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
-
-  const users = data?.users ?? [];
-
-  const handleSend = useCallback(
-    async (user: NotificationUser) => {
-      if (sentIds.has(user.clerkId)) return;
-      if (Platform.OS !== 'web') Haptics.selectionAsync();
-      try {
-        await sendNotification({
-          data: { toUserId: user.clerkId, tmdbId, filmTitle, posterUrl },
-        });
-        setSentIds((prev) => new Set(prev).add(user.clerkId));
-      } catch {
-        Alert.alert('Error', 'Could not send the recommendation. Please try again.');
-      }
-    },
-    [sentIds, sendNotification, tmdbId, filmTitle, posterUrl]
-  );
-
-  const handleClose = useCallback(() => {
-    setSentIds(new Set());
-    onClose();
-  }, [onClose]);
-
-  const renderUser = useCallback(
-    ({ item }: { item: NotificationUser }) => {
-      const name = item.username ?? item.clerkId.slice(0, 8);
-      const initials = name.slice(0, 2).toUpperCase();
-      const sent = sentIds.has(item.clerkId);
-
-      return (
-        <View style={rsStyles.userRow}>
-          {/* The person, not just a label: tapping them opens the
-              conversation you already have, which is where recommending
-              something was heading anyway. */}
-          <TouchableOpacity
-            style={rsStyles.userTap}
-            onPress={() => onOpenChat(item)}
-            activeOpacity={0.6}
-          >
-            {item.avatarUrl ? (
-              <Image
-                source={{ uri: item.avatarUrl }}
-                style={rsStyles.avatar}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[rsStyles.avatar, rsStyles.avatarFallback]}>
-                <Text style={rsStyles.avatarText}>{initials}</Text>
-              </View>
-            )}
-            <Text style={rsStyles.username} numberOfLines={1}>
-              {name}
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={15}
-              color={colors.textFaint}
-              style={rsStyles.userChevron}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[rsStyles.sendBtn, sent && rsStyles.sendBtnSent]}
-            onPress={() => handleSend(item)}
-            disabled={sent || isPending}
-            activeOpacity={0.8}
-          >
-            {sent ? (
-              <Ionicons name="checkmark" size={15} color={colors.onColor} />
-            ) : (
-              <Text style={rsStyles.sendBtnText}>Send</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      );
-    },
-    [sentIds, isPending, handleSend, onOpenChat, colors, rsStyles]
-  );
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <View style={[rsStyles.root, { paddingTop: insets.top + 12 }]}>
-        {/* Header */}
-        <View style={rsStyles.header}>
-          <Text style={rsStyles.title}>Recommend to…</Text>
-          <TouchableOpacity onPress={handleClose} hitSlop={8}>
-            <Ionicons name="close" size={22} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Film pill */}
-        <View style={rsStyles.filmPill}>
-          <Image source={{ uri: posterUrl }} style={rsStyles.pillPoster} contentFit="cover" />
-          <Text style={rsStyles.pillTitle} numberOfLines={2}>{filmTitle}</Text>
-        </View>
-
-        {isLoading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
-        ) : users.length === 0 ? (
-          <View style={rsStyles.empty}>
-            <Ionicons name="people-outline" size={48} color={colors.iconFaint} />
-            <Text style={rsStyles.emptyText}>Follow someone first to recommend films to them.</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={users}
-            keyExtractor={(u) => u.clerkId}
-            renderItem={renderUser}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-            ItemSeparatorComponent={() => <View style={rsStyles.separator} />}
-          />
-        )}
-      </View>
-    </Modal>
-  );
-}
-
-const makeRsStyles = (c: Palette) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
-  },
-  title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: c.text },
-  filmPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    margin: 16,
-    padding: 12,
-    backgroundColor: c.surfaceSubtle,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.border,
-    gap: 12,
-  },
-  pillPoster: { width: 40, height: 60, borderRadius: 6 },
-  pillTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.text, flex: 1 },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  avatar: { width: 40, height: 40, borderRadius: 20, flexShrink: 0 },
-  avatarFallback: { backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: c.avatarFg },
-  userTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  username: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium', color: c.text },
-  userChevron: { marginHorizontal: 6 },
-  sendBtn: {
-    backgroundColor: c.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 8,
-    minWidth: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnSent: { backgroundColor: '#10B981' },
-  sendBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: c.onColor },
-  separator: { height: 1, backgroundColor: c.surfaceAlt, marginLeft: 72 },
-  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: c.textFaint, textAlign: 'center', paddingHorizontal: 32 },
 });
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -1530,8 +1331,11 @@ export function FilmDetailModal({
         </View>
       </KeyboardAvoidingView>
 
-      {/* Recommend sheet */}
-      <RecommendSheet
+      {/* Recommending the film to somebody.
+          The same sheet the feed uses, rather than a second one built
+          here. They did the same job with different code, and the one
+          with the search box in it was the one fewer screens reached. */}
+      <ShareToFriendSheet
         visible={recommendVisible}
         onClose={() => setRecommendVisible(false)}
         onOpenChat={(user) => {

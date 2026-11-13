@@ -41,8 +41,11 @@ import {
   getGetFeedQueryKey,
   useMarkFeedSeen,
   useAddMovie,
+  usePatchWatched,
+  useDeleteMovie,
   getListMoviesQueryKey,
   type FeedItem,
+  type Movie,
 } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilmCommentsSheet } from '@/components/FilmCommentsSheet';
@@ -52,8 +55,9 @@ import { LoadError } from '@/components/LoadError';
 import { useToast } from '@/components/ToastProvider';
 import { useRequireAccount } from '@/hooks/useRequireAccount';
 import { describeApiError } from '@/lib/apiErrors';
+import { confirmDestructive } from '@/lib/confirm';
 import {
-  useLockerStatusByTmdbId,
+  useLockerByTmdbId,
   furtherLockerStatus,
   type LockerStatus,
 } from '@/hooks/useWatchedTmdbIds';
@@ -95,7 +99,7 @@ function verbFor(item: FeedItem): string {
 
 function FeedCard({
   item,
-  lockerStatus,
+  savedMovie,
   onOpenFilm,
   onOpenComments,
   onOpenUser,
@@ -103,11 +107,15 @@ function FeedCard({
 }: {
   item: FeedItem;
   /**
-   * Where this film already sits in the VIEWER's locker — not the feed
-   * author's. Passed in rather than looked up here so the whole list reads
-   * one shared copy of the locker instead of a card's worth each.
+   * The VIEWER's own locker row for this film — not the feed author's —
+   * or undefined if they do not have it. Passed in rather than looked up
+   * here so the whole list reads one shared copy of the locker instead of
+   * a card's worth each.
+   *
+   * The whole row rather than a status, because the buttons now undo as
+   * well as do, and both undo endpoints key off the row's own id.
    */
-  lockerStatus: LockerStatus;
+  savedMovie: Movie | undefined;
   onOpenFilm: () => void;
   onOpenComments: () => void;
   onOpenUser: () => void;
@@ -118,6 +126,8 @@ function FeedCard({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const { mutateAsync: addMovie } = useAddMovie();
+  const { mutateAsync: patchWatched } = usePatchWatched();
+  const { mutateAsync: deleteMovie } = useDeleteMovie();
   const requireAccount = useRequireAccount();
 
   /**
@@ -132,9 +142,21 @@ function FeedCard({
   const [justSaved, setJustSaved] = useState<LockerStatus>(null);
   const [busy, setBusy] = useState(false);
 
-  // The tap wins while the refetch is in flight; the server wins when it
-  // knows about a film this session never touched. Neither action moves a
-  // film backwards, so the further of the two is always the truth.
+  const lockerStatus: LockerStatus = savedMovie
+    ? savedMovie.isWatched
+      ? 'watched'
+      : 'watchlist'
+    : null;
+
+  /**
+   * The tap wins while the refetch is in flight; the server wins when it
+   * knows about a film this session never touched.
+   *
+   * Only while the tap moves FORWARD. Undoing moves backwards, and taking
+   * the further of the two would then pin the button to the state being
+   * undone — so an undo clears the optimistic value instead of setting a
+   * lower one, and the server's answer stands.
+   */
   const saved = furtherLockerStatus(justSaved, lockerStatus);
   const inLocker = saved !== null;
   const isWatched = saved === 'watched';
@@ -180,6 +202,69 @@ function FeedCard({
       }
     },
     [addMovie, busy, canSave, item, queryClient, requireAccount, showToast]
+  );
+
+  /**
+   * Undo, for both buttons.
+   *
+   * The pair used to be one-way: once a film was in the locker the
+   * bookmark went dead, and once it was watched so did the tick. A mis-tap
+   * on a feed card then had to be fixed on the Films tab, which is a long
+   * way to go to undo something you did by accident one screen earlier.
+   *
+   * The two undos are not the same size, and are treated differently.
+   * Unwatching leaves the film saved and is a correction, so it just
+   * happens. Removing takes the film out of the locker altogether, losing
+   * any rating with it, so it asks first.
+   */
+  const undo = useCallback(
+    async (what: 'watched' | 'saved') => {
+      if (!savedMovie || busy) return;
+
+      if (what === 'watched') {
+        setBusy(true);
+        try {
+          await patchWatched({ id: savedMovie.id, data: { isWatched: false } });
+          // Cleared rather than lowered: the optimistic value only ever
+          // runs ahead, so an undo hands the question back to the server.
+          setJustSaved(null);
+          if (Platform.OS !== 'web') void Haptics.selectionAsync();
+          // Awaited, unlike the add path. An add has an optimistic value
+          // covering the gap; an undo has none — it hands the question
+          // straight back to the server — so returning before the refetch
+          // lands would flash the old label back for a frame. Staying busy
+          // until the answer arrives is the honest version of that wait.
+          await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+        } catch (err) {
+          const described = describeApiError(err, { action: 'mark that unwatched' });
+          showToast({ title: described.title, subtitle: described.message, variant: 'error' });
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
+      confirmDestructive(
+        `Remove "${item.title ?? 'this film'}" from your films? Your rating goes with it.`,
+        'Remove',
+        async () => {
+          setBusy(true);
+          try {
+            await deleteMovie({ id: savedMovie.id });
+            setJustSaved(null);
+            if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            showToast({ title: 'Removed from your films', subtitle: item.title ?? undefined });
+            await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
+          } catch (err) {
+            const described = describeApiError(err, { action: 'remove that film' });
+            showToast({ title: described.title, subtitle: described.message, variant: 'error' });
+          } finally {
+            setBusy(false);
+          }
+        }
+      );
+    },
+    [busy, deleteMovie, item.title, patchWatched, queryClient, savedMovie, showToast]
   );
 
   return (
@@ -269,12 +354,13 @@ function FeedCard({
       {isPlaylist ? null : (
         <View style={styles.actions}>
           {/* Saved once it is in the locker at ALL, watched included — a
-              film you have seen is not one still to be saved, and offering
-              to save it again would be a button with nothing to do. */}
+              film you have seen is not one still to be saved. Tapping it
+              while saved takes it back out, which is the undo for having
+              tapped it by accident. */}
           <TouchableOpacity
             style={styles.action}
-            onPress={() => save(false)}
-            disabled={!canSave || busy || inLocker}
+            onPress={() => (inLocker ? undo('saved') : save(false))}
+            disabled={!canSave || busy}
             activeOpacity={0.7}
           >
             <Ionicons
@@ -293,16 +379,14 @@ function FeedCard({
             </Text>
           </TouchableOpacity>
 
-          {/* Still live for a film on the watchlist, so "I have finally seen
-              this" works straight from the feed. The server treats adding
-              something already saved AS watched as a promotion, so there is
-              nothing to do here beyond leaving the button enabled — which
-              it was not: both actions locked together the moment either was
-              taken. */}
+          {/* Live in both directions: for a film on the watchlist the
+              server treats adding it AS watched as a promotion, and for
+              one already watched this un-marks it. The film stays saved
+              either way — unwatching is a correction, not a removal. */}
           <TouchableOpacity
             style={styles.action}
-            onPress={() => save(true)}
-            disabled={!canSave || busy || isWatched}
+            onPress={() => (isWatched ? undo('watched') : save(true))}
+            disabled={!canSave || busy}
             activeOpacity={0.7}
           >
             <Ionicons
@@ -386,7 +470,7 @@ export function SocialFeedView() {
    * The feed is full of films you may already have saved or seen — that is
    * rather the point of it — and the cards had no way to know.
    */
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerByTmdbId = useLockerByTmdbId();
 
   const open = useCallback(
     (item: FeedItem) => {
@@ -473,9 +557,7 @@ export function SocialFeedView() {
           {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
           <FeedCard
             item={item}
-            lockerStatus={
-              item.tmdbId != null ? lockerStatusByTmdbId.get(item.tmdbId) ?? null : null
-            }
+            savedMovie={item.tmdbId != null ? lockerByTmdbId.get(item.tmdbId) : undefined}
             onOpenFilm={() => open(item)}
             onOpenComments={() => openComments(item)}
             onOpenUser={() => router.push(`/user/${item.user.clerkId}`)}
@@ -484,7 +566,7 @@ export function SocialFeedView() {
         </>
       );
     },
-    [items, labelFor, lockerStatusByTmdbId, open, openComments, router, styles.sectionLabel]
+    [items, labelFor, lockerByTmdbId, open, openComments, router, styles.sectionLabel]
   );
 
   if (isLoading) {

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useListMovies } from '@workspace/api-client-react';
+import { useListMovies, type Movie } from '@workspace/api-client-react';
 
 /**
  * Every TMDB id this user has marked watched.
@@ -41,6 +41,25 @@ export function useLockerStatusByTmdbId(): Map<number, Exclude<LockerStatus, nul
       new Map(
         (data?.movies ?? []).map((m) => [m.tmdbId, m.isWatched ? 'watched' as const : 'watchlist' as const]),
       ),
+    [data],
+  );
+}
+
+/**
+ * tmdbId → the viewer's whole locker row.
+ *
+ * For screens that do not only ask "is this saved" but act on it. Marking
+ * something unwatched or removing it needs the row's own id, which a
+ * status alone cannot give — the film's tmdbId is not what those
+ * endpoints take.
+ *
+ * Same shared query again, so a screen using this and the status map
+ * together still makes one request.
+ */
+export function useLockerByTmdbId(): Map<number, Movie> {
+  const { data } = useListMovies();
+  return useMemo(
+    () => new Map((data?.movies ?? []).map((m) => [m.tmdbId, m])),
     [data],
   );
 }
