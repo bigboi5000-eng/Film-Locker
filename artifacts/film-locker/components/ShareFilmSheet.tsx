@@ -5,7 +5,7 @@
  * Displays each identified film with poster/title, lets the user tap
  * "Add to Watchlist", and offers a "Return to [app]" action once done.
  */
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useAddMovie,
+  type Movie,
   useGetMyPlaylists,
   useCreatePlaylist,
   useAddPlaylistItem,
@@ -42,6 +43,7 @@ import {
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
+import { useLockerByTmdbId } from '@/hooks/useWatchedTmdbIds';
 import { webInputReset } from '@/lib/webInputReset';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -109,6 +111,23 @@ function RecognisedNote({ match }: { match: GeminiMovieMatch }) {
     </View>
   );
 }
+/**
+ * What to say about a film the viewer already has.
+ *
+ * Identifying a film from a post or a photo said nothing about whether it
+ * was already yours — the card offered "Add to Watchlist" for something
+ * sitting in your watchlist, and adding it again did nothing visible,
+ * because the server treats a duplicate as a no-op. The honest answer is
+ * that there is nothing to add and somewhere to go instead.
+ *
+ * Null when the film is not in the locker, so the caller can fall through
+ * to its normal Add button.
+ */
+function alreadyThereLabel(saved: Movie | undefined): string | null {
+  if (!saved) return null;
+  return saved.isWatched ? 'Already in your watched list' : 'Already in your watchlist';
+}
+
 const { height: SCREEN_H } = Dimensions.get('window');
 
 /** Single film card inside the sheet */
@@ -131,6 +150,14 @@ function FilmCard({
   const { showToast } = useToast();
   const { mutateAsync: addMovie, isPending } = useAddMovie();
   const [added, setAdded] = useState(false);
+
+  // The viewer's own row for this film, if they have it. Shared query, so
+  // this is a cache read wherever the locker has already loaded.
+  const locker = useLockerByTmdbId();
+  const savedMovie = match.tmdb_id != null ? locker.get(match.tmdb_id) : undefined;
+  // `added` wins: it is this session's action, and the refetch behind it
+  // may not have landed yet.
+  const alreadyThere = !added ? alreadyThereLabel(savedMovie) : null;
 
   const handleAdd = useCallback(async () => {
     if (!match.tmdb_id || added || isPending) return;
@@ -208,8 +235,24 @@ function FilmCard({
           </Text>
         ) : null}
 
-        {/* Add button */}
-        {added ? (
+        {/* Add button, or a way to the film when it is already yours */}
+        {alreadyThere ? (
+          <View style={cardStyles.alreadyBlock}>
+            <View style={cardStyles.addedRow}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              <Text style={[cardStyles.addedText, { color: colors.success }]}>{alreadyThere}</Text>
+            </View>
+            <TouchableOpacity
+              style={[cardStyles.goBtn, { borderColor: colors.primary }]}
+              onPress={() => onOpenFilm?.(match)}
+              disabled={!onOpenFilm || !match.tmdb_id}
+              activeOpacity={0.8}
+            >
+              <Text style={[cardStyles.goBtnText, { color: colors.primary }]}>Go to film</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        ) : added ? (
           <View style={cardStyles.addedRow}>
             <Ionicons name="checkmark-circle" size={18} color={colors.success} />
             <Text style={cardStyles.addedText}>Added to Watchlist</Text>
@@ -313,6 +356,13 @@ const makeCardStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: c.success,
   },
+  alreadyBlock: { marginTop: 4, gap: 8, alignItems: 'flex-start' },
+  goBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: 8, borderWidth: 1,
+  },
+  goBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
 });
 
 // ── Film selection row (checklist shown before choosing a destination) ───────
@@ -333,6 +383,10 @@ function FilmSelectRow({
   const selectStyles = useThemedStyles(makeSelectStyles);
   const colors = useColors();
   const displayTitle = match.title ?? match.movie_title;
+  const locker = useLockerByTmdbId();
+  const alreadyThere = alreadyThereLabel(
+    match.tmdb_id != null ? locker.get(match.tmdb_id) : undefined
+  );
 
   return (
     <TouchableOpacity
@@ -360,6 +414,18 @@ function FilmSelectRow({
         {match.release_year ? (
           <Text style={[selectStyles.year, { color: colors.mutedForeground }]}>{match.release_year}</Text>
         ) : null}
+        {/* Why this one starts unticked. Without it the row looks like an
+            oversight, and ticking it again would add nothing — the server
+            treats a duplicate as a no-op. Details, beside it, is the way
+            to the film. */}
+        {alreadyThere ? (
+          <View style={selectStyles.alreadyRow}>
+            <Ionicons name="checkmark-circle" size={12} color={colors.success} />
+            <Text style={[selectStyles.alreadyText, { color: colors.success }]} numberOfLines={1}>
+              {alreadyThere}
+            </Text>
+          </View>
+        ) : null}
         <RecognisedNote match={match} />
         {/* The row itself toggles the checkbox, so opening the film needs
             its own target rather than the poster — a tap meant for
@@ -367,7 +433,9 @@ function FilmSelectRow({
         <View style={selectStyles.linkRow}>
           {onOpenFilm && match.tmdb_id ? (
             <TouchableOpacity onPress={() => onOpenFilm(match)} hitSlop={6} style={selectStyles.notAMatchBtn}>
-              <Text style={[selectStyles.notAMatchText, { color: colors.primary }]}>Details</Text>
+              <Text style={[selectStyles.notAMatchText, { color: colors.primary }]}>
+                {alreadyThere ? 'Go to film' : 'Details'}
+              </Text>
             </TouchableOpacity>
           ) : null}
           {onNotAMatch && (
@@ -387,6 +455,8 @@ function FilmSelectRow({
 }
 
 const makeSelectStyles = (c: Palette) => StyleSheet.create({
+  alreadyRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  alreadyText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1122,6 +1192,18 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
   const [addedCount, setAddedCount] = useState(0);
   const [multiMode, setMultiMode] = useState<BulkAddMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  /**
+   * The locker, read through a ref.
+   *
+   * The effect that sets the default selection runs on `visible` alone —
+   * deliberately, so reopening the sheet does not re-tick boxes somebody
+   * has just unticked. Reading the locker through a ref keeps it out of
+   * that dependency list while still being current when the effect fires.
+   */
+  const locker = useLockerByTmdbId();
+  const lockerRef = useRef(locker);
+  useEffect(() => { lockerRef.current = locker; }, [locker]);
   // Bumped every time the sheet opens fresh — remounts the ErrorBoundary below
   // so a crash on one share doesn't permanently wedge the fallback UI in place
   // for every share after it.
@@ -1236,8 +1318,16 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
       setOpenId((n) => n + 1);
       setCorrections({});
       setCorrectingIndex(null);
+      // Films already in the locker start unticked: there is nothing to
+      // add, and leaving them ticked means the Add button reports saving
+      // films it did not save, because the server drops a duplicate.
+      // Still tickable by hand — this is a default, not a prohibition.
       setSelectedIds(new Set(matches
-        .filter((m) => m.confidence_score >= CONFIDENCE_THRESHOLD && m.tmdb_id != null)
+        .filter((m) =>
+          m.confidence_score >= CONFIDENCE_THRESHOLD &&
+          m.tmdb_id != null &&
+          !lockerRef.current.has(m.tmdb_id)
+        )
         .map((m) => String(m.tmdb_id))
       ));
     }
