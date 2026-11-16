@@ -36,7 +36,7 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { LoadError } from '@/components/LoadError';
-import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
+import { useWatchedTmdbIds, useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
 import { SearchResultRow } from '@/components/SearchResultRow';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
@@ -250,6 +250,9 @@ export default function HomeScreen() {
 
   /** Films already seen, so a rail can tick them wherever they appear. */
   const watchedTmdbIds = useWatchedTmdbIds();
+  // Saved-and-unwatched as well as watched: these rails are where a film
+  // you have already decided on is most likely to be put in front of you.
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
 
   /** TMDB ids already in the locker, so a recommendation can say so. */
   const savedTmdbIds = useMemo(
@@ -436,7 +439,7 @@ export default function HomeScreen() {
                     onPress={setSelectedMovie}
                     width={CARD_W}
                     height={CARD_H}
-                    isWatched={watchedTmdbIds.has(item.tmdbId)}
+                    lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
                   />
                 </View>
               )}
@@ -471,7 +474,7 @@ export default function HomeScreen() {
                     onPress={setSelectedMovie}
                     width={CARD_W}
                     height={CARD_H}
-                    isWatched={watchedTmdbIds.has(item.tmdbId)}
+                    lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
                   />
                 </View>
               )}
@@ -507,7 +510,7 @@ export default function HomeScreen() {
                     onPress={setSelectedMovie}
                     width={CARD_W}
                     height={CARD_H}
-                    isWatched={watchedTmdbIds.has(item.tmdbId)}
+                    lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
                   />
                   </View>
                 )}

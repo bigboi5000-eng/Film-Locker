@@ -56,6 +56,8 @@ import { WatchedFilmsSheet } from '@/components/WatchedFilmsSheet';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
+import { LockerBadge } from '@/components/LockerBadge';
+import { useLockerStatusByTmdbId, type LockerStatus } from '@/hooks/useWatchedTmdbIds';
 import type { Palette } from '@/constants/colors';
 
 /** How many posters the hero band shows before it starts repeating itself. */
@@ -69,23 +71,30 @@ function initialsFor(displayInitials?: string | null, username?: string | null):
 function FilmStripCard({
   film,
   meta,
+  lockerStatus,
   onPress,
 }: {
   film: ProfileFilmCard;
   meta?: string | null;
+  lockerStatus?: LockerStatus;
   onPress: () => void;
 }) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
   return (
     <TouchableOpacity style={styles.filmCard} onPress={onPress} activeOpacity={0.8}>
-      {film.posterUrl ? (
-        <Image source={{ uri: film.posterUrl }} style={styles.filmPoster} contentFit="cover" />
-      ) : (
-        <View style={[styles.filmPoster, styles.filmPosterFallback]}>
-          <Ionicons name="film-outline" size={22} color={colors.textFaint} />
-        </View>
-      )}
+      {/* Looking at somebody's films is looking for what to watch next,
+          so which of them you already have is worth seeing here too. */}
+      <View>
+        {film.posterUrl ? (
+          <Image source={{ uri: film.posterUrl }} style={styles.filmPoster} contentFit="cover" />
+        ) : (
+          <View style={[styles.filmPoster, styles.filmPosterFallback]}>
+            <Ionicons name="film-outline" size={22} color={colors.textFaint} />
+          </View>
+        )}
+        <LockerBadge status={lockerStatus ?? null} size={18} />
+      </View>
       <Text style={styles.filmTitle} numberOfLines={2}>
         {film.title ?? 'Unknown film'}
       </Text>
@@ -113,6 +122,7 @@ export default function UserProfileScreen() {
   /** On your own profile: render it as somebody who does not follow you. */
   const [preview, setPreview] = useState(false);
   const [selected, setSelected] = useState<ProfileFilmCard | null>(null);
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
 
   const { data, isLoading } = useGetUserProfile(clerkId, {
     query: { queryKey: getGetUserProfileQueryKey(clerkId), enabled: Boolean(clerkId) },
@@ -455,7 +465,12 @@ export default function UserProfileScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
-                <FilmStripCard film={item} meta={stars(item.rating)} onPress={() => setSelected(item)} />
+                <FilmStripCard
+                  film={item}
+                  meta={stars(item.rating)}
+                  lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                  onPress={() => setSelected(item)}
+                />
               )}
             />
           </View>
@@ -471,7 +486,12 @@ export default function UserProfileScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
-                <FilmStripCard film={item} meta={stars(item.rating)} onPress={() => setSelected(item)} />
+                <FilmStripCard
+                  film={item}
+                  meta={stars(item.rating)}
+                  lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                  onPress={() => setSelected(item)}
+                />
               )}
             />
           </View>

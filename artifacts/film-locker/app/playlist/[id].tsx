@@ -32,7 +32,7 @@ import {
 import { MovieCard, MovieCardSkeleton, type MovieCardBadge } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
-import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
+import { useWatchedTmdbIds, useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
@@ -383,6 +383,7 @@ export default function PlaylistScreen() {
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
 
   const watchedTmdbIds = useWatchedTmdbIds();
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
   const { data: playlist, isLoading, isError, error, refetch, isRefetching } = useGetPlaylist(numericId, {
     query: { queryKey: getGetPlaylistQueryKey(numericId), enabled: !isNaN(numericId) },
   });
@@ -552,7 +553,7 @@ export default function PlaylistScreen() {
         posterUrl={item.posterUrl}
         onPress={() => openItemModal(item)}
         onLongPress={canEdit ? () => handleRemove(item.tmdbId, item.filmTitle) : undefined}
-        isWatched={watchedTmdbIds.has(item.tmdbId)}
+        lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
         badges={badges}
       />
     );

@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
+import { LockerBadge } from '@/components/LockerBadge';
+import type { LockerStatus } from '@/hooks/useWatchedTmdbIds';
 import type { Palette } from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -71,8 +73,14 @@ export interface MovieCardProps {
   posterUrl: string;
   onPress?: (id: number) => void;
   onLongPress?: (id: number) => void;
-  /** Show a watched checkmark badge */
-  isWatched?: boolean;
+  /**
+   * Whether this film is in the viewer's locker, and which half.
+   *
+   * The Films tab passes only 'watched' or null: every card there is in
+   * the locker by definition, so a bookmark on each would be noise. The
+   * screens that OFFER films pass the real status.
+   */
+  lockerStatus?: LockerStatus;
   /** The owner's own score, 0.5–5 in half-star steps. */
   rating?: number | null;
   /**
@@ -121,7 +129,7 @@ export function MovieCard({
   posterUrl,
   onPress,
   onLongPress,
-  isWatched,
+  lockerStatus,
   rating,
   badges,
 }: MovieCardProps) {
@@ -159,12 +167,7 @@ export function MovieCard({
         </View>
       </View>
 
-      {/* Watched badge */}
-      {isWatched && (
-        <View style={styles.watchedBadge}>
-          <Text style={styles.watchedBadgeText}>✓</Text>
-        </View>
-      )}
+      <LockerBadge status={lockerStatus ?? null} />
 
       {/* Who else has seen it. Capped at four with a +n, because five
           circles across a poster this wide covers the artwork and the
@@ -233,18 +236,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     marginTop: 2,
   },
-  watchedBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: c.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  watchedBadgeText: { color: c.onColor, fontSize: 12, fontFamily: 'Inter_700Bold' },
   badgeRow: {
     position: 'absolute',
     top: 8,

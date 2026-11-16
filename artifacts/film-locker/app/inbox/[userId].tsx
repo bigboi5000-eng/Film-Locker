@@ -25,6 +25,8 @@ import {
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
+import { LockerBadge } from '@/components/LockerBadge';
+import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
 import type { Palette } from '@/constants/colors';
 
 // Top row — ordered by how likely each is to be someone's go-to reaction to
@@ -354,10 +356,19 @@ function RecommendationCard({
   const canOpen = item.tmdbId != null;
   const open = () => onOpenFilm(item);
 
+  // Somebody recommending a film you already have is common — it is why
+  // they thought of you. Offering "Add to Watchlist" for it does nothing,
+  // because the server drops a duplicate, and says nothing either.
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatus = item.tmdbId != null
+    ? lockerStatusByTmdbId.get(item.tmdbId) ?? null
+    : null;
+
   return (
     <View style={[styles.filmCard, isMine ? styles.filmCardMine : styles.filmCardTheirs]}>
       <TouchableOpacity onPress={open} disabled={!canOpen} activeOpacity={0.8}>
         <Image source={{ uri: item.posterUrl! }} style={styles.poster} contentFit="cover" transition={200} />
+        <LockerBadge status={lockerStatus} size={18} />
       </TouchableOpacity>
       <View style={styles.filmInfo}>
         {/* The text block opens the film; the action row below is a sibling
@@ -371,14 +382,30 @@ function RecommendationCard({
 
         <View style={styles.actionRow}>
           {!isMine && (
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => onAddToWatchlist(item)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="bookmark-outline" size={13} color={colors.onColor} style={{ marginRight: 4 }} />
-              <Text style={styles.addBtnText}>Add to Watchlist</Text>
-            </TouchableOpacity>
+            lockerStatus ? (
+              // Tapping the poster or the title already opens the film, so
+              // this says where it is rather than adding a second way in.
+              <TouchableOpacity style={styles.reactBtn} onPress={open} disabled={!canOpen} activeOpacity={0.8}>
+                <Ionicons
+                  name={lockerStatus === 'watched' ? 'checkmark-circle' : 'bookmark'}
+                  size={13}
+                  color={lockerStatus === 'watched' ? colors.success : colors.star}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.reactBtnPromptText}>
+                  {lockerStatus === 'watched' ? 'Watched' : 'In your watchlist'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => onAddToWatchlist(item)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="bookmark-outline" size={13} color={colors.onColor} style={{ marginRight: 4 }} />
+                <Text style={styles.addBtnText}>Add to Watchlist</Text>
+              </TouchableOpacity>
+            )
           )}
 
           {/* Opens the composer targeted at this film — same result as

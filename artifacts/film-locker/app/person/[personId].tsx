@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGetPerson, getGetPersonQueryKey, type TmdbMovieCard } from '@workspace/api-client-react';
+import { LockerBadge } from '@/components/LockerBadge';
+import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -56,6 +58,9 @@ export default function PersonScreen() {
   const id = Number(personId);
 
   const [selected, setSelected] = useState<TmdbMovieCard | null>(null);
+  // A filmography is a long list of films you may well already own — the
+  // reason for looking a director up is often to find what you have missed.
+  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
 
   /** Which filmographies the user has opened out into a grid. */
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -157,11 +162,17 @@ export default function PersonScreen() {
               onPress={() => setSelected(item)}
               activeOpacity={0.8}
             >
-              <Image
-                source={{ uri: item.posterUrl }}
-                style={[styles.poster, width ? { width, height: width * 1.5 } : null]}
-                contentFit="cover"
-              />
+              {/* The badge sits on the POSTER, not the card: the card is
+                  taller than its artwork, and a mark floating over the
+                  title beneath it reads as belonging to the text. */}
+              <View>
+                <Image
+                  source={{ uri: item.posterUrl }}
+                  style={[styles.poster, width ? { width, height: width * 1.5 } : null]}
+                  contentFit="cover"
+                />
+                <LockerBadge status={lockerStatusByTmdbId.get(item.tmdbId) ?? null} size={20} />
+              </View>
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
               <Text style={styles.cardYear}>{item.releaseYear}</Text>
             </TouchableOpacity>

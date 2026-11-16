@@ -399,7 +399,9 @@ export default function WatchlistScreen() {
         releaseYear={item.releaseYear}
         posterUrl={item.posterUrl}
         rating={item.rating}
-        isWatched={item.isWatched}
+        // Only ever the tick here. Every card on this screen is in the
+        // locker, so a bookmark on each would say nothing.
+        lockerStatus={item.isWatched ? 'watched' : null}
         onPress={() => openSavedMovieModal(item)}
         onLongPress={handleDelete}
       />
