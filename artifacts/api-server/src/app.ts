@@ -11,7 +11,7 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { privacyPolicyHtml, supportHtml, termsOfServiceHtml } from "./lib/legalContent";
+import { deleteAccountHtml, privacyPolicyHtml, supportHtml, termsOfServiceHtml } from "./lib/legalContent";
 
 const app: Express = express();
 
@@ -38,6 +38,13 @@ app.get("/terms", (_req, res) => {
 // drift apart or be deployed separately.
 app.get("/support", (_req, res) => {
   res.type("html").send(supportHtml());
+});
+// Google Play's Data Safety form wants a deletion URL that works for
+// somebody who is not signed in and may have uninstalled the app — which
+// is precisely the person who most needs it. Served here with the others
+// so all four are deployed together.
+app.get("/delete-account", (_req, res) => {
+  res.type("html").send(deleteAccountHtml());
 });
 
 // Structured request logging

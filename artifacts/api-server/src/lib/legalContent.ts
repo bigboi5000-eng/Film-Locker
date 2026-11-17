@@ -274,6 +274,92 @@ export function termsOfServiceHtml(): string {
  * with a way to get help, and a page that ships with the API cannot fall
  * out of step with it or quietly stop being deployed.
  */
+/**
+ * How to delete your account, as a page anybody can open.
+ *
+ * Google Play's Data Safety form asks for a deletion URL, and it has to
+ * work for somebody who is NOT signed in and may have uninstalled the app
+ * — which is exactly the person most likely to want this. An in-app path
+ * alone does not satisfy that, and "it is in the app somewhere" is no use
+ * to someone who no longer has the app.
+ *
+ * So this says both things: where the button is for anyone who still has
+ * it, and an address that reaches a person for anyone who does not. It
+ * also states what deletion actually removes, since the form asks whether
+ * all data is deleted and the answer should be checkable rather than
+ * asserted.
+ */
+export function deleteAccountHtml(): string {
+  return page(
+    "Deleting your account",
+    `
+    <p>
+      You can delete your Film Locker account at any time. It is permanent:
+      the data goes, and there is no undo.
+    </p>
+
+    <h2>In the app</h2>
+    <p>
+      Open your profile, then <strong>Settings</strong>, then
+      <strong>Delete account</strong>. You will be offered the chance to
+      export your films first — worth taking, because nothing is recoverable
+      afterwards.
+    </p>
+
+    <h2>Without the app</h2>
+    <p>
+      If you have already uninstalled Film Locker, or cannot sign in, email
+      <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> from the
+      address on your account and ask for it to be deleted. We will confirm
+      when it is done.
+    </p>
+
+    <h2>What is deleted</h2>
+    <ul>
+      <li>Your profile: username, display initials, avatar and email.</li>
+      <li>Every film in your locker, with its ratings, watched dates and the links any of them came from.</li>
+      <li>Your playlists and everything in them, and any seat you hold on somebody else's.</li>
+      <li>Your comments and public ratings on films.</li>
+      <li>Your follows, in both directions, and any blocks.</li>
+      <li>Recommendations and messages you have sent or received.</li>
+      <li>Your push notification token, so the device stops receiving them.</li>
+    </ul>
+
+    <h2>What is kept, and why</h2>
+    <ul>
+      <li>
+        <strong>Films you added to somebody else's shared playlist stay on
+        that playlist.</strong> The list belongs to its owner, and removing
+        their films because you left would take away something that is
+        theirs.
+      </li>
+      <li>
+        <strong>Reports other people have filed about your conduct are
+        kept</strong> as a safety record. Deleting your own account should
+        not erase evidence somebody else submitted.
+      </li>
+      <li>
+        Ordinary server logs, which hold request metadata rather than your
+        content, age out on their own.
+      </li>
+    </ul>
+
+    <h2>Your sign-in</h2>
+    <p>
+      Film Locker signs you in through Clerk. Deleting your account through
+      the app removes your Clerk identity as well, so the sign-in itself
+      goes with everything else.
+    </p>
+
+    <div class="note">
+      Want a copy first? Settings has an export that writes your films,
+      playlists, ratings and comments to a file you can keep. The deletion
+      flow offers it to you before anything is removed.
+    </div>
+    `
+  );
+}
+
 export function supportHtml(): string {
   return page(
     "Support",
@@ -318,6 +404,8 @@ export function supportHtml(): string {
     <p>
       In the app: your profile, then Delete account. It removes your films,
       ratings, comments, messages and follows, and cannot be undone.
+      <a href="/delete-account">What deletion covers</a> sets out exactly
+      what goes, and how to ask if you no longer have the app.
     </p>
 
     <h2>Privacy and terms</h2>

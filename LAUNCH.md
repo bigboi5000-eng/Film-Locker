@@ -101,6 +101,19 @@ automatically; the entry points are read from disk rather than listed.
 ## 3. API domain — done
 
 `api.film-locker.com` points at the Railway service, DNS-only in Cloudflare.
+
+Four public pages are served from it, outside `/api` and unauthenticated:
+
+| Page | URL | Wanted by |
+|---|---|---|
+| Privacy policy | `https://api.film-locker.com/privacy` | App Store Connect, Play Data Safety |
+| Terms | `https://api.film-locker.com/terms` | both stores |
+| Support | `https://api.film-locker.com/support` | App Store guideline 1.5 |
+| Account deletion | `https://api.film-locker.com/delete-account` | **Play Data Safety deletion URL** |
+
+The deletion page has to work for somebody who is signed out and may have
+uninstalled the app — that is the whole point of it — so it must never be
+put behind auth.
 Proxying it caused app requests to be treated as bot traffic while a browser
 sailed through, so leave the cloud grey.
 
