@@ -100,6 +100,14 @@ script, running it with `tsx`, reading the output, and deleting it.
   "the list doesn't appear" bugs.
 - A component declared inside a render body is a new function every render,
   so React unmounts and remounts its whole subtree.
+- **Anything that runs at the root layout runs before the tabs exist.** A
+  share intent into a cold app fires on the root's first render — before
+  expo-router has a navigator (so `router.replace` throws, uncaught, and
+  the app dies) and before `(tabs)/_layout` has wired the auth token (so
+  requests go out unauthenticated and 401). Gate such work on
+  `useRootNavigationState()?.key` and Clerk's `isLoaded`, and wire
+  anything global at the ROOT rather than in a tab or behind a permission
+  prompt.
 - `eas-cli` is pinned to **26.0.0** in the build workflows. `latest`
   (27.5.0) broke local Android builds.
 

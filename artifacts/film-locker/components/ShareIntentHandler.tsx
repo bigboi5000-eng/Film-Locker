@@ -22,7 +22,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Platform, Alert } from 'react-native';
 import { useShareIntentContext } from 'expo-share-intent';
-import { useRouter } from 'expo-router';
+import { useRouter, useRootNavigationState } from 'expo-router';
+import { useAuth } from '@clerk/expo';
 import { File } from 'expo-file-system';
 import {
   useProcessSocialLink,
@@ -66,6 +67,34 @@ function supportedMimeType(reported: string | undefined): ExtractFromImageBodyMi
 
 export function ShareIntentHandler() {
   const router = useRouter();
+  /**
+   * Whether the navigator exists yet.
+   *
+   * A share into a COLD app delivers its intent on the root layout's first
+   * render, which can be before expo-router has mounted anything to
+   * navigate within — and router.replace() then throws "Attempted to
+   * navigate before mounting the Root Layout component", uncaught, from
+   * inside an effect. That is the crash: the app opens, dies, and only
+   * ever when it was not already running, because a warm app always has a
+   * navigator by the time the intent arrives.
+   *
+   * `key` is undefined until the navigation state exists. The intent is
+   * not lost in the meantime — expo-share-intent holds it, and this
+   * effect re-runs when the key appears.
+   */
+  const rootNavigationState = useRootNavigationState();
+  const navigatorReady = Boolean(rootNavigationState?.key);
+
+  /**
+   * And whether Clerk has settled.
+   *
+   * The request needs a bearer token, and on a cold start Clerk is still
+   * restoring the session when the intent lands. Firing before it has
+   * finished sends an unauthenticated request that comes back 401, which
+   * the user reads as "Film Locker could not read this link" — the link
+   * was fine; the app simply asked before it was ready.
+   */
+  const { isLoaded: authLoaded } = useAuth();
   const { mutateAsync: processLink } = useProcessSocialLink();
   const { mutateAsync: extractFromImage } = useExtractFromImage();
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
@@ -157,6 +186,9 @@ export function ShareIntentHandler() {
 
   useEffect(() => {
     if (!hasShareIntent) return;
+    // Wait, rather than fail. Both of these arrive within a moment of a
+    // cold launch, and the intent is still here when they do.
+    if (!navigatorReady || !authLoaded) return;
 
     // An image takes precedence over any text that came with it: someone
     // sharing a screenshot is sharing the picture, and the accompanying text
@@ -176,7 +208,18 @@ export function ShareIntentHandler() {
     // Sharing into the app should always land the user on the Watchlist tab
     // (same place the in-app paste-link flow lives), not wherever the app
     // happened to be showing when the OS launched/resumed it.
-    router.replace('/(tabs)/watchlist');
+    //
+    // Guarded as well as gated. navigatorReady should make this safe, but a
+    // throw here runs inside an effect with nothing above it to catch —
+    // which is the difference between "the share opened on the wrong tab"
+    // and "the app died on launch". The first is a blemish; the second is
+    // what this whole effect exists to avoid.
+    try {
+      router.replace('/(tabs)/watchlist');
+    } catch {
+      // Landing wherever the app already was is a perfectly usable
+      // outcome: the sheet below opens over whatever is on screen.
+    }
 
     setPendingKind(image ? 'image' : 'link');
     setIsPending(true);
@@ -238,7 +281,7 @@ export function ShareIntentHandler() {
     processLinkRef.current({ data: { url: url!, dryRun: true } })
       .then((data) => finish(data.matches ?? [], data.listTitle ?? null, url!))
       .catch(() => fail("Film Locker couldn't read this link. Try sharing again."));
-  }, [hasShareIntent, shareIntent]);
+  }, [hasShareIntent, shareIntent, navigatorReady, authLoaded]);
 
   // Receiving the intent failed at the native level — show an error so the
   // user knows something went wrong rather than a silent blank screen.

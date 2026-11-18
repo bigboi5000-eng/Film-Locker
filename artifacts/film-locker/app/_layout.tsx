@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/expo';
+import { ClerkProvider, ClerkLoaded, useAuth, useUser } from '@clerk/expo';
 import { chunkedTokenCache } from '@/lib/clerkTokenCache';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -23,7 +23,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { useColors, useIsDark } from '@/hooks/useColors';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { setBaseUrl, setAuthTokenGetter, ApiError } from '@workspace/api-client-react';
+import { setBaseUrl, setAuthTokenGetter, setAuthStateDescriber, ApiError } from '@workspace/api-client-react';
 import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { customFetch } from '@workspace/api-client-react';
 
@@ -117,6 +117,41 @@ if (!publishableKey?.startsWith('pk_')) {
  * to the server.  Also handles deep-link navigation when a notification tap
  * brings the app to the foreground.
  */
+/**
+ * Wire Clerk's token into the API client, before anything can call it.
+ *
+ * This used to live in (tabs)/_layout, which meant the client had no way
+ * to get a token until the TABS had mounted. That is fine when the app is
+ * opened by tapping its icon, because nothing requests anything until you
+ * are looking at a tab — and wrong the moment something runs earlier.
+ *
+ * Sharing a link into a cold app is exactly that case: the share handler
+ * fires on the first render of the root layout, several mounts before any
+ * tab exists, so its request went out with no Authorization header at all
+ * and came back 401. From the user's side the app opened and said it could
+ * not read the link — reliably, and only ever after the app had been shut
+ * for a while, which is precisely when nothing had wired the getter yet.
+ *
+ * Sits inside <ClerkLoaded>, so useAuth is settled by the time it runs.
+ */
+function ApiAuthBridge() {
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { user } = useUser();
+
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+    // What the app believes about itself, sent only when a request ends up
+    // with no token — the thing that distinguishes an ordinary signed-out
+    // visitor from the app insisting it is signed in while Clerk hands
+    // back nothing.
+    setAuthStateDescriber(
+      () => `isSignedIn=${isSignedIn} isLoaded=${isLoaded} hasUser=${Boolean(user)}`,
+    );
+  }, [getToken, isSignedIn, isLoaded, user]);
+
+  return null;
+}
+
 function PushNotificationManager() {
   const { isSignedIn, getToken } = useAuth();
   const router = useRouter();
@@ -132,9 +167,10 @@ function PushNotificationManager() {
       if (!token) return;
 
       try {
-        // Wire auth getter so customFetch can attach the bearer token
-        setAuthTokenGetter(() => getToken());
-
+        // The token getter is wired by ApiAuthBridge above, at the root,
+        // rather than here — this effect only runs if push registration
+        // succeeded, so hanging authentication off it meant a user who
+        // declined notifications had no token getter at all.
         await customFetch('/api/users/push-token', {
           method: 'PUT',
           body: JSON.stringify({ expoPushToken: token }),
@@ -282,6 +318,7 @@ export default function RootLayout() {
                   <GestureHandlerRootView style={{ flex: 1 }}>
                     <ToastProvider>
                       <KeyboardProvider>
+                        <ApiAuthBridge />
                         <PushNotificationManager />
                         <RootLayoutNav />
                         <ShareIntentHandler />
