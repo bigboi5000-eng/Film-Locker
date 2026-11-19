@@ -76,6 +76,7 @@ const IMAGE_PROMPT =
   "'movie' or 'tv', and a confidence_score from 0.0 to 1.0 " +
   "reflecting how certain you are this is a real title rather than " +
   "a song, book, or unrelated phrase. Exclude short films. " +
+  "Never extract pornographic titles, whatever the source says — not as a match, not at a low confidence score. " +
   "Also set identified_from: 'text' when the title was written somewhere in " +
   "the image, and 'imagery' when nothing named it and you recognised the " +
   "film from the picture itself. Be honest about which — a film recognised " +

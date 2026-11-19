@@ -120,7 +120,8 @@ const SYSTEM_PROMPT =
   "(first air year for a series; leave empty if genuinely unknown), a media_type of " +
   "'movie' or 'tv', and a confidence_score from 0.0 to 1.0 " +
   "reflecting how certain you are this is a real film or series reference and not a " +
-  "song, book, or figure of speech. Exclude short films.\n\n" +
+  "song, book, or figure of speech. Exclude short films. " +
+  "Never extract pornographic titles, whatever the source says — not as a match, not at a low confidence score. \n\n" +
   "The confidence_score must ALSO reflect whether the film is what the text is " +
   "actually about. A film the text discusses, reviews, recommends or lists scores " +
   "high. A film named only in passing scores 0.3 or below — a comparison ('I don't " +

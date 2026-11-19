@@ -118,6 +118,27 @@ and `playlist_items` all carry a `media_type` of `movie` or `tv`.
   server therefore serves television only to a caller that sends the
   header, which `custom-fetch.ts` does unconditionally.
 
+## Adult content
+
+- **`include_adult=false` only works on /search and /discover.** TMDB
+  silently ignores it on /trending, /now_playing, /recommendations,
+  /similar, /person/{id}/movie_credits and a fetch of /movie/{id} by id.
+  Putting it on those URLs looks like a filter and is not one.
+- So the gate is the **`adult` boolean on the object**, checked by
+  `isAdult()` in `lib/tmdb.ts` at every site that returns a title. It
+  rides along on responses already being fetched, so it costs nothing.
+  Any new TMDB call that returns titles needs it.
+- An adult title fetched by id returns **null**, which the route turns
+  into a 404 — the same answer as an id TMDB has never heard of.
+- **TMDB's `adult` means pornography, not an adults-only certificate.**
+  Showgirls and Midnight Cowboy are `adult: false` and stay in.
+  Certificates are a separate thing, on /release_dates, and nothing reads
+  them.
+- The Gemini prompts refuse pornographic titles too, which is not
+  redundant: an extracted title *string* is shown to the user even when
+  TMDB finds no match for it, so the TMDB filter alone cannot keep one
+  off the screen.
+
 ## Things that bite
 
 - **Silent failure is the recurring bug in this codebase.** Bare `catch`,

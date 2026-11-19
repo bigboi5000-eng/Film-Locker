@@ -9,6 +9,14 @@ const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 
 interface TmdbMovie {
   id: number;
+  /**
+   * TMDB's pornography flag. See `isAdult`.
+   *
+   * Present on every film and series object TMDB returns, in list
+   * responses and details alike. Optional here only so an older cached
+   * payload without it does not typecheck as something else.
+   */
+  adult?: boolean;
   title: string;
   release_date: string;
   poster_path: string | null;
@@ -56,6 +64,14 @@ export type MediaType = "movie" | "tv";
  */
 interface TmdbTvDetail {
   id: number;
+  /**
+   * TMDB's pornography flag. See `isAdult`.
+   *
+   * Present on every film and series object TMDB returns, in list
+   * responses and details alike. Optional here only so an older cached
+   * payload without it does not typecheck as something else.
+   */
+  adult?: boolean;
   name: string;
   first_air_date: string;
   poster_path: string | null;
@@ -84,6 +100,14 @@ interface TmdbTvDetail {
 
 interface TmdbTvListItem {
   id: number;
+  /**
+   * TMDB's pornography flag. See `isAdult`.
+   *
+   * Present on every film and series object TMDB returns, in list
+   * responses and details alike. Optional here only so an older cached
+   * payload without it does not typecheck as something else.
+   */
+  adult?: boolean;
   name: string;
   first_air_date?: string;
   poster_path: string | null;
@@ -267,6 +291,33 @@ async function tmdbFetch(url: string, attempt = 0): Promise<Response> {
     : 400 * 2 ** attempt;
   await new Promise((resolve) => setTimeout(resolve, waitMs));
   return tmdbFetch(url, attempt + 1);
+}
+
+/**
+ * Pornography, as TMDB defines it.
+ *
+ * `include_adult=false` is already on every search call, but that
+ * parameter exists ONLY on /search and /discover — TMDB silently ignores
+ * it on /trending, /now_playing, /recommendations, /similar,
+ * /person/{id}/movie_credits and a fetch of /movie/{id} by id. Those are
+ * not hypothetical gaps: a performer's filmography is exactly where this
+ * surfaces, and a locker can be handed any id at all through the detail
+ * endpoint.
+ *
+ * So the flag on the object is what is trusted, everywhere, rather than a
+ * parameter that is honoured on four URLs out of fourteen. It costs
+ * nothing: it rides along on responses already being fetched.
+ *
+ * Note what this is NOT. TMDB's `adult` means pornography, not an
+ * adults-only certificate — Showgirls and Midnight Cowboy are ordinary
+ * films here and stay in. Certificates live on /release_dates and are a
+ * separate question.
+ *
+ * Absent reads as not-adult, matching TMDB, which sends `false` rather
+ * than omitting the field.
+ */
+function isAdult(item: { adult?: boolean } | null | undefined): boolean {
+  return item?.adult === true;
 }
 
 function getApiKey(): string {
@@ -514,8 +565,12 @@ export async function searchTmdb(
       // do not let that discard the film entirely. TMDB indexes a new release
       // days before anyone uploads a poster for it, which is exactly the case
       // this function was getting wrong.
-      const withPoster = data.results.filter((m) => m.poster_path);
-      const candidates = withPoster.length > 0 ? withPoster : data.results;
+      // Dropped before the poster fallback, not after: that fallback
+      // deliberately keeps results with no artwork, so filtering later
+      // would let an adult title through precisely when it has none.
+      const clean = data.results.filter((m) => !isAdult(m));
+      const withPoster = clean.filter((m) => m.poster_path);
+      const candidates = withPoster.length > 0 ? withPoster : clean;
 
       const ordered = releaseYear
         ? candidates
@@ -568,6 +623,7 @@ interface TmdbTvSearchResponse {
     name: string;
     first_air_date: string | null;
     popularity: number;
+    adult?: boolean;
   }>;
 }
 
@@ -614,7 +670,12 @@ export async function searchTmdbTv(query: string, year?: string): Promise<TmdbTv
         }
 
         const data = (await res.json()) as TmdbTvSearchResponse;
-        const best = [...data.results].sort((a, b) => b.popularity - a.popularity)[0];
+        // This path only ever produces a sentence of explanation, never a
+        // saveable title — but that sentence names the series, so it is
+        // filtered like everything else.
+        const best = [...data.results]
+          .filter((m) => !isAdult(m))
+          .sort((a, b) => b.popularity - a.popularity)[0];
         if (!best) return null;
 
         return {
@@ -708,6 +769,16 @@ async function fetchMovieDetailsUncached(
     ]);
 
   if (detailsResult.status === "rejected") return null;
+
+  // The only gate on a fetch BY ID, and the one that matters most: this
+  // endpoint is handed whatever id a client asks for, so without it an
+  // adult title is one URL away however well the lists are filtered.
+  // Null, which the route turns into a 404 — the same answer as an id
+  // TMDB has never heard of, which is what this should look like.
+  if (isAdult(detailsResult.value)) {
+    logger.info({ tmdbId, mediaType }, "TMDB detail: adult title refused");
+    return null;
+  }
 
   // Said out loud, because it never was. A rejected credits or providers
   // call was read only as `status !== "fulfilled"` and the field quietly
@@ -892,7 +963,7 @@ export async function searchMoviesUI(query: string): Promise<TmdbCandidate[]> {
       results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
     };
     return data.results
-      .filter((m) => m.poster_path)
+      .filter((m) => m.poster_path && !isAdult(m))
       .map((m) => ({ ...movieToCandidate(m, mediaType), popularity: m.popularity }));
   };
 
@@ -932,7 +1003,12 @@ export async function fetchTrending(): Promise<TmdbCandidate[]> {
     results: Array<(TmdbMovie | TmdbTvListItem) & { media_type?: string }>;
   };
   return data.results
-    .filter((m) => m.poster_path && (m.media_type === "movie" || m.media_type === "tv"))
+    .filter(
+      (m) =>
+        m.poster_path &&
+        !isAdult(m) &&
+        (m.media_type === "movie" || m.media_type === "tv"),
+    )
     .slice(0, 20)
     .map((m) => movieToCandidate(m, m.media_type as MediaType));
 }
@@ -966,7 +1042,7 @@ export async function fetchNowPlaying(region: string = DEFAULT_REGION): Promise<
       results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
     };
     return data.results
-      .filter((m) => m.poster_path)
+      .filter((m) => m.poster_path && !isAdult(m))
       .sort((a, b) => b.popularity - a.popularity)
       .map((m) => movieToCandidate(m, mediaType));
   };
@@ -1031,7 +1107,7 @@ export async function fetchTmdbRecommendations(
     results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
   };
   return data.results
-    .filter((m) => m.poster_path)
+    .filter((m) => m.poster_path && !isAdult(m))
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 20)
     .map((m) => movieToCandidate(m, mediaType));
@@ -1070,7 +1146,7 @@ export async function fetchSimilarMovies(
           results: Array<TmdbMovie | TmdbTvListItem>;
         };
         return data.results
-          .filter((m) => m.poster_path)
+          .filter((m) => m.poster_path && !isAdult(m))
           .slice(0, limit)
           .map((m) => movieToCandidate(m, mediaType));
       };
@@ -1091,6 +1167,8 @@ export async function fetchSimilarMovies(
 interface TmdbPerson {
   id: number;
   name: string;
+  /** TMDB flags adult-industry performers the same way it flags titles. */
+  adult?: boolean;
   biography?: string;
   profile_path?: string | null;
   known_for_department?: string;
@@ -1154,17 +1232,29 @@ export async function fetchPersonDetails(personId: number): Promise<TmdbPersonDe
       if (personResult.status === "rejected") return null;
       const person = personResult.value;
 
+      // A performer TMDB flags as adult has a filmography that would be
+      // emptied by the credit filter below anyway, so the page would load
+      // as a name and a biography with nothing under it. Refused outright
+      // instead, which the route turns into a 404.
+      if (isAdult(person)) {
+        logger.info({ personId }, "TMDB person: adult performer refused");
+        return null;
+      }
+
       // Newest first, and only films with artwork — a filmography is browsed
       // by looking at it, and a grid of blank tiles is not browsable.
+      // Credits are where this leaks in practice. /person/{id}/movie_credits
+      // takes no include_adult and happily lists adult titles against a
+      // mainstream performer who has one in their history.
       const order = (films: TmdbMovie[]) =>
         films
-          .filter((m) => m.poster_path)
+          .filter((m) => m.poster_path && !isAdult(m))
           .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
           .map((m) => movieToCandidate(m, "movie"));
 
       const orderTv = (shows: TmdbTvListItem[]) =>
         shows
-          .filter((m) => m.poster_path)
+          .filter((m) => m.poster_path && !isAdult(m))
           .sort((a, b) => (b.first_air_date ?? "").localeCompare(a.first_air_date ?? ""))
           .map((m) => movieToCandidate(m, "tv"));
 
