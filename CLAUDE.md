@@ -82,6 +82,42 @@ script, running it with `tsx`, reading the output, and deleting it.
   when writing a migration by hand.
 - Use `migrate`, never `drizzle-kit push`, against the real database.
 
+## Films and series
+
+`movies`, `film_community_ratings`, `film_comments`, `film_notifications`
+and `playlist_items` all carry a `media_type` of `movie` or `tv`.
+
+- **A `tmdb_id` on its own is not a title.** TMDB numbers films and series
+  in separate sequences, so 1399 is *Star Trek: First Contact* **and**
+  *Game of Thrones*. Every query that matches on `tmdb_id` must match on
+  `media_type` too, and every uniqueness rule already does. A map keyed on
+  the id alone is the recurring shape of this bug — on the client use
+  `titleKey()` from `hooks/useLockerTitles.ts`, on the server
+  `filmCardKey()` from `lib/filmCards.ts`.
+- **Absent means film**, everywhere: a column default on rows written
+  before the column existed, a request from an app build that does not
+  send it, a malformed value. `normalizeMediaType` (server) and
+  `asMediaType` (client) are the only places that decide this.
+- **Television has its own TMDB genre id list**, overlapping the film one.
+  Read through the film map a sci-fi series comes back tagged only
+  "Drama", because 10765 is not in it and 18 is. See `TMDB_TV_GENRE_MAP`.
+- **A series has no runtime.** TMDB's `episode_run_time` is minutes per
+  *episode*, which is a different question, so `movies.runtime` stays null
+  for TV — the Kind filter hides the Length slider, and the enrichment
+  queue excludes series from its "missing runtime" gate so they are not
+  re-visited for ever.
+- **A series' credits crew has no Director on it at all.** Creators come
+  off the detail response (`created_by`); the person page reads
+  `/person/{id}/tv_credits`, which `movie_credits` does not cover.
+- **`X-Film-Locker-Supports-Tv` gates the whole feature.** This is the one
+  place the "ship the server ahead of the app" rule above does NOT hold,
+  because a series is not a new field — it is a new kind of thing in lists
+  that have only ever held films. An old build does not ignore one: it
+  saves the series' id with no `media_type`, so it lands as a film, and
+  enrichment then writes a different film's cast and runtime over it. The
+  server therefore serves television only to a caller that sends the
+  header, which `custom-fetch.ts` does unconditionally.
+
 ## Things that bite
 
 - **Silent failure is the recurring bug in this codebase.** Bare `catch`,
