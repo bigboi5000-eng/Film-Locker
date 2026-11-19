@@ -1320,3 +1320,18 @@ export type AddCollaboratorBody = {
   userId: string;
 };
 
+export type RemovePlaylistItemParams = {
+/**
+ * Whether tmdbId names a film or a television series. Without it a list holding both titles that share a TMDB number would lose both. Omitted means film.
+ */
+mediaType?: RemovePlaylistItemMediaType;
+};
+
+export type RemovePlaylistItemMediaType = typeof RemovePlaylistItemMediaType[keyof typeof RemovePlaylistItemMediaType];
+
+
+export const RemovePlaylistItemMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+

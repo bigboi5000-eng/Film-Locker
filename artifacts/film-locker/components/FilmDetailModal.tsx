@@ -82,6 +82,21 @@ interface FilmDetailModalProps {
   onClose: () => void;
   /** TMDB ID — always required; used to fetch full detail data */
   tmdbId: number;
+  /**
+   * Film or series.
+   *
+   * Required alongside tmdbId, not instead of it and not optional: TMDB
+   * numbers the two separately, so 1399 is a Star Trek film and also Game
+   * of Thrones, and this sheet makes six requests keyed on that id. Get it
+   * wrong and the poster says one thing while the cast, the runtime, the
+   * community score and the comments all belong to something else.
+   *
+   * Callers pass what the card they were showing carried. A card from
+   * before series existed carries nothing, which is a film — hence the
+   * `?? 'movie'` at the call sites rather than a default here, so the
+   * compiler still makes every caller think about it.
+   */
+  mediaType: 'movie' | 'tv';
   /** Basic card data shown immediately while full details load */
   title: string;
   posterUrl: string;
@@ -306,10 +321,12 @@ function formatRuntime(minutes: number | null | undefined): string | null {
 function CommunitySection({
   onStarInteraction,
   tmdbId,
+  mediaType,
   isLoggedIn,
   onRatingChanged,
 }: {
   tmdbId: number;
+  mediaType: 'movie' | 'tv';
   isLoggedIn: boolean;
   /**
    * Fired after a community rating is set, with the value the server also
@@ -333,9 +350,9 @@ function CommunitySection({
    * from the shared hook rather than a copy kept here. The feed's comment
    * sheet runs the same one, so a rule added to either is added to both.
    */
-  const thread = useFilmCommentThread(tmdbId);
+  const thread = useFilmCommentThread(tmdbId, mediaType);
 
-  const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId);
+  const { data: score, isLoading: scoreLoading } = useGetFilmCommunityScore(tmdbId, { mediaType });
   // Declared here rather than beside the stars it feeds, because
   // handleCommunityRating closes over it below: a dependency array is
   // evaluated during render, so a later `const` would be in its temporal
@@ -345,8 +362,10 @@ function CommunitySection({
   const { mutateAsync: submitRating, isPending: ratingPending } = useSetFilmCommunityRating();
   const { mutateAsync: deleteRating, isPending: ratingDeleting } = useDeleteFilmCommunityRating();
   const invalidateScore = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: getGetFilmCommunityScoreQueryKey(tmdbId) });
-  }, [queryClient, tmdbId]);
+    await queryClient.invalidateQueries({
+      queryKey: getGetFilmCommunityScoreQueryKey(tmdbId, { mediaType }),
+    });
+  }, [queryClient, tmdbId, mediaType]);
 
   const handleCommunityRating = useCallback(
     async (n: number, viaDrag: boolean) => {
@@ -369,7 +388,7 @@ function CommunitySection({
 
       try {
         if (clearing) {
-          await deleteRating({ tmdbId });
+          await deleteRating({ tmdbId, params: { mediaType } });
           await invalidateScore();
           // Deliberately not clearing the private rating — see the server
           // route. Withdrawing a public rating says nothing about what you
@@ -378,7 +397,7 @@ function CommunitySection({
           return;
         }
 
-        await submitRating({ tmdbId, data: { rating: n } });
+        await submitRating({ tmdbId, data: { rating: n, mediaType } });
         await invalidateScore();
         // The server copies this onto the viewer's own rating of the film;
         // tell the parent so the stars for it move too.
@@ -395,7 +414,7 @@ function CommunitySection({
         );
       }
     },
-    [isLoggedIn, submitRating, deleteRating, tmdbId, invalidateScore, userRating, onRatingChanged]
+    [isLoggedIn, submitRating, deleteRating, tmdbId, mediaType, invalidateScore, userRating, onRatingChanged]
   );
 
   const average = score?.average ?? null;
@@ -660,18 +679,22 @@ const makeCommunityStyles = (c: Palette) => StyleSheet.create({
  */
 function SimilarFilms({
   tmdbId,
+  mediaType,
   visible,
   onPick,
 }: {
   tmdbId: number;
+  mediaType: 'movie' | 'tv';
   visible: boolean;
   onPick: (movie: TmdbMovieCard) => void;
 }) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
-  const { data, isLoading } = useGetSimilarMovies(tmdbId, {
-    query: { queryKey: getGetSimilarMoviesQueryKey(tmdbId), enabled: visible },
-  });
+  const { data, isLoading } = useGetSimilarMovies(
+    tmdbId,
+    { mediaType },
+    { query: { queryKey: getGetSimilarMoviesQueryKey(tmdbId, { mediaType }), enabled: visible } },
+  );
 
   const movies = data?.movies ?? [];
   if (!isLoading && movies.length === 0) return null;
@@ -705,6 +728,7 @@ export function FilmDetailModal({
   visible,
   onClose,
   tmdbId: tmdbIdProp,
+  mediaType: mediaTypeProp,
   title: titleProp,
   posterUrl: posterUrlProp,
   releaseYear: releaseYearProp,
@@ -727,6 +751,11 @@ export function FilmDetailModal({
   const [swapped, setSwapped] = useState<TmdbMovieCard | null>(null);
 
   const tmdbId = swapped?.tmdbId ?? tmdbIdProp;
+  // Swapped first and WITHOUT a fallback to the prop: a series reached
+  // through "More like this" from a film must not inherit the film's kind,
+  // which would send every one of this sheet's requests to the wrong id
+  // space. A swapped card that somehow carries no kind is a film.
+  const mediaType = swapped ? (swapped.mediaType ?? 'movie') : mediaTypeProp;
   const title = swapped?.title ?? titleProp;
   const posterUrl = swapped?.posterUrl ?? posterUrlProp;
   const releaseYear = swapped?.releaseYear ?? releaseYearProp;
@@ -758,8 +787,10 @@ export function FilmDetailModal({
   const savedMovie = useMemo(() => {
     if (swapped) return undefined;
     if (savedMovieProp) return savedMovieProp;
-    return myMovies?.movies?.find((m) => m.tmdbId === tmdbId);
-  }, [swapped, savedMovieProp, myMovies, tmdbId]);
+    return myMovies?.movies?.find(
+      (m) => m.tmdbId === tmdbId && (m.mediaType ?? 'movie') === mediaType,
+    );
+  }, [swapped, savedMovieProp, myMovies, tmdbId, mediaType]);
 
   // Back to the film the parent opened whenever the sheet is dismissed, so
   // reopening does not resume somewhere the user did not leave off.
@@ -778,7 +809,7 @@ export function FilmDetailModal({
   // Fetch full TMDB details — parent only renders this component when a movie
   // is selected, so the hook always runs against a valid tmdbId.
   const region = useMemo(() => getDeviceRegion(), []);
-  const { data: details, isLoading } = useGetMovieDetails(tmdbId, { region });
+  const { data: details, isLoading } = useGetMovieDetails(tmdbId, { region, mediaType });
 
   // Use Clerk auth state — works for both saved and unsaved films
 
@@ -948,6 +979,7 @@ export function FilmDetailModal({
       await addMovie({
         data: {
           tmdbId,
+          mediaType,
           title: details?.title ?? title,
           releaseYear: details?.releaseYear ?? releaseYear,
           posterUrl: details?.posterUrl ?? posterUrl,
@@ -974,7 +1006,7 @@ export function FilmDetailModal({
       const described = describeApiError(err, { action: 'add this film' });
       showToast({ title: described.title, subtitle: described.message, variant: 'error' });
     }
-  }, [addMovie, tmdbId, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, onAdded, requireAccount]);
+  }, [addMovie, tmdbId, mediaType, title, releaseYear, posterUrl, details, displayOverview, invalidate, showToast, handleClose, onAdded, requireAccount]);
 
   return (
     <Modal
@@ -1183,10 +1215,16 @@ export function FilmDetailModal({
               {/* ── Community Section — Film Locker's own ratings and
                   written comments. The TMDB rating above is just a number;
                   this is the only place actual written opinions live. ── */}
-              <SimilarFilms tmdbId={tmdbId} visible={visible} onPick={onSimilarPick} />
+              <SimilarFilms
+                tmdbId={tmdbId}
+                mediaType={mediaType}
+                visible={visible}
+                onPick={onSimilarPick}
+              />
 
               <CommunitySection
                 tmdbId={tmdbId}
+                mediaType={mediaType}
                 isLoggedIn={isLoggedIn}
                 // The server copies a community rating onto this viewer's own
                 // rating of the film, so the stars for it have to move too.
@@ -1350,6 +1388,7 @@ export function FilmDetailModal({
           });
         }}
         tmdbId={tmdbId}
+        mediaType={mediaType}
         filmTitle={title}
         posterUrl={posterUrl}
       />
@@ -1359,6 +1398,7 @@ export function FilmDetailModal({
         visible={addToPlaylistVisible}
         onClose={() => setAddToPlaylistVisible(false)}
         tmdbId={tmdbId}
+        mediaType={mediaType}
         title={title}
         posterUrl={posterUrl}
       />

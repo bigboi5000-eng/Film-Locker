@@ -373,6 +373,24 @@ const RATING_PICKER = 'rating' as const;
 type PickerKey = ChipKey | typeof RATING_PICKER;
 
 /** Apply all active filters to a movie list. */
+/**
+ * What to call the things being counted.
+ *
+ * "66 films" is wrong the moment a series can be among them, and
+ * "66 titles" is wrong when the user has just asked for films only. So it
+ * follows the cut: a screen says what it is actually showing. Exported
+ * because the counts outside this sheet — the row above a grid, a
+ * playlist's header — describe the same filtered list.
+ *
+ * "series" is already both singular and plural, which is why it is the
+ * one branch that does not take an "s".
+ */
+export function countNoun(n: number, mediaType?: MediaFilter): string {
+  if (mediaType === 'movie') return `film${n === 1 ? '' : 's'}`;
+  if (mediaType === 'tv') return 'series';
+  return `title${n === 1 ? '' : 's'}`;
+}
+
 export function applyFilters<T extends FilterableMovie>(movies: T[], filters: FilterState): T[] {
   // Derived from the same list being filtered, so "both ends home" means
   // the same thing here as it does on the slider the user is looking at.
@@ -545,21 +563,7 @@ export function FilterBar({
 
   const clearAll = useCallback(() => onChange({}), [onChange]);
 
-  /**
-   * What to call the things being counted.
-   *
-   * "66 films" is wrong the moment a series can be among them, and
-   * "66 titles" is wrong when the user has just asked for films only. So
-   * it follows the cut: the sheet says what it is actually showing.
-   */
-  const noun = useCallback(
-    (n: number) => {
-      if (filters.mediaType === 'movie') return `film${n === 1 ? '' : 's'}`;
-      if (filters.mediaType === 'tv') return n === 1 ? 'series' : 'series';
-      return `title${n === 1 ? '' : 's'}`;
-    },
-    [filters.mediaType],
-  );
+  const noun = useCallback((n: number) => countNoun(n, filters.mediaType), [filters.mediaType]);
 
   const matching = useMemo(() => applyFilters(movies, filters).length, [movies, filters]);
 

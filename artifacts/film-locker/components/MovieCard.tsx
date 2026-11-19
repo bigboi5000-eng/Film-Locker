@@ -14,7 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import { LockerBadge } from '@/components/LockerBadge';
-import type { LockerStatus } from '@/hooks/useWatchedTmdbIds';
+import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');

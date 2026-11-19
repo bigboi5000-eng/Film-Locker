@@ -25,7 +25,7 @@ import {
 import { useToast } from '@/components/ToastProvider';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
-import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
+import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
 interface WatchedFilmsSheetProps {
@@ -67,6 +67,7 @@ function WatchedFilmRow({
       await addMovie({
         data: {
           tmdbId: movie.tmdbId,
+          mediaType: asMediaType(movie.mediaType),
           title: movie.title,
           releaseYear: movie.releaseYear,
           posterUrl: movie.posterUrl,
@@ -121,7 +122,7 @@ export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: Watch
   });
   const movies = data?.movies ?? [];
   // One shared read of the viewer's own locker for the whole sheet.
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatusByTitle = useLockerStatusByTitle();
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -143,7 +144,7 @@ export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: Watch
             renderItem={({ item }) => (
               <WatchedFilmRow
                 movie={item}
-                alreadyInLocker={lockerStatusByTmdbId.has(item.tmdbId)}
+                alreadyInLocker={lockerStatusByTitle.has(titleKey(item))}
                 onAdded={() => {}}
               />
             )}

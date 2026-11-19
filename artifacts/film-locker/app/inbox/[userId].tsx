@@ -26,7 +26,7 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import { LockerBadge } from '@/components/LockerBadge';
-import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
+import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
 // Top row — ordered by how likely each is to be someone's go-to reaction to
@@ -359,9 +359,9 @@ function RecommendationCard({
   // Somebody recommending a film you already have is common — it is why
   // they thought of you. Offering "Add to Watchlist" for it does nothing,
   // because the server drops a duplicate, and says nothing either.
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatusByTitle = useLockerStatusByTitle();
   const lockerStatus = item.tmdbId != null
-    ? lockerStatusByTmdbId.get(item.tmdbId) ?? null
+    ? lockerStatusByTitle.get(titleKey({ tmdbId: item.tmdbId, mediaType: item.mediaType })) ?? null
     : null;
 
   return (
@@ -631,6 +631,7 @@ export default function InboxThreadScreen() {
         await addMovie({
           data: {
             tmdbId: item.tmdbId!,
+            mediaType: asMediaType(item.mediaType),
             title: item.filmTitle!,
             releaseYear: '',
             posterUrl: item.posterUrl!,
@@ -749,6 +750,7 @@ export default function InboxThreadScreen() {
           visible
           onClose={() => setOpenFilm(null)}
           tmdbId={openFilm.tmdbId}
+          mediaType={asMediaType(openFilm.mediaType)}
           title={openFilm.filmTitle ?? ''}
           posterUrl={openFilm.posterUrl ?? ''}
           releaseYear=""

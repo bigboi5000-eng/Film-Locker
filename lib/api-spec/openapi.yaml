@@ -1662,7 +1662,7 @@ paths:
     delete:
       operationId: removePlaylistItem
       tags: [playlists]
-      summary: Remove a film from a playlist
+      summary: Remove a film or series from a playlist
       parameters:
         - name: id
           in: path
@@ -1674,6 +1674,16 @@ paths:
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. Without it
+            a list holding both titles that share a TMDB number would lose
+            both. Omitted means film.
+          schema:
+            type: string
+            enum: [movie, tv]
       responses:
         "204":
           description: Removed

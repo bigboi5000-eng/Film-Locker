@@ -39,12 +39,15 @@ const COMMENT_MAX = 280;
 export function FilmCommentsSheet({
   visible,
   tmdbId,
+  mediaType,
   filmTitle,
   isLoggedIn,
   onClose,
 }: {
   visible: boolean;
   tmdbId: number;
+  /** Film or series — the two have separate comment threads. */
+  mediaType: 'movie' | 'tv';
   filmTitle: string;
   isLoggedIn: boolean;
   onClose: () => void;
@@ -56,7 +59,7 @@ export function FilmCommentsSheet({
   // Only fetches while open: the feed mounts one of these per tap, and a
   // closed sheet asking for comments is a request for a screen nobody is
   // looking at.
-  const thread = useFilmCommentThread(tmdbId, visible);
+  const thread = useFilmCommentThread(tmdbId, mediaType, visible);
 
   const canPost = thread.commentText.trim().length > 0 && !thread.posting;
 

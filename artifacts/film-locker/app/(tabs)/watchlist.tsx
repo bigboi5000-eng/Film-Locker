@@ -38,9 +38,9 @@ import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
 import { SearchResultRow } from '@/components/SearchResultRow';
 import { getDeviceRegion } from '@/lib/region';
-import { useWatchedTmdbIds } from '@/hooks/useWatchedTmdbIds';
+import { useWatchedTitles, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
-import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { FilterBar, FilterState, applyFilters, countNoun } from '@/components/FilterBar';
 import { applySort, defaultSortFor, type SortState } from '@/components/SortSheet';
 import { ShareFilmSheet } from '@/components/ShareFilmSheet';
 import { confirmDestructive } from '@/lib/confirm';
@@ -74,6 +74,8 @@ function useDebounce<T>(value: T, delay: number): T {
 
 interface ModalTarget {
   tmdbId: number;
+  /** Film or series. Absent on a row saved before series existed. */
+  mediaType?: string | null;
   title: string;
   posterUrl: string;
   releaseYear: string;
@@ -226,7 +228,7 @@ export default function WatchlistScreen() {
 
   // The locker is this user's own films — nothing to fetch without an
   // account, and it would 401 on every render for a guest.
-  const watchedTmdbIds = useWatchedTmdbIds();
+  const watchedTitles = useWatchedTitles();
   /**
    * Something to look at on this tab without an account.
    *
@@ -275,9 +277,11 @@ export default function WatchlistScreen() {
   const watchedCount = useMemo(() => allMovies.filter((m) => m.isWatched).length, [allMovies]);
   const watchlistCount = allMovies.length - watchedCount;
 
-  // Map tmdbId → saved Movie for quick look-up in search results
-  const savedByTmdbId = useMemo(
-    () => new Map(allMovies.map((m) => [m.tmdbId, m])),
+  // Kind AND id → saved row, for quick look-up in search results. The id
+  // alone would hand a searched-for series the locker row of the film that
+  // shares its number.
+  const savedByTitle = useMemo(
+    () => new Map(allMovies.map((m) => [titleKey(m), m])),
     [allMovies]
   );
 
@@ -322,6 +326,7 @@ export default function WatchlistScreen() {
     (movie: TmdbMovieCard, savedMovie?: Movie) => {
       setModalTarget({
         tmdbId: movie.tmdbId,
+        mediaType: movie.mediaType,
         title: movie.title,
         posterUrl: movie.posterUrl,
         releaseYear: movie.releaseYear,
@@ -337,6 +342,7 @@ export default function WatchlistScreen() {
       if (match.tmdb_id == null) return;
       setModalTarget({
         tmdbId: match.tmdb_id,
+        mediaType: match.media_type,
         title: match.title ?? match.movie_title,
         posterUrl: match.poster_url ?? '',
         releaseYear: match.release_year,
@@ -350,6 +356,7 @@ export default function WatchlistScreen() {
   const openSavedMovieModal = useCallback((movie: Movie) => {
     setModalTarget({
       tmdbId: movie.tmdbId,
+      mediaType: movie.mediaType,
       title: movie.title,
       posterUrl: movie.posterUrl,
       releaseYear: movie.releaseYear,
@@ -362,23 +369,26 @@ export default function WatchlistScreen() {
 
   const renderSearchResult = useCallback(
     ({ item }: { item: TmdbMovieCard }) => {
-      const saved = savedByTmdbId.get(item.tmdbId);
+      const saved = savedByTitle.get(titleKey(item));
       return (
         <SearchResultRow
           movie={item}
           isSaved={Boolean(saved)}
           savedMovie={saved}
           onPress={openMovieModal}
-          isWatched={watchedTmdbIds.has(item.tmdbId)}
+          isWatched={watchedTitles.has(titleKey(item))}
         />
       );
     },
-    [savedByTmdbId, openMovieModal, watchedTmdbIds]
+    [savedByTitle, openMovieModal, watchedTitles]
   );
 
   const renderAiResult = useCallback(
     ({ item }: { item: GeminiMovieMatch }) => {
-      const saved = item.tmdb_id != null ? savedByTmdbId.get(item.tmdb_id) : undefined;
+      const saved =
+        item.tmdb_id != null
+          ? savedByTitle.get(titleKey({ tmdbId: item.tmdb_id, mediaType: item.media_type }))
+          : undefined;
       return (
         <AiResultRow
           match={item}
@@ -388,7 +398,7 @@ export default function WatchlistScreen() {
         />
       );
     },
-    [savedByTmdbId, openAiResultModal]
+    [savedByTitle, openAiResultModal]
   );
 
   const renderWatchlistMovie = useCallback(
@@ -530,7 +540,7 @@ export default function WatchlistScreen() {
       ) : filteredMovies.length > 0 ? (
         <View style={styles.sectionLabelRow}>
           <Text style={styles.sectionLabel}>
-            {filteredMovies.length} FILM{filteredMovies.length === 1 ? '' : 'S'}
+            {filteredMovies.length} {countNoun(filteredMovies.length, filters.mediaType).toUpperCase()}
           </Text>
           <Text style={styles.sectionHint}>Hold to remove</Text>
         </View>
@@ -724,6 +734,7 @@ export default function WatchlistScreen() {
           visible
           onClose={() => setModalTarget(null)}
           tmdbId={modalTarget.tmdbId}
+          mediaType={asMediaType(modalTarget.mediaType)}
           title={modalTarget.title}
           posterUrl={modalTarget.posterUrl}
           releaseYear={modalTarget.releaseYear}

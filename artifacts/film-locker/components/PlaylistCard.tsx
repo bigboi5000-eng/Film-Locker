@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { countNoun } from '@/components/FilterBar';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { Playlist } from '@workspace/api-client-react';
@@ -34,7 +35,7 @@ export function PlaylistCard({ playlist, onPress }: { playlist: Playlist; onPres
             size={11}
             color={colors.textFaint}
           />
-          <Text style={styles.metaText}>{playlist.itemCount} film{playlist.itemCount !== 1 ? 's' : ''}</Text>
+          <Text style={styles.metaText}>{playlist.itemCount} {countNoun(playlist.itemCount)}</Text>
           {/* A list somebody invited you to edit, sitting in Mine alongside
               your own. Without this it reads as one of yours, and it is
               not — you cannot rename it, send it or delete it. */}

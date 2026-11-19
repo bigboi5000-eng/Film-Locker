@@ -74,6 +74,7 @@ import type {
   RecommendBody,
   RecommendResponse,
   RecommendationsResponse,
+  RemovePlaylistItemParams,
   SearchMoviesParams,
   SearchMoviesResponse,
   SearchPublicPlaylistsParams,
@@ -5219,21 +5220,30 @@ export const useSharePlaylist = <TError = ErrorType<void>,
     }
 
 export const getRemovePlaylistItemUrl = (id: number,
-    tmdbId: number,) => {
+    tmdbId: number,
+    params?: RemovePlaylistItemParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/playlists/${id}/items/${tmdbId}`
+  return stringifiedParams.length > 0 ? `/api/playlists/${id}/items/${tmdbId}?${stringifiedParams}` : `/api/playlists/${id}/items/${tmdbId}`
 }
 
 /**
- * @summary Remove a film from a playlist
+ * @summary Remove a film or series from a playlist
  */
 export const removePlaylistItem = async (id: number,
-    tmdbId: number, options?: RequestInit): Promise<void> => {
+    tmdbId: number,
+    params?: RemovePlaylistItemParams, options?: RequestInit): Promise<void> => {
 
-  return customFetch<void>(getRemovePlaylistItemUrl(id,tmdbId),
+  return customFetch<void>(getRemovePlaylistItemUrl(id,tmdbId,params),
   {
     ...options,
     method: 'DELETE'
@@ -5246,8 +5256,8 @@ export const removePlaylistItem = async (id: number,
 
 
 export const getRemovePlaylistItemMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removePlaylistItem>>, TError,{id: number;tmdbId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof removePlaylistItem>>, TError,{id: number;tmdbId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removePlaylistItem>>, TError,{id: number;tmdbId: number;params?: RemovePlaylistItemParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removePlaylistItem>>, TError,{id: number;tmdbId: number;params?: RemovePlaylistItemParams}, TContext> => {
 
 const mutationKey = ['removePlaylistItem'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -5259,10 +5269,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removePlaylistItem>>, {id: number;tmdbId: number}> = (props) => {
-          const {id,tmdbId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removePlaylistItem>>, {id: number;tmdbId: number;params?: RemovePlaylistItemParams}> = (props) => {
+          const {id,tmdbId,params} = props ?? {};
 
-          return  removePlaylistItem(id,tmdbId,requestOptions)
+          return  removePlaylistItem(id,tmdbId,params,requestOptions)
         }
 
 
@@ -5277,14 +5287,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type RemovePlaylistItemMutationError = ErrorType<void>
 
     /**
- * @summary Remove a film from a playlist
+ * @summary Remove a film or series from a playlist
  */
 export const useRemovePlaylistItem = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removePlaylistItem>>, TError,{id: number;tmdbId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removePlaylistItem>>, TError,{id: number;tmdbId: number;params?: RemovePlaylistItemParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof removePlaylistItem>>,
         TError,
-        {id: number;tmdbId: number},
+        {id: number;tmdbId: number;params?: RemovePlaylistItemParams},
         TContext
       > => {
       return useMutation(getRemovePlaylistItemMutationOptions(options));

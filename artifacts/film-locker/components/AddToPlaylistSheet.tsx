@@ -13,6 +13,7 @@ import {
   ScrollView, ActivityIndicator, TextInput, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { countNoun } from '@/components/FilterBar';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetMyPlaylists,
@@ -30,12 +31,14 @@ import type { Palette } from '@/constants/colors';
 interface AddToPlaylistSheetProps {
   visible: boolean;
   tmdbId: number;
+  /** Film or series — a playlist can hold both, and they key apart. */
+  mediaType: 'movie' | 'tv';
   title: string;
   posterUrl: string;
   onClose: () => void;
 }
 
-export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose }: AddToPlaylistSheetProps) {
+export function AddToPlaylistSheet({ visible, tmdbId, mediaType, title, posterUrl, onClose }: AddToPlaylistSheetProps) {
   const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const { showToast } = useToast();
@@ -53,7 +56,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
   const handleAddToExisting = useCallback(async (playlistId: number, playlistName: string) => {
     setAddingId(playlistId);
     try {
-      await addItem({ id: playlistId, data: { tmdbId, filmTitle: title, posterUrl } });
+      await addItem({ id: playlistId, data: { tmdbId, mediaType, filmTitle: title, posterUrl } });
       await queryClient.invalidateQueries({ queryKey: getGetMyPlaylistsQueryKey() });
       showToast({ title: `Added to "${playlistName}"`, variant: 'success' });
       onClose();
@@ -62,14 +65,14 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
     } finally {
       setAddingId(null);
     }
-  }, [addItem, tmdbId, title, posterUrl, queryClient, showToast, onClose]);
+  }, [addItem, tmdbId, mediaType, title, posterUrl, queryClient, showToast, onClose]);
 
   const handleCreateAndAdd = useCallback(async () => {
     const name = newName.trim();
     if (!name) return;
     try {
       const playlist = await createPlaylist({ data: { name, isPublic: false } });
-      await addItem({ id: playlist.id, data: { tmdbId, filmTitle: title, posterUrl } });
+      await addItem({ id: playlist.id, data: { tmdbId, mediaType, filmTitle: title, posterUrl } });
       await queryClient.invalidateQueries({ queryKey: getGetMyPlaylistsQueryKey() });
       showToast({ title: `Added to "${name}"`, variant: 'success' });
       setNewName('');
@@ -78,7 +81,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
       const detail = err instanceof ApiError ? (err.data as { error?: string } | null)?.error : undefined;
       showToast({ title: 'Could not create playlist', subtitle: detail, variant: 'error' });
     }
-  }, [newName, createPlaylist, addItem, tmdbId, title, posterUrl, queryClient, showToast, onClose]);
+  }, [newName, createPlaylist, addItem, tmdbId, mediaType, title, posterUrl, queryClient, showToast, onClose]);
 
   return (
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="slide" statusBarTranslucent>
@@ -116,7 +119,7 @@ export function AddToPlaylistSheet({ visible, tmdbId, title, posterUrl, onClose 
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.plName, { color: colors.foreground }]} numberOfLines={1}>{pl.name}</Text>
                       <Text style={[styles.plCount, { color: colors.mutedForeground }]}>
-                        {pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}
+                        {pl.itemCount} {countNoun(pl.itemCount)}
                         {/* A list somebody invited this person to edit. It
                             belongs here — they really can add to it — but
                             silently putting a film on a friend's list

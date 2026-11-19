@@ -282,7 +282,11 @@ const makeCommentStyles = (c: Palette) => StyleSheet.create({
  * 3 while somebody was reading them. Posting, deleting and blocking all
  * reset to page 1, since each of them changes what page 1 contains.
  */
-export function useFilmCommentThread(tmdbId: number, enabled = true) {
+export function useFilmCommentThread(
+  tmdbId: number,
+  mediaType: 'movie' | 'tv' = 'movie',
+  enabled = true,
+) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -291,10 +295,13 @@ export function useFilmCommentThread(tmdbId: number, enabled = true) {
   const [commentText, setCommentText] = useState('');
   const [reportTarget, setReportTarget] = useState<FilmComment | null>(null);
 
+  // The kind is in the request AND in the query key. In the request
+  // because a comment thread on a series is not the film's; in the key
+  // because otherwise react-query serves one from the other's cache.
   const { data, isLoading } = useGetFilmComments(
     tmdbId,
-    { page },
-    { query: { queryKey: getGetFilmCommentsQueryKey(tmdbId, { page }), enabled } }
+    { page, mediaType },
+    { query: { queryKey: getGetFilmCommentsQueryKey(tmdbId, { page, mediaType }), enabled } }
   );
   const { mutateAsync: postComment, isPending: posting } = usePostFilmComment();
   const { mutateAsync: deleteComment } = useDeleteFilmComment();
@@ -313,6 +320,9 @@ export function useFilmCommentThread(tmdbId: number, enabled = true) {
   const reset = useCallback(async () => {
     setPage(1);
     setAllComments([]);
+    // Deliberately the key WITHOUT page or kind: this is a prefix match,
+    // so it clears every page of both kinds for this id rather than the
+    // one page that happened to be on screen.
     await queryClient.invalidateQueries({ queryKey: getGetFilmCommentsQueryKey(tmdbId) });
   }, [queryClient, tmdbId]);
 
@@ -320,7 +330,7 @@ export function useFilmCommentThread(tmdbId: number, enabled = true) {
     const text = commentText.trim();
     if (!text) return;
     try {
-      await postComment({ tmdbId, data: { body: text } });
+      await postComment({ tmdbId, data: { body: text, mediaType } });
       setCommentText('');
       Keyboard.dismiss();
       await reset();
@@ -328,7 +338,7 @@ export function useFilmCommentThread(tmdbId: number, enabled = true) {
       const described = describeApiError(err, { action: 'post your comment' });
       Alert.alert(described.title, described.message);
     }
-  }, [commentText, postComment, tmdbId, reset]);
+  }, [commentText, postComment, tmdbId, mediaType, reset]);
 
   const remove = useCallback(
     (id: number) => {

@@ -41,9 +41,10 @@ import {
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
+import { countNoun } from '@/components/FilterBar';
 import { useColors } from '@/hooks/useColors';
 import { useToast } from '@/components/ToastProvider';
-import { useLockerByTmdbId } from '@/hooks/useWatchedTmdbIds';
+import { useLockerByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { webInputReset } from '@/lib/webInputReset';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -153,8 +154,8 @@ function FilmCard({
 
   // The viewer's own row for this film, if they have it. Shared query, so
   // this is a cache read wherever the locker has already loaded.
-  const locker = useLockerByTmdbId();
-  const savedMovie = match.tmdb_id != null ? locker.get(match.tmdb_id) : undefined;
+  const locker = useLockerByTitle();
+  const savedMovie = match.tmdb_id != null ? locker.get(titleKey({ tmdbId: match.tmdb_id, mediaType: match.media_type })) : undefined;
   // `added` wins: it is this session's action, and the refetch behind it
   // may not have landed yet.
   const alreadyThere = !added ? alreadyThereLabel(savedMovie) : null;
@@ -165,6 +166,7 @@ function FilmCard({
       await addMovie({
         data: {
           tmdbId: match.tmdb_id,
+          mediaType: asMediaType(match.media_type),
           title: match.title ?? match.movie_title,
           releaseYear: match.release_year,
           posterUrl: match.poster_url ?? '',
@@ -383,9 +385,9 @@ function FilmSelectRow({
   const selectStyles = useThemedStyles(makeSelectStyles);
   const colors = useColors();
   const displayTitle = match.title ?? match.movie_title;
-  const locker = useLockerByTmdbId();
+  const locker = useLockerByTitle();
   const alreadyThere = alreadyThereLabel(
-    match.tmdb_id != null ? locker.get(match.tmdb_id) : undefined
+    match.tmdb_id != null ? locker.get(titleKey({ tmdbId: match.tmdb_id, mediaType: match.media_type })) : undefined
   );
 
   return (
@@ -559,6 +561,7 @@ function BulkAddPanel({
         await addMovie({
           data: {
             tmdbId: m.tmdb_id!,
+            mediaType: asMediaType(m.media_type),
             title: m.title ?? m.movie_title,
             releaseYear: m.release_year,
             posterUrl: m.poster_url ?? '',
@@ -601,6 +604,7 @@ function BulkAddPanel({
           id: playlistId,
           data: {
             tmdbId: m.tmdb_id!,
+            mediaType: asMediaType(m.media_type),
             filmTitle: m.title ?? m.movie_title,
             posterUrl: m.poster_url ?? '',
             // On the item, not just on the locker film: a playlist is
@@ -617,6 +621,7 @@ function BulkAddPanel({
           await addMovie({
             data: {
               tmdbId: m.tmdb_id!,
+              mediaType: asMediaType(m.media_type),
               title: m.title ?? m.movie_title,
               releaseYear: m.release_year,
               posterUrl: m.poster_url ?? '',
@@ -667,7 +672,7 @@ function BulkAddPanel({
         ) : (
           <>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={ppStyles.doneText}>Adding {candidates.length} film{candidates.length !== 1 ? 's' : ''} to watchlist…</Text>
+            <Text style={ppStyles.doneText}>Adding {candidates.length} {countNoun(candidates.length)} to watchlist…</Text>
           </>
         )}
       </View>
@@ -688,7 +693,7 @@ function BulkAddPanel({
   return (
     <ScrollView contentContainerStyle={ppStyles.root} keyboardShouldPersistTaps="handled">
       <Text style={ppStyles.heading}>{alsoAddToWatchlist ? 'Save to playlist + watchlist' : 'Save to a playlist'}</Text>
-      <Text style={ppStyles.sub}>{candidates.length} film{candidates.length !== 1 ? 's' : ''} will be added</Text>
+      <Text style={ppStyles.sub}>{candidates.length} {countNoun(candidates.length)} will be added</Text>
 
       {/* Existing playlists — tap to add the selected films straight in */}
       {playlists.length > 0 && (
@@ -707,7 +712,7 @@ function BulkAddPanel({
               </View>
               <View style={ppStyles.plInfo}>
                 <Text style={ppStyles.plName}>{pl.name}</Text>
-                <Text style={ppStyles.plCount}>{pl.itemCount} film{pl.itemCount !== 1 ? 's' : ''}</Text>
+                <Text style={ppStyles.plCount}>{pl.itemCount} {countNoun(pl.itemCount)}</Text>
               </View>
               {addingTo === pl.id ? (
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -847,7 +852,7 @@ function LargeListPanel({
     <>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.scrollContent}>
         <Text style={llStyles.headline}>
-          {identified.length} film{identified.length === 1 ? '' : 's'} identified
+          {identified.length} {countNoun(identified.length)} identified
           {total > identified.length ? ` out of ${total}` : ''}
         </Text>
         {listTitle ? <Text style={llStyles.listName} numberOfLines={2}>{listTitle}</Text> : null}
@@ -989,7 +994,7 @@ function ManualFilmSearch({
 
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery.trim());
-  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [addingId, setAddingId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1015,6 +1020,7 @@ function ManualFilmSearch({
       await addMovie({
         data: {
           tmdbId: movie.tmdbId,
+          mediaType: asMediaType(movie.mediaType),
           title: movie.title,
           releaseYear: movie.releaseYear,
           posterUrl: movie.posterUrl,
@@ -1022,7 +1028,7 @@ function ManualFilmSearch({
         },
       });
       await queryClient.invalidateQueries({ queryKey: getListMoviesQueryKey() });
-      setAddedIds((prev) => new Set(prev).add(movie.tmdbId));
+      setAddedIds((prev) => new Set(prev).add(titleKey(movie)));
     } catch {
       showToast({ title: `Could not add "${movie.title}"`, variant: 'error' });
     } finally {
@@ -1062,7 +1068,7 @@ function ManualFilmSearch({
         </Text>
       ) : (
         results.map((movie) => {
-          const added = addedIds.has(movie.tmdbId);
+          const added = addedIds.has(titleKey(movie));
           return (
             <View key={movie.tmdbId} style={[manualSearchStyles.filmRow, { borderBottomColor: colors.border }]}>
               {movie.posterUrl ? (
@@ -1201,7 +1207,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
    * has just unticked. Reading the locker through a ref keeps it out of
    * that dependency list while still being current when the effect fires.
    */
-  const locker = useLockerByTmdbId();
+  const locker = useLockerByTitle();
   const lockerRef = useRef(locker);
   useEffect(() => { lockerRef.current = locker; }, [locker]);
   // Bumped every time the sheet opens fresh — remounts the ErrorBoundary below
@@ -1326,7 +1332,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
         .filter((m) =>
           m.confidence_score >= CONFIDENCE_THRESHOLD &&
           m.tmdb_id != null &&
-          !lockerRef.current.has(m.tmdb_id)
+          !lockerRef.current.has(titleKey({ tmdbId: m.tmdb_id, mediaType: m.media_type }))
         )
         .map((m) => String(m.tmdb_id))
       ));
@@ -1659,6 +1665,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
         visible
         onClose={() => setOpenFilm(null)}
         tmdbId={openFilm.tmdb_id}
+        mediaType={asMediaType(openFilm.media_type)}
         title={openFilm.title ?? openFilm.movie_title}
         posterUrl={openFilm.poster_url ?? ''}
         releaseYear={openFilm.release_year ?? ''}

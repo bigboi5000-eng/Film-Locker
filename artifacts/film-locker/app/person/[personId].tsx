@@ -15,7 +15,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGetPerson, getGetPersonQueryKey, type TmdbMovieCard } from '@workspace/api-client-react';
 import { LockerBadge } from '@/components/LockerBadge';
-import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
+import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -60,7 +60,7 @@ export default function PersonScreen() {
   const [selected, setSelected] = useState<TmdbMovieCard | null>(null);
   // A filmography is a long list of films you may well already own — the
   // reason for looking a director up is often to find what you have missed.
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatusByTitle = useLockerStatusByTitle();
 
   /** Which filmographies the user has opened out into a grid. */
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -171,7 +171,7 @@ export default function PersonScreen() {
                   style={[styles.poster, width ? { width, height: width * 1.5 } : null]}
                   contentFit="cover"
                 />
-                <LockerBadge status={lockerStatusByTmdbId.get(item.tmdbId) ?? null} size={20} />
+                <LockerBadge status={lockerStatusByTitle.get(titleKey(item)) ?? null} size={20} />
               </View>
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
               <Text style={styles.cardYear}>{item.releaseYear}</Text>
@@ -233,6 +233,7 @@ export default function PersonScreen() {
           visible
           onClose={() => setSelected(null)}
           tmdbId={selected.tmdbId}
+          mediaType={asMediaType(selected.mediaType)}
           title={selected.title}
           posterUrl={selected.posterUrl}
           releaseYear={selected.releaseYear}

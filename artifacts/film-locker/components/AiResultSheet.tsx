@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { countNoun } from '@/components/FilterBar';
+import { titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { useColors } from '@/hooks/useColors';
 import type { GeminiMovieMatch, Movie } from '@workspace/api-client-react';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
@@ -57,7 +59,7 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
   }, [visible, slideAnim]);
 
   // Correlate by TMDB id (populated by backend after lookup) — not fragile title-string matching
-  const savedTmdbIds = new Set(saved.map((m) => m.tmdbId));
+  const savedTitles = new Set(saved.map(titleKey));
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
@@ -65,11 +67,16 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
   });
 
   const renderMatch = ({ item }: { item: GeminiMovieMatch }) => {
-    // Use tmdb_id (resolved by backend) for accurate correlation — avoids title-string mismatch
+    // Use tmdb_id (resolved by backend) for accurate correlation — avoids
+    // title-string mismatch. Paired with the kind, because the id on its
+    // own is not a title: TMDB numbers films and series separately.
     const resolvedTmdbId = item.tmdb_id ?? null;
-    const wasSaved = resolvedTmdbId !== null && savedTmdbIds.has(resolvedTmdbId);
+    const resolvedKind = asMediaType(item.media_type);
+    const wasSaved =
+      resolvedTmdbId !== null &&
+      savedTitles.has(titleKey({ tmdbId: resolvedTmdbId, mediaType: resolvedKind }));
     const savedMovie = resolvedTmdbId !== null
-      ? saved.find((m) => m.tmdbId === resolvedTmdbId)
+      ? saved.find((m) => m.tmdbId === resolvedTmdbId && asMediaType(m.mediaType) === resolvedKind)
       : undefined;
     const belowThreshold = item.confidence_score < CONFIDENCE_THRESHOLD;
 
@@ -171,7 +178,7 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
                   Gemini Extraction
                 </Text>
                 <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>
-                  {saved.length} film{saved.length !== 1 ? 's' : ''} added to your locker
+                  {saved.length} {countNoun(saved.length)} added to your locker
                   {matches.length > 0 ? ` · ${matches.length} detected` : ''}
                 </Text>
               </View>

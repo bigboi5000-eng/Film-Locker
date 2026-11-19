@@ -32,9 +32,9 @@ import {
 import { MovieCard, MovieCardSkeleton, type MovieCardBadge } from '@/components/MovieCard';
 import { GridTopCaps } from '@/components/GridTopCaps';
 import { LoadError } from '@/components/LoadError';
-import { useWatchedTmdbIds, useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
+import { useWatchedTitles, useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
-import { FilterBar, FilterState, applyFilters, type FilterableMovie } from '@/components/FilterBar';
+import { FilterBar, FilterState, applyFilters, type FilterableMovie, countNoun } from '@/components/FilterBar';
 import { SharePlaylistSheet } from '@/components/SharePlaylistSheet';
 import { CollaboratorsSheet } from '@/components/CollaboratorsSheet';
 import { collaboratorColorMap, badgeInitials } from '@/lib/collaboratorColors';
@@ -45,16 +45,16 @@ import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
 
-function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
+function AddFilmsSection({ playlistId, existingTitles, onAdded }: {
   playlistId: number;
-  existingTmdbIds: Set<number>;
+  existingTitles: Set<string>;
   onAdded: () => void;
 }) {
   const colors = useColors();
   const editStyles = useThemedStyles(makeEditStyles);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [justAddedIds, setJustAddedIds] = useState<Set<number>>(new Set());
+  const [justAddedIds, setJustAddedIds] = useState<Set<string>>(new Set());
   const [addingId, setAddingId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -74,9 +74,14 @@ function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
     try {
       await addItem({
         id: playlistId,
-        data: { tmdbId: movie.tmdbId, filmTitle: movie.title, posterUrl: movie.posterUrl ?? '' },
+        data: {
+          tmdbId: movie.tmdbId,
+          mediaType: asMediaType(movie.mediaType),
+          filmTitle: movie.title,
+          posterUrl: movie.posterUrl ?? '',
+        },
       });
-      setJustAddedIds((prev) => new Set(prev).add(movie.tmdbId));
+      setJustAddedIds((prev) => new Set(prev).add(titleKey(movie)));
       onAdded();
     } catch {
       Alert.alert('Error', `Could not add "${movie.title}".`);
@@ -112,7 +117,7 @@ function AddFilmsSection({ playlistId, existingTmdbIds, onAdded }: {
         <Text style={editStyles.searchEmptyText}>No films found for "{debouncedQuery}"</Text>
       ) : (
         results.map((movie) => {
-          const alreadyIn = existingTmdbIds.has(movie.tmdbId) || justAddedIds.has(movie.tmdbId);
+          const alreadyIn = existingTitles.has(titleKey(movie)) || justAddedIds.has(titleKey(movie));
           return (
             <View key={movie.tmdbId} style={editStyles.filmRow}>
               {movie.posterUrl ? (
@@ -151,7 +156,7 @@ function EditSheet({
   initialName,
   initialDescription,
   initialIsPublic,
-  existingTmdbIds,
+  existingTitles,
   onSave,
   onDelete,
   onClose,
@@ -163,7 +168,7 @@ function EditSheet({
   initialName: string;
   initialDescription: string | null | undefined;
   initialIsPublic: boolean;
-  existingTmdbIds: Set<number>;
+  existingTitles: Set<string>;
   onSave: (data: { name: string; description: string | null; isPublic: boolean }) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -240,7 +245,7 @@ function EditSheet({
 
             <View style={editStyles.divider} />
 
-            <AddFilmsSection playlistId={playlistId} existingTmdbIds={existingTmdbIds} onAdded={onFilmAdded} />
+            <AddFilmsSection playlistId={playlistId} existingTitles={existingTitles} onAdded={onFilmAdded} />
 
             <View style={editStyles.divider} />
 
@@ -318,12 +323,12 @@ const makeEditStyles = (c: Palette) => StyleSheet.create({
  * make it public and cannot delete it — so handing them the edit sheet
  * would be a sheet of controls that mostly do not apply to them.
  */
-function AddFilmsSheet({ visible, onClose, playlistId, playlistName, existingTmdbIds, onFilmAdded }: {
+function AddFilmsSheet({ visible, onClose, playlistId, playlistName, existingTitles, onFilmAdded }: {
   visible: boolean;
   onClose: () => void;
   playlistId: number;
   playlistName: string;
-  existingTmdbIds: Set<number>;
+  existingTitles: Set<string>;
   onFilmAdded: () => void;
 }) {
   const editStyles = useThemedStyles(makeEditStyles);
@@ -338,7 +343,7 @@ function AddFilmsSheet({ visible, onClose, playlistId, playlistName, existingTmd
             <Text style={editStyles.title}>Add to {playlistName}</Text>
             <AddFilmsSection
               playlistId={playlistId}
-              existingTmdbIds={existingTmdbIds}
+              existingTitles={existingTitles}
               onAdded={onFilmAdded}
             />
             <TouchableOpacity style={editStyles.saveBtn} onPress={onClose} activeOpacity={0.8}>
@@ -355,6 +360,8 @@ function AddFilmsSheet({ visible, onClose, playlistId, playlistName, existingTmd
 
 interface ModalTarget {
   tmdbId: number;
+  /** Film or series. Absent on an item added before series existed. */
+  mediaType?: string | null;
   title: string;
   posterUrl: string;
   releaseYear: string;
@@ -382,8 +389,8 @@ export default function PlaylistScreen() {
   const [sort, setSort] = useState<SortState>({ key: 'none', direction: 'desc' });
   const [modalTarget, setModalTarget] = useState<ModalTarget | null>(null);
 
-  const watchedTmdbIds = useWatchedTmdbIds();
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const watchedTitles = useWatchedTitles();
+  const lockerStatusByTitle = useLockerStatusByTitle();
   const { data: playlist, isLoading, isError, error, refetch, isRefetching } = useGetPlaylist(numericId, {
     query: { queryKey: getGetPlaylistQueryKey(numericId), enabled: !isNaN(numericId) },
   });
@@ -472,8 +479,11 @@ export default function PlaylistScreen() {
   // filtering works the same way it does on the other tabs for anything
   // that's been through the TMDB enrichment pipeline.
   const { data: moviesData } = useListMovies();
-  const savedByTmdbId = useMemo(
-    () => new Map((moviesData?.movies ?? []).map((m) => [m.tmdbId, m])),
+  // Keyed by kind and id, like every other locker map: a playlist can
+  // hold a series whose number belongs to an unrelated film in the
+  // viewer's own locker, and that film's director must not leak onto it.
+  const savedByTitle = useMemo(
+    () => new Map((moviesData?.movies ?? []).map((m) => [titleKey(m), m])),
     [moviesData]
   );
 
@@ -504,11 +514,13 @@ export default function PlaylistScreen() {
     });
   }, [deletePlaylist, numericId, playlist?.name, queryClient, router]);
 
-  const handleRemove = useCallback((tmdbId: number, title: string) => {
+  const handleRemove = useCallback((tmdbId: number, mediaType: string | null | undefined, title: string) => {
     confirmDestructive(`Would you like to remove "${title}" from this playlist?`, 'Remove', async () => {
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       try {
-        await removeItem({ id: numericId, tmdbId });
+        // Without the kind this would take both the film and the series
+        // out, where a list holds two titles sharing a TMDB number.
+        await removeItem({ id: numericId, tmdbId, params: { mediaType: asMediaType(mediaType) } });
         await invalidate();
       } catch {
         Alert.alert('Error', `Could not remove "${title}".`);
@@ -517,9 +529,10 @@ export default function PlaylistScreen() {
   }, [removeItem, numericId, invalidate]);
 
   const openItemModal = useCallback((item: PlaylistItem) => {
-    const saved = savedByTmdbId.get(item.tmdbId);
+    const saved = savedByTitle.get(titleKey(item));
     setModalTarget({
       tmdbId: item.tmdbId,
+      mediaType: item.mediaType,
       title: item.filmTitle,
       posterUrl: item.posterUrl,
       releaseYear: saved?.releaseYear ?? '',
@@ -529,7 +542,7 @@ export default function PlaylistScreen() {
       // came from when it was added to a list and not to the locker.
       sourceUrl: item.sourceUrl ?? null,
     });
-  }, [savedByTmdbId]);
+  }, [savedByTitle]);
 
   const renderItem = useCallback(({ item }: { item: PlaylistItem }) => {
     /**
@@ -549,23 +562,23 @@ export default function PlaylistScreen() {
       <MovieCard
         id={item.tmdbId}
         title={item.filmTitle}
-        releaseYear={savedByTmdbId.get(item.tmdbId)?.releaseYear ?? ''}
+        releaseYear={savedByTitle.get(titleKey(item))?.releaseYear ?? ''}
         posterUrl={item.posterUrl}
         onPress={() => openItemModal(item)}
-        onLongPress={canEdit ? () => handleRemove(item.tmdbId, item.filmTitle) : undefined}
-        lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+        onLongPress={canEdit ? () => handleRemove(item.tmdbId, item.mediaType, item.filmTitle) : undefined}
+        lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
         badges={badges}
       />
     );
-  }, [savedByTmdbId, openItemModal, handleRemove, canEdit, watchedTmdbIds, personStyleById]);
+  }, [savedByTitle, openItemModal, handleRemove, canEdit, watchedTitles, personStyleById]);
 
   const items = playlist?.items ?? [];
-  const existingTmdbIds = useMemo(() => new Set(items.map((item) => item.tmdbId)), [items]);
+  const existingTitles = useMemo(() => new Set(items.map(titleKey)), [items]);
 
   // Merge in filterable metadata from the matching watchlist entry, if any.
   const filterableItems = useMemo(
     () => items.map((item) => {
-      const saved = savedByTmdbId.get(item.tmdbId);
+      const saved = savedByTitle.get(titleKey(item));
       return {
         ...item,
         genres: saved?.genres,
@@ -593,10 +606,10 @@ export default function PlaylistScreen() {
         // someone else put in this playlist is still ticked and still
         // filterable if the viewer has seen it — the saved row only
         // exists for films already in their own locker.
-        isWatched: watchedTmdbIds.has(item.tmdbId),
+        isWatched: watchedTitles.has(titleKey(item)),
       };
     }),
-    [items, savedByTmdbId, watchedTmdbIds]
+    [items, savedByTitle, watchedTitles]
   );
   const filteredItems = useMemo(
     () => applySort(applyFilters(filterableItems, filters), sort),
@@ -623,7 +636,7 @@ export default function PlaylistScreen() {
                   color={colors.textFaint}
                 />
                 <Text style={styles.headerMetaText}>
-                  {playlist?.isPublic ? 'Public' : 'Private'} · {items.length} film{items.length !== 1 ? 's' : ''}
+                  {playlist?.isPublic ? 'Public' : 'Private'} · {items.length} {countNoun(items.length)}
                 </Text>
               </View>
             </>
@@ -801,7 +814,7 @@ export default function PlaylistScreen() {
           {filteredItems.length > 0 && (
             <View style={styles.sectionLabelRow}>
               <Text style={styles.sectionLabel}>
-                {filteredItems.length} FILM{filteredItems.length === 1 ? '' : 'S'}
+                {filteredItems.length} {countNoun(filteredItems.length, filters.mediaType).toUpperCase()}
               </Text>
               {canEdit && <Text style={styles.sectionHint}>Hold to remove</Text>}
             </View>
@@ -861,7 +874,7 @@ export default function PlaylistScreen() {
           onClose={() => setAddVisible(false)}
           playlistId={numericId}
           playlistName={playlist.name}
-          existingTmdbIds={existingTmdbIds}
+          existingTitles={existingTitles}
           onFilmAdded={invalidate}
         />
       )}
@@ -873,7 +886,7 @@ export default function PlaylistScreen() {
           initialName={playlist.name}
           initialDescription={playlist.description}
           initialIsPublic={playlist.isPublic}
-          existingTmdbIds={existingTmdbIds}
+          existingTitles={existingTitles}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditVisible(false)}
@@ -887,6 +900,7 @@ export default function PlaylistScreen() {
           visible
           onClose={() => setModalTarget(null)}
           tmdbId={modalTarget.tmdbId}
+          mediaType={asMediaType(modalTarget.mediaType)}
           title={modalTarget.title}
           posterUrl={modalTarget.posterUrl}
           releaseYear={modalTarget.releaseYear}

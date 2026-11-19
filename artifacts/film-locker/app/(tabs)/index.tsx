@@ -36,7 +36,7 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { LoadError } from '@/components/LoadError';
-import { useWatchedTmdbIds, useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
+import { useWatchedTitles, useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { SearchResultRow } from '@/components/SearchResultRow';
 import { PlaylistCard } from '@/components/PlaylistCard';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
@@ -208,6 +208,9 @@ export default function HomeScreen() {
     if (match.tmdb_id == null) return;
     setSelectedMovie({
       tmdbId: match.tmdb_id,
+      // What TMDB actually matched, which the server reports back — not
+      // what Gemini guessed, and not assumed to be a film.
+      mediaType: match.media_type,
       title: match.title ?? match.movie_title,
       releaseYear: match.release_year,
       posterUrl: match.poster_url ?? '',
@@ -249,20 +252,24 @@ export default function HomeScreen() {
   const hasWatchlist = (lockerData?.movies.length ?? 0) > 0;
 
   /** Films already seen, so a rail can tick them wherever they appear. */
-  const watchedTmdbIds = useWatchedTmdbIds();
+  const watchedTitles = useWatchedTitles();
   // Saved-and-unwatched as well as watched: these rails are where a film
   // you have already decided on is most likely to be put in front of you.
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatusByTitle = useLockerStatusByTitle();
 
-  /** TMDB ids already in the locker, so a recommendation can say so. */
-  const savedTmdbIds = useMemo(
-    () => new Set((lockerData?.movies ?? []).map((m) => m.tmdbId)),
+  /** Titles already in the locker, so a recommendation can say so. */
+  const savedTitles = useMemo(
+    () => new Set((lockerData?.movies ?? []).map(titleKey)),
     [lockerData]
   );
   const isRefreshing = trendingRefetching || newRefetching || recommendationsRefetching || playlistsRefetching;
 
   const savedVersion = selectedMovie
-    ? lockerData?.movies.find((m) => m.tmdbId === selectedMovie.tmdbId)
+    ? lockerData?.movies.find(
+        (m) =>
+          m.tmdbId === selectedMovie.tmdbId &&
+          asMediaType(m.mediaType) === asMediaType(selectedMovie.mediaType),
+      )
     : undefined;
 
   // Avatar for the profile button. Clerk's own `imageUrl` is not consulted:
@@ -373,7 +380,10 @@ export default function HomeScreen() {
                 <AiResultRow
                   key={`ai-${match.tmdb_id ?? i}`}
                   match={match}
-                  isSaved={match.tmdb_id != null && savedTmdbIds.has(match.tmdb_id)}
+                  isSaved={
+                    match.tmdb_id != null &&
+                    savedTitles.has(titleKey({ tmdbId: match.tmdb_id, mediaType: match.media_type }))
+                  }
                   onPress={openAiResult}
                 />
               ))
@@ -401,9 +411,9 @@ export default function HomeScreen() {
                   <SearchResultRow
                     key={m.tmdbId}
                     movie={m}
-                    isSaved={savedTmdbIds.has(m.tmdbId)}
+                    isSaved={savedTitles.has(titleKey(m))}
                     onPress={(movie) => setSelectedMovie(movie)}
-                    isWatched={watchedTmdbIds.has(m.tmdbId)}
+                    isWatched={watchedTitles.has(titleKey(m))}
                   />
                 ))}
               </View>
@@ -439,7 +449,7 @@ export default function HomeScreen() {
                     onPress={setSelectedMovie}
                     width={CARD_W}
                     height={CARD_H}
-                    lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                    lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
                   />
                 </View>
               )}
@@ -474,7 +484,7 @@ export default function HomeScreen() {
                     onPress={setSelectedMovie}
                     width={CARD_W}
                     height={CARD_H}
-                    lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                    lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
                   />
                 </View>
               )}
@@ -510,7 +520,7 @@ export default function HomeScreen() {
                     onPress={setSelectedMovie}
                     width={CARD_W}
                     height={CARD_H}
-                    lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                    lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
                   />
                   </View>
                 )}
@@ -570,6 +580,7 @@ export default function HomeScreen() {
           visible={selectedMovie !== null}
           onClose={() => setSelectedMovie(null)}
           tmdbId={selectedMovie.tmdbId}
+          mediaType={asMediaType(selectedMovie.mediaType)}
           title={selectedMovie.title}
           posterUrl={selectedMovie.posterUrl}
           releaseYear={selectedMovie.releaseYear}

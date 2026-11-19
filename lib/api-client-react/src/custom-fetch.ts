@@ -87,6 +87,23 @@ function signalWithTimeout(
 }
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
+/**
+ * Tells the server this build can be shown a television series.
+ *
+ * Sent on every request, unconditionally, because this file ships IN the
+ * build — so its presence is exactly the fact the server needs, and there
+ * is nothing for a screen to remember to pass.
+ *
+ * The server defaults to films-only when it does not see this. That is not
+ * caution for its own sake: responses here are CAST, not validated, so a
+ * build that predates television does not reject a series, it shows one
+ * and then saves its tmdb_id as a film — and TMDB numbers the two
+ * separately, so the locker ends up holding a completely different film's
+ * cast and runtime under the series' name. See the server's
+ * lib/clientCapabilities.ts.
+ */
+const SUPPORTS_TV_HEADER = "x-film-locker-supports-tv";
+
 // ---------------------------------------------------------------------------
 // Module-level configuration
 // ---------------------------------------------------------------------------
@@ -443,6 +460,10 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  if (!headers.has(SUPPORTS_TV_HEADER)) {
+    headers.set(SUPPORTS_TV_HEADER, "1");
   }
 
   // Attach bearer token when an auth getter is configured and no

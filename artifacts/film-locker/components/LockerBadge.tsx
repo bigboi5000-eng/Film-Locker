@@ -20,7 +20,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
-import type { LockerStatus } from '@/hooks/useWatchedTmdbIds';
+import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
 export function LockerBadge({

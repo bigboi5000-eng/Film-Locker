@@ -106,6 +106,8 @@ interface ShareToFriendSheetProps {
   visible: boolean;
   onClose: () => void;
   tmdbId: number;
+  /** Film or series — carried so the recipient's tap opens the right one. */
+  mediaType: 'movie' | 'tv';
   filmTitle: string;
   posterUrl: string;
   /**
@@ -122,6 +124,7 @@ export function ShareToFriendSheet({
   onClose,
   tmdbId,
   filmTitle,
+  mediaType,
   posterUrl,
   onOpenChat,
 }: ShareToFriendSheetProps) {
@@ -153,7 +156,7 @@ export function ShareToFriendSheet({
       setSendingTo(user.clerkId);
       try {
         await send({
-          data: { toUserId: user.clerkId, tmdbId, filmTitle, posterUrl },
+          data: { toUserId: user.clerkId, tmdbId, mediaType, filmTitle, posterUrl },
         });
         setSentTo((prev) => new Set([...prev, user.clerkId]));
       } catch (err: any) {
@@ -162,7 +165,7 @@ export function ShareToFriendSheet({
         setSendingTo(null);
       }
     },
-    [send, tmdbId, filmTitle, posterUrl]
+    [send, tmdbId, mediaType, filmTitle, posterUrl]
   );
 
   const handleClose = useCallback(() => {

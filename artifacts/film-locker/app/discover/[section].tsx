@@ -22,8 +22,8 @@ import {
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { LoadError } from '@/components/LoadError';
-import { useLockerStatusByTmdbId } from '@/hooks/useWatchedTmdbIds';
-import { FilterBar, FilterState, applyFilters } from '@/components/FilterBar';
+import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
+import { FilterBar, FilterState, applyFilters, countNoun } from '@/components/FilterBar';
 import { applySort, type SortState } from '@/components/SortSheet';
 import { webInputReset } from '@/lib/webInputReset';
 import { getDeviceRegion } from '@/lib/region';
@@ -86,7 +86,7 @@ export default function DiscoverScreen() {
   const [selectedMovie, setSelectedMovie] = useState<TmdbMovieCard | null>(null);
 
   const region = useMemo(() => getDeviceRegion(), []);
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatusByTitle = useLockerStatusByTitle();
 
   // Fetch data for whichever section we're in
   const trending = useGetTrending({ region });
@@ -126,7 +126,11 @@ export default function DiscoverScreen() {
 
   // For the modal: find the saved version if it exists
   const savedVersion = selectedMovie
-    ? lockerData?.movies.find((m) => m.tmdbId === selectedMovie.tmdbId)
+    ? lockerData?.movies.find(
+        (m) =>
+          m.tmdbId === selectedMovie.tmdbId &&
+          asMediaType(m.mediaType) === asMediaType(selectedMovie.mediaType),
+      )
     : undefined;
 
   const handleBack = useCallback(() => router.back(), [router]);
@@ -141,7 +145,7 @@ export default function DiscoverScreen() {
             onPress={setSelectedMovie}
             width={CARD_W}
             height={CARD_H}
-            lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+            lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
           />
         </View>
       );
@@ -167,7 +171,7 @@ export default function DiscoverScreen() {
           </Text>
           {!isLoading && (
             <Text style={styles.headerCount}>
-              {filtered.length} film{filtered.length !== 1 ? 's' : ''}
+              {filtered.length} {countNoun(filtered.length, filters.mediaType)}
             </Text>
           )}
         </View>
@@ -250,6 +254,7 @@ export default function DiscoverScreen() {
           visible
           onClose={() => setSelectedMovie(null)}
           tmdbId={selectedMovie.tmdbId}
+          mediaType={asMediaType(selectedMovie.mediaType)}
           title={selectedMovie.title}
           posterUrl={selectedMovie.posterUrl}
           releaseYear={selectedMovie.releaseYear}

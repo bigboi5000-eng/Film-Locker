@@ -2043,11 +2043,15 @@ export const SharePlaylistResponse = zod.object({
 
 
 /**
- * @summary Remove a film from a playlist
+ * @summary Remove a film or series from a playlist
  */
 export const RemovePlaylistItemParams = zod.object({
   "id": zod.coerce.number(),
   "tmdbId": zod.coerce.number()
+})
+
+export const RemovePlaylistItemQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. Without it a list holding both titles that share a TMDB number would lose both. Omitted means film.\n')
 })
 
 export const RemovePlaylistItemResponse = zod.void()

@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import type { TmdbMovieCard } from '@workspace/api-client-react';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { LockerBadge } from '@/components/LockerBadge';
-import type { LockerStatus } from '@/hooks/useWatchedTmdbIds';
+import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
 interface DiscoverCardProps {

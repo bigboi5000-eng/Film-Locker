@@ -57,7 +57,7 @@ import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import { LockerBadge } from '@/components/LockerBadge';
-import { useLockerStatusByTmdbId, type LockerStatus } from '@/hooks/useWatchedTmdbIds';
+import { useLockerStatusByTitle, type LockerStatus, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
 /** How many posters the hero band shows before it starts repeating itself. */
@@ -122,7 +122,7 @@ export default function UserProfileScreen() {
   /** On your own profile: render it as somebody who does not follow you. */
   const [preview, setPreview] = useState(false);
   const [selected, setSelected] = useState<ProfileFilmCard | null>(null);
-  const lockerStatusByTmdbId = useLockerStatusByTmdbId();
+  const lockerStatusByTitle = useLockerStatusByTitle();
 
   const { data, isLoading } = useGetUserProfile(clerkId, {
     query: { queryKey: getGetUserProfileQueryKey(clerkId), enabled: Boolean(clerkId) },
@@ -468,7 +468,7 @@ export default function UserProfileScreen() {
                 <FilmStripCard
                   film={item}
                   meta={stars(item.rating)}
-                  lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                  lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
                   onPress={() => setSelected(item)}
                 />
               )}
@@ -489,7 +489,7 @@ export default function UserProfileScreen() {
                 <FilmStripCard
                   film={item}
                   meta={stars(item.rating)}
-                  lockerStatus={lockerStatusByTmdbId.get(item.tmdbId) ?? null}
+                  lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
                   onPress={() => setSelected(item)}
                 />
               )}
@@ -574,6 +574,7 @@ export default function UserProfileScreen() {
           visible
           onClose={() => setSelected(null)}
           tmdbId={selected.tmdbId}
+          mediaType={asMediaType(selected.mediaType)}
           title={selected.title ?? ''}
           posterUrl={selected.posterUrl ?? ''}
           releaseYear={selected.releaseYear ?? ''}

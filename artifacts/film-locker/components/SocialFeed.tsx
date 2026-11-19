@@ -57,10 +57,9 @@ import { useRequireAccount } from '@/hooks/useRequireAccount';
 import { describeApiError } from '@/lib/apiErrors';
 import { confirmDestructive } from '@/lib/confirm';
 import {
-  useLockerByTmdbId,
+  useLockerByTitle,
   furtherLockerStatus,
-  type LockerStatus,
-} from '@/hooks/useWatchedTmdbIds';
+  type LockerStatus, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
 import type { Palette } from '@/constants/colors';
@@ -178,6 +177,7 @@ function FeedCard({
         await addMovie({
           data: {
             tmdbId: item.tmdbId!,
+            mediaType: asMediaType(item.mediaType),
             title: item.title!,
             releaseYear: item.releaseYear ?? '',
             posterUrl: item.posterUrl ?? '',
@@ -470,7 +470,7 @@ export function SocialFeedView() {
    * The feed is full of films you may already have saved or seen — that is
    * rather the point of it — and the cards had no way to know.
    */
-  const lockerByTmdbId = useLockerByTmdbId();
+  const lockerByTitle = useLockerByTitle();
 
   const open = useCallback(
     (item: FeedItem) => {
@@ -557,7 +557,11 @@ export function SocialFeedView() {
           {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
           <FeedCard
             item={item}
-            savedMovie={item.tmdbId != null ? lockerByTmdbId.get(item.tmdbId) : undefined}
+            savedMovie={
+              item.tmdbId != null
+                ? lockerByTitle.get(titleKey({ tmdbId: item.tmdbId, mediaType: item.mediaType }))
+                : undefined
+            }
             onOpenFilm={() => open(item)}
             onOpenComments={() => openComments(item)}
             onOpenUser={() => router.push(`/user/${item.user.clerkId}`)}
@@ -566,7 +570,7 @@ export function SocialFeedView() {
         </>
       );
     },
-    [items, labelFor, lockerByTmdbId, open, openComments, router, styles.sectionLabel]
+    [items, labelFor, lockerByTitle, open, openComments, router, styles.sectionLabel]
   );
 
   if (isLoading) {
@@ -613,6 +617,7 @@ export function SocialFeedView() {
           visible
           onClose={() => setSelected(null)}
           tmdbId={selected.tmdbId}
+          mediaType={asMediaType(selected.mediaType)}
           title={selected.title ?? ''}
           posterUrl={selected.posterUrl ?? ''}
           releaseYear={selected.releaseYear ?? ''}
@@ -624,6 +629,7 @@ export function SocialFeedView() {
         <FilmCommentsSheet
           visible
           tmdbId={commentsFor.tmdbId}
+          mediaType={asMediaType(commentsFor.mediaType)}
           filmTitle={commentsFor.title ?? 'This film'}
           isLoggedIn={Boolean(isSignedIn)}
           onClose={() => {
@@ -641,6 +647,7 @@ export function SocialFeedView() {
           visible
           onClose={() => setSharing(null)}
           tmdbId={sharing.tmdbId}
+          mediaType={asMediaType(sharing.mediaType)}
           filmTitle={sharing.title ?? ''}
           posterUrl={sharing.posterUrl ?? ''}
         />
