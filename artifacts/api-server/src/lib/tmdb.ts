@@ -471,28 +471,44 @@ function parseYear(year: string | undefined): string | null {
  * would only reintroduce the same bias among the remaining candidates.
  * Without a year, popularity is still the best tie-break available.
  */
-export async function searchTmdb(query: string, year?: string): Promise<TmdbCandidate[]> {
+export async function searchTmdb(
+  query: string,
+  year?: string,
+  mediaType: MediaType = "movie",
+): Promise<TmdbCandidate[]> {
   const normalised = query.trim().toLowerCase();
   if (!normalised) return [];
 
   const releaseYear = parseYear(year);
 
   return cached(
-    // The year is part of the key: the same title searched with and without
-    // one is a different query and must not share a cached result.
-    `tmdb:search:${normalised}${releaseYear ? `:${releaseYear}` : ""}`,
+    // The year and the kind are both part of the key: the same title
+    // searched with and without a year is a different query, and searched
+    // as a film and as a series it is two different titles.
+    `tmdb:search:${mediaType}:${normalised}${releaseYear ? `:${releaseYear}` : ""}`,
     SEARCH_CACHE_TTL_MS,
     async () => {
       const apiKey = getApiKey();
-      const yearParam = releaseYear ? `&primary_release_year=${releaseYear}` : "";
-      const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}${yearParam}&include_adult=false&language=en-US`;
+      // The year parameter is named differently on the two endpoints, and
+      // the wrong name is silently IGNORED by TMDB rather than rejected —
+      // so a series search with primary_release_year would quietly stop
+      // disambiguating and go back to losing new titles to popular old
+      // ones, with nothing in the logs to say so.
+      const yearParam = releaseYear
+        ? mediaType === "tv"
+          ? `&first_air_date_year=${releaseYear}`
+          : `&primary_release_year=${releaseYear}`
+        : "";
+      const url = `${TMDB_BASE}/search/${mediaType}?query=${encodeURIComponent(query)}&api_key=${apiKey}${yearParam}&include_adult=false&language=en-US`;
 
-      const res = await fetch(url);
+      const res = await tmdbFetch(url);
       if (!res.ok) {
         throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
       }
 
-      const data = (await res.json()) as TmdbSearchResponse;
+      const data = (await res.json()) as {
+        results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
+      };
 
       // Prefer results with artwork, since the UI shows a poster card — but
       // do not let that discard the film entirely. TMDB indexes a new release
@@ -505,7 +521,7 @@ export async function searchTmdb(query: string, year?: string): Promise<TmdbCand
         ? candidates
         : [...candidates].sort((a, b) => b.popularity - a.popularity);
 
-      return ordered.slice(0, 3).map((m) => movieToCandidate(m, "movie"));
+      return ordered.slice(0, 3).map((m) => movieToCandidate(m, mediaType));
     },
     // Never remember a miss: a film TMDB hasn't indexed yet, or a title
     // Gemini garbled, would otherwise stay "not found" for the full hour
@@ -527,12 +543,13 @@ export async function searchTmdb(query: string, year?: string): Promise<TmdbCand
 export async function searchTmdbPreferringYear(
   query: string,
   year?: string,
+  mediaType: MediaType = "movie",
 ): Promise<TmdbCandidate[]> {
   if (parseYear(year)) {
-    const narrowed = await searchTmdb(query, year);
+    const narrowed = await searchTmdb(query, year, mediaType);
     if (narrowed.length > 0) return narrowed;
   }
-  return searchTmdb(query);
+  return searchTmdb(query, undefined, mediaType);
 }
 
 // ── Television, only so it can be ruled out ───────────────────────────────────

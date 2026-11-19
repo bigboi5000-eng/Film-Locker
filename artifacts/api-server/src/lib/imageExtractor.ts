@@ -58,10 +58,11 @@ export const SUPPORTED_IMAGE_TYPES: Record<string, string> = {
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 
 const IMAGE_PROMPT =
-  "Look at this image and extract every film or movie referenced in it. " +
+  "Look at this image and extract every film and television series " +
+  "referenced in it. " +
   "Read all visible text — printed titles, captions overlaid on stills, " +
   "poster artwork, cinema listings, handwritten lists — and also identify " +
-  "films you recognise from the imagery itself even where the title is not " +
+  "titles you recognise from the imagery itself even where the title is not " +
   "written out. " +
   "This is very often one of: a grid or collage of film stills with the " +
   "title printed under or over each one; a screenshot of a social media " +
@@ -70,10 +71,11 @@ const IMAGE_PROMPT =
   "appear — do not stop after the first few. " +
   "Ignore text that is not part of the content itself: app chrome, usernames, " +
   "follower counts, button labels, timestamps, battery and signal indicators. " +
-  "For each film return its canonical title, the four-digit release year " +
-  "(empty string if unknown), and a confidence_score from 0.0 to 1.0 " +
-  "reflecting how certain you are this is a real film reference rather than " +
-  "a song, book, or unrelated phrase. Exclude TV series and short films. " +
+  "For each one return its canonical title, the four-digit release year " +
+  "(first air year for a series; empty string if unknown), a media_type of " +
+  "'movie' or 'tv', and a confidence_score from 0.0 to 1.0 " +
+  "reflecting how certain you are this is a real title rather than " +
+  "a song, book, or unrelated phrase. Exclude short films. " +
   "Also set identified_from: 'text' when the title was written somewhere in " +
   "the image, and 'imagery' when nothing named it and you recognised the " +
   "film from the picture itself. Be honest about which — a film recognised " +

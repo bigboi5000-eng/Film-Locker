@@ -269,7 +269,8 @@ export async function processSocialLink(
   urlOrText: string,
   warn?: WarnFn,
   dryRun = false,
-  clerkUserId = ""
+  clerkUserId = "",
+  supportsTv = false,
 ): Promise<ProcessSocialLinkResult> {
 
   // ── Pre-step: extract URL from mixed text (e.g. Google share format) ──────
@@ -281,7 +282,7 @@ export async function processSocialLink(
     if (mixed.titleHint) {
       warn?.({ url, titleHint: mixed.titleHint }, "processSocialLink: mixed-text share detected — trying title as search query first");
       try {
-        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId, true, { sourceUrl: url });
+        const { matches, saved, listTitle } = await runMoviePipeline(mixed.titleHint, warn, dryRun, clerkUserId, true, { sourceUrl: url, supportsTv });
         if (matches.length > 0) {
           warn?.({ matchCount: matches.length }, "processSocialLink: title text pipeline succeeded");
           return { source: "caption", text: mixed.titleHint, matches, saved, listTitle };
@@ -323,7 +324,7 @@ export async function processSocialLink(
   if (searchQuery) {
     warn?.({ url, searchQuery }, "processSocialLink: search URL detected — running text pipeline on query");
     try {
-      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId, true, { sourceUrl: url });
+      const { matches, saved, listTitle } = await runMoviePipeline(searchQuery, warn, dryRun, clerkUserId, true, { sourceUrl: url, supportsTv });
       warn?.({ matchCount: matches.length }, "processSocialLink: search query pipeline complete");
       return { source: "caption", text: searchQuery, matches, saved, listTitle };
     } catch (err) {
@@ -445,7 +446,7 @@ export async function processSocialLink(
     warn?.({ url, captionPreview: pageCaption.slice(0, 300) }, "processSocialLink: page caption scrape succeeded");
     try {
       const { matches, saved, listTitle } = await timed("caption-pipeline", warn, () =>
-        runMoviePipeline(pageCaption!, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+        runMoviePipeline(pageCaption!, warn, dryRun, clerkUserId, false, { sourceUrl: url, supportsTv }));
       if (matches.length > 0) {
         warn?.({ matchCount: matches.length }, "processSocialLink: page caption pipeline succeeded");
         discardAudioDownload();
@@ -478,7 +479,7 @@ export async function processSocialLink(
         const thread = redditThreadText(post);
         if (thread) {
           const { matches, saved, listTitle } = await timed("reddit-thread-pipeline", warn, () =>
-            runMoviePipeline(thread, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+            runMoviePipeline(thread, warn, dryRun, clerkUserId, false, { sourceUrl: url, supportsTv }));
           if (matches.length > 0) {
             warn?.(
               { url, matchCount: matches.length, comments: post.comments.length },
@@ -516,7 +517,7 @@ export async function processSocialLink(
     if (preview && preview.movies.length > 0) {
       warn?.({ url, matchCount: preview.movies.length }, "processSocialLink: preview image found films");
       const { matches, saved, listTitle } =
-        await enrichAndSaveMatches(preview.movies, warn, dryRun, clerkUserId, preview.list_title, { sourceUrl: url });
+        await enrichAndSaveMatches(preview.movies, warn, dryRun, clerkUserId, preview.list_title, { sourceUrl: url, supportsTv });
       if (matches.length > 0) {
         discardAudioDownload();
         return { source: "image", text: null, matches, saved, listTitle };
@@ -556,7 +557,7 @@ export async function processSocialLink(
         const caption = captionText(post);
         if (caption) {
           const { matches, saved, listTitle } = await timed("apify-caption-pipeline", warn, () =>
-            runMoviePipeline(caption, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+            runMoviePipeline(caption, warn, dryRun, clerkUserId, false, { sourceUrl: url, supportsTv }));
           if (matches.length > 0) {
             warn?.({ url, matchCount: matches.length }, "processSocialLink: Apify caption found films");
             discardAudioDownload();
@@ -569,7 +570,7 @@ export async function processSocialLink(
         const comments = commentsText(post);
         if (comments) {
           const { matches, saved, listTitle } = await timed("apify-comments-pipeline", warn, () =>
-            runMoviePipeline(comments, warn, dryRun, clerkUserId, false, { sourceUrl: url }));
+            runMoviePipeline(comments, warn, dryRun, clerkUserId, false, { sourceUrl: url, supportsTv }));
           if (matches.length > 0) {
             warn?.({ url, matchCount: matches.length }, "processSocialLink: Apify comments found films");
             discardAudioDownload();
@@ -585,7 +586,7 @@ export async function processSocialLink(
             extractMoviesFromImageUrl(post.imageUrl!));
           if (image && image.movies.length > 0) {
             const { matches, saved, listTitle } =
-              await enrichAndSaveMatches(image.movies, warn, dryRun, clerkUserId, image.list_title, { sourceUrl: url });
+              await enrichAndSaveMatches(image.movies, warn, dryRun, clerkUserId, image.list_title, { sourceUrl: url, supportsTv });
             if (matches.length > 0) {
               warn?.({ url, matchCount: matches.length }, "processSocialLink: Apify cover frame found films");
               discardAudioDownload();
@@ -636,7 +637,7 @@ export async function processSocialLink(
       if (matches.length > 0) {
         const { matches: enriched, saved, listTitle: enrichedListTitle } =
           await timed("enrich-and-save", warn, () =>
-            enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle, { sourceUrl: url }));
+            enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle, { sourceUrl: url, supportsTv }));
         discardAudioDownload();
         return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
       }
@@ -669,7 +670,7 @@ export async function processSocialLink(
 
       if (audioMatches.length > 0) {
         const { matches, saved, listTitle } =
-          await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId, audioListTitle, { sourceUrl: url });
+          await enrichAndSaveMatches(audioMatches, warn, dryRun, clerkUserId, audioListTitle, { sourceUrl: url, supportsTv });
         return { source: "audio", text: null, matches, saved, listTitle };
       }
 
@@ -689,7 +690,7 @@ export async function processSocialLink(
       warn?.({ url, matchCount: videoMatches.length }, "processSocialLink: video extraction complete");
 
       const { matches, saved, listTitle } =
-        await enrichAndSaveMatches(videoMatches, warn, dryRun, clerkUserId, videoListTitle, { sourceUrl: url });
+        await enrichAndSaveMatches(videoMatches, warn, dryRun, clerkUserId, videoListTitle, { sourceUrl: url, supportsTv });
       return { source: "video", text: null, matches, saved, listTitle };
     } catch (err) {
       warn?.({ url, err }, "processSocialLink: video extraction failed — no data available");
@@ -715,7 +716,7 @@ export async function processSocialLink(
       warn?.({ url, matchCount: matches.length }, "processSocialLink: last-resort grounding complete");
       if (matches.length > 0) {
         const { matches: enriched, saved, listTitle: enrichedListTitle } =
-          await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle, { sourceUrl: url });
+          await enrichAndSaveMatches(matches, warn, dryRun, clerkUserId, listTitle, { sourceUrl: url, supportsTv });
         return { source: "caption", text: null, matches: enriched, saved, listTitle: enrichedListTitle };
       }
     } catch (err) {

@@ -54,6 +54,18 @@ import { extractMoviesFromImage } from "../../lib/imageExtractor";
 import { getRecommendations } from "../../lib/geminiRecommender";
 import { pickSeeds, RECENCY_HALF_LIFE_DAYS } from "../../lib/recommendationSeeds";
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
+import { clientSupportsTv } from "../../lib/clientCapabilities";
+
+/**
+ * Drop series for a build that cannot handle them.
+ *
+ * See lib/clientCapabilities.ts: an old build does not ignore a series, it
+ * saves it as a film with a TMDB id belonging to something else entirely.
+ */
+const forClient = (
+  movies: TmdbCandidate[],
+  supportsTv: boolean,
+): TmdbCandidate[] => (supportsTv ? movies : movies.filter((m) => m.mediaType !== "tv"));
 
 const router: IRouter = Router();
 
@@ -66,7 +78,9 @@ router.get("/movies/trending", async (req, res): Promise<void> => {
     const movies = await cached(`trending:${region}`, DISCOVERY_CACHE_TTL_MS, async () =>
       enrichCandidates(await fetchTrending(), region)
     );
-    res.json(GetTrendingResponse.parse({ movies }));
+    // Filtered on the way out rather than cached twice: the full list is
+    // the expensive thing to build, and it is the same list either way.
+    res.json(GetTrendingResponse.parse({ movies: forClient(movies, clientSupportsTv(req)) }));
   } catch (err) {
     req.log.error({ err }, "trending: TMDB fetch failed");
     res.status(502).json({ error: "Could not fetch trending movies from TMDB" });
@@ -80,7 +94,9 @@ router.get("/movies/new-releases", async (req, res): Promise<void> => {
     const movies = await cached(`new-releases:${region}`, DISCOVERY_CACHE_TTL_MS, async () =>
       enrichCandidates(await fetchNowPlaying(region), region)
     );
-    res.json(GetNewReleasesResponse.parse({ movies }));
+    res.json(
+      GetNewReleasesResponse.parse({ movies: forClient(movies, clientSupportsTv(req)) }),
+    );
   } catch (err) {
     req.log.error({ err }, "new-releases: TMDB fetch failed");
     res.status(502).json({ error: "Could not fetch new releases from TMDB" });
@@ -96,7 +112,9 @@ router.get("/movies/search", async (req, res): Promise<void> => {
   }
   try {
     const movies = await searchMoviesUI(q);
-    res.json(SearchMoviesResponse.parse({ movies }));
+    res.json(
+      SearchMoviesResponse.parse({ movies: forClient(movies, clientSupportsTv(req)) }),
+    );
   } catch (err) {
     req.log.error({ err }, "search: TMDB fetch failed");
     res.status(502).json({ error: "Could not search TMDB" });
@@ -135,6 +153,9 @@ router.get("/movies/tmdb/:tmdbId/similar", async (req, res): Promise<void> => {
     return;
   }
   try {
+    // No filter here: TMDB's recommendations for a series are series and
+    // for a film are films, so a build that cannot show television never
+    // asks this question about one in the first place.
     const movies = await fetchSimilarMovies(
       params.data.tmdbId,
       12,
@@ -254,7 +275,10 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
     }
 
     const region = normalizeRegion(req.query.region);
-    const enriched = await enrichCandidates(recommendations.slice(0, 20), region);
+    const enriched = await enrichCandidates(
+      forClient(recommendations, clientSupportsTv(req)).slice(0, 20),
+      region,
+    );
 
     req.log.info(
       {
@@ -413,7 +437,9 @@ router.post("/movies/ai-extract", requireAuth, async (req, res): Promise<void> =
     parsed.data.text,
     (data, msg) => req.log.warn(data, msg),
     false,
-    clerkUserId
+    clerkUserId,
+    false,
+    { supportsTv: clientSupportsTv(req) },
   );
 
   req.log.info({ matchCount: matches.length, saved: saved.length }, "ai-extract: complete");
@@ -436,7 +462,8 @@ router.post("/movies/process-social-link", requireAuth, async (req, res): Promis
     parsed.data.url,
     (data, msg) => req.log.warn(data, msg),
     dryRun,
-    clerkUserId
+    clerkUserId,
+    clientSupportsTv(req),
   );
 
   req.log.info(
@@ -486,7 +513,8 @@ router.post("/movies/extract-from-image", requireAuth, async (req, res): Promise
     (data, msg) => req.log.warn(data, msg),
     dryRun,
     clerkUserId,
-    extraction.list_title
+    extraction.list_title,
+    { supportsTv: clientSupportsTv(req) },
   );
 
   req.log.info(
@@ -530,7 +558,8 @@ router.post("/movies/recommend", requireAuth, async (req, res): Promise<void> =>
     (data, msg) => req.log.warn(data, msg),
     dryRun,
     clerkUserId,
-    list_title
+    list_title,
+    { supportsTv: clientSupportsTv(req) },
   );
 
   req.log.info({ matchCount: matches.length, saved: saved.length }, "recommend: complete");

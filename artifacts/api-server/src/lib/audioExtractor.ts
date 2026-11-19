@@ -43,11 +43,12 @@ function getClient(): GoogleGenAI {
 
 const AUDIO_PROMPT =
   "Listen to this audio track from a social media clip. " +
-  "Extract every movie title and release year being discussed or referenced. " +
-  "For each film, return its canonical title, the four-digit release year " +
-  "(empty string if unknown), and a confidence_score from 0.0 to 1.0 reflecting " +
-  "how certain you are this is a real movie reference and not a song, book, or " +
-  "figure of speech. Exclude TV series and short films. If this is a 'Top N' or " +
+  "Extract every film and television series being discussed or referenced. " +
+  "For each one, return its canonical title, the four-digit release year " +
+  "(first air year for a series; empty string if unknown), a media_type of " +
+  "'movie' or 'tv', and a confidence_score from 0.0 to 1.0 reflecting " +
+  "how certain you are this is a real title and not a song, book, or " +
+  "figure of speech. Exclude short films. If this is a 'Top N' or " +
   "countdown-style list, extract every title mentioned, not just the first few, " +
   "and set list_title to a short name for the list (e.g. 'Top 10 Horror Films of " +
   "All Time'); otherwise set list_title to null. " +

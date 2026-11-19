@@ -159,6 +159,17 @@ export interface TmdbMovieDetailsResponse {
 }
 
 /**
+ * Which of TMDB's two id sequences tmdb_id belongs to. Not simply what the model said — the lookup falls back to the other sequence on a miss, so this is what TMDB actually matched. Absent when nothing matched, and absent means film.
+ */
+export type GeminiMovieMatchMediaType = typeof GeminiMovieMatchMediaType[keyof typeof GeminiMovieMatchMediaType];
+
+
+export const GeminiMovieMatchMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+/**
  * How the film was identified, where the source could tell. "text" means a title was written somewhere — printed on a poster, burned into a still, typed in a caption. "imagery" means nothing named it and the model recognised the film from what it could see.
  * The two are not equally reliable, and confidence_score does not separate them: a scene recognised wrongly comes back as a real film with a high score, and the TMDB lookup cannot catch it either, because the title resolves — it is simply the wrong film. Absent where the path could not tell, which means "not known" rather than "read from text".
  */
@@ -178,6 +189,8 @@ export interface GeminiMovieMatch {
   release_year: string;
   confidence_score: number;
   tmdb_id?: number | null;
+  /** Which of TMDB's two id sequences tmdb_id belongs to. Not simply what the model said — the lookup falls back to the other sequence on a miss, so this is what TMDB actually matched. Absent when nothing matched, and absent means film. */
+  media_type?: GeminiMovieMatchMediaType;
   poster_url?: string | null;
   title?: string | null;
   overview?: string | null;

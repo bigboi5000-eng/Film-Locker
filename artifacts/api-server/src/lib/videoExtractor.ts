@@ -47,11 +47,12 @@ function getClient(): GoogleGenAI {
 const VIDEO_PROMPT =
   "Watch this video clip from a social media post, including any on-screen text, " +
   "title cards, captions, or graphics — not just narration or dialogue. " +
-  "Extract every movie title and release year being shown or discussed. " +
-  "For each film, return its canonical title, the four-digit release year " +
-  "(empty string if unknown), and a confidence_score from 0.0 to 1.0 reflecting " +
-  "how certain you are this is a real movie reference and not a song, book, or " +
-  "figure of speech. Exclude TV series and short films. This is very often a " +
+  "Extract every film and television series being shown or discussed. " +
+  "For each one, return its canonical title, the four-digit release year " +
+  "(first air year for a series; empty string if unknown), a media_type of " +
+  "'movie' or 'tv', and a confidence_score from 0.0 to 1.0 reflecting " +
+  "how certain you are this is a real title and not a song, book, or " +
+  "figure of speech. Exclude short films. This is very often a " +
   "'Top N' or countdown-style list revealed through on-screen text with quiet or " +
   "no narration — read every title shown, in order, even if there is no voiceover " +
   "mentioning it, and set list_title to a short name for the list (e.g. 'Top 10 " +

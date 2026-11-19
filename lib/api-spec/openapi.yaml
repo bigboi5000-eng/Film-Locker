@@ -1982,6 +1982,14 @@ components:
         tmdb_id:
           type: integer
           nullable: true
+        media_type:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Which of TMDB's two id sequences tmdb_id belongs to. Not simply
+            what the model said — the lookup falls back to the other
+            sequence on a miss, so this is what TMDB actually matched.
+            Absent when nothing matched, and absent means film.
         # TMDB card fields — populated in dry-run mode so the UI can show a
         # film card without a separate API call.
         poster_url:

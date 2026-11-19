@@ -6,6 +6,20 @@ export interface GeminiMovieMatch {
   movie_title: string;
   release_year: string;
   confidence_score: number;
+  /**
+   * "movie" or "tv".
+   *
+   * Asked for rather than inferred. The two are told apart by knowing what
+   * the title IS, which is exactly what the model is already doing and
+   * what nothing downstream can recover: a search for "Fargo" resolves to
+   * both a film and a series, and picking by popularity gets it wrong
+   * about half the time.
+   *
+   * Optional because a source that cannot tell says nothing, and a title
+   * with no kind is looked up as a film first — which is what this
+   * pipeline did for its whole life before series were allowed in.
+   */
+  media_type?: "movie" | "tv";
   /** One-sentence hook — only populated by geminiRecommender.ts, absent elsewhere. */
   synopsis?: string;
   /**
@@ -69,11 +83,19 @@ const RESPONSE_SCHEMA = {
           confidence_score: {
             type: Type.NUMBER,
             description:
-              "Confidence 0.0–1.0 that this token is truly a movie reference. " +
-              "1.0 = unmistakably a film title. 0.0 = almost certainly not.",
+              "Confidence 0.0–1.0 that this token is truly a film or series " +
+              "reference. 1.0 = unmistakably a title. 0.0 = almost certainly not.",
+          },
+          media_type: {
+            type: Type.STRING,
+            enum: ["movie", "tv"],
+            description:
+              "'tv' for a television series, miniseries or limited series; " +
+              "'movie' for a feature film, including a television film. " +
+              "Several titles exist as both — say which one the text means.",
           },
         },
-        required: ["movie_title", "release_year", "confidence_score"],
+        required: ["movie_title", "release_year", "confidence_score", "media_type"],
       },
     },
     list_title: {
@@ -92,12 +114,13 @@ const RESPONSE_SCHEMA = {
 };
 
 const SYSTEM_PROMPT =
-  "You are a film-identification expert. Given any text — social media captions, " +
-  "reviews, lists, or freeform prose — extract every theatrical or streaming film " +
-  "referenced. For each film return its canonical title, the four-digit release year " +
-  "(leave empty if genuinely unknown), and a confidence_score from 0.0 to 1.0 " +
-  "reflecting how certain you are this is a real movie reference and not a song, " +
-  "book, or figure of speech. Exclude TV series and short films.\n\n" +
+  "You are a film and television identification expert. Given any text — social media captions, " +
+  "reviews, lists, or freeform prose — extract every film and television series " +
+  "referenced. For each one return its canonical title, the four-digit release year " +
+  "(first air year for a series; leave empty if genuinely unknown), a media_type of " +
+  "'movie' or 'tv', and a confidence_score from 0.0 to 1.0 " +
+  "reflecting how certain you are this is a real film or series reference and not a " +
+  "song, book, or figure of speech. Exclude short films.\n\n" +
   "The confidence_score must ALSO reflect whether the film is what the text is " +
   "actually about. A film the text discusses, reviews, recommends or lists scores " +
   "high. A film named only in passing scores 0.3 or below — a comparison ('I don't " +

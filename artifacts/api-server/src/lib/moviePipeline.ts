@@ -11,7 +11,14 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
 import { extractMoviesWithGemini, type GeminiMovieMatch } from "./geminiParser";
-import { searchTmdb, searchTmdbPreferringYear, searchTmdbTv, fetchMovieDetails } from "./tmdb";
+import {
+  searchTmdb,
+  searchTmdbPreferringYear,
+  searchTmdbTv,
+  fetchMovieDetails,
+  DEFAULT_REGION,
+  type MediaType,
+} from "./tmdb";
 
 export type SavedMovie = typeof moviesTable.$inferSelect;
 
@@ -20,6 +27,15 @@ export interface EnrichedMatch {
   release_year: string;
   confidence_score: number;
   tmdb_id: number | null;
+  /**
+   * Which of TMDB's two id spaces tmdb_id belongs to.
+   *
+   * Not simply carried over from what Gemini said: the lookup falls back
+   * to the other space on a miss, so this is what TMDB actually matched.
+   * Absent when nothing matched, and absent means film for any client that
+   * does not read it.
+   */
+  media_type?: MediaType;
   /** Populated in dry-run mode — TMDB card fields for UI display. */
   poster_url?: string | null;
   title?: string | null;
@@ -35,9 +51,11 @@ export interface EnrichedMatch {
   /**
    * Set when the title matched no film but does match a television series.
    *
-   * Film Locker holds films, so this is never something to save — it is
-   * there so the app can say "that is a TV series" instead of showing an
-   * empty result, which looks identical to having failed to read the post.
+   * Only ever populated for an app build that cannot save a series. A build
+   * that can gets the series itself, as an ordinary match with a tmdb_id
+   * and media_type: "tv". Kept, rather than removed with television
+   * support, because an older build still reads it — and reads nothing
+   * else that would let it say anything useful about a series.
    */
   tv_series_name?: string | null;
   tv_series_year?: string | null;
@@ -139,6 +157,17 @@ export interface SaveOptions {
    * camera, a search, an AI extraction from typed text.
    */
   sourceUrl?: string | null;
+  /**
+   * Whether the app build that asked can show a television series.
+   *
+   * Defaults to false, and that default is the safe one: an old build
+   * handed a series saves it as a film under an id that belongs to
+   * something else (see lib/clientCapabilities.ts). When false this
+   * behaves exactly as it did before series were allowed in — a series is
+   * not saved, and comes back as the `tv_series_name` explanation so the
+   * user is told what it is instead of being shown an empty sheet.
+   */
+  supportsTv?: boolean;
 }
 
 export async function enrichAndSaveMatches(
@@ -172,14 +201,42 @@ export async function enrichAndSaveMatches(
   // Index-aligned with `sanitised`; null means "no usable TMDB match", either
   // because the match was below the confidence threshold, the search found
   // nothing, or the search itself failed.
+  const supportsTv = options.supportsTv ?? false;
+
   const hits = await mapWithConcurrency(sanitised, TMDB_CONCURRENCY, async (match) => {
     if (!(match.confidence_score >= CONFIDENCE_THRESHOLD)) return null;
+
+    // Which of TMDB's two id spaces to look in. Gemini is asked outright,
+    // because the kind cannot be recovered afterwards: "Fargo" resolves in
+    // both, and picking by popularity gets it wrong about half the time.
+    //
+    // When the client cannot show television this stays "movie" whatever
+    // Gemini said, which keeps the old behaviour exactly — the series is
+    // not found as a film, and pass 1b below explains why.
+    const wanted: MediaType = supportsTv && match.media_type === "tv" ? "tv" : "movie";
+
     try {
       // Gemini's release_year disambiguates remakes and same-titled films,
       // and is what keeps a brand-new release from losing to a better-known
       // older one. It falls back to an unnarrowed search when the year finds
       // nothing, so a wrong year costs a little latency, never a match.
-      return (await searchTmdbPreferringYear(match.movie_title, match.release_year))[0] ?? null;
+      const primary = await searchTmdbPreferringYear(
+        match.movie_title,
+        match.release_year,
+        wanted,
+      );
+      if (primary[0]) return primary[0];
+
+      // Gemini can call it wrong — a film spun off a series, a series
+      // named after a film. A miss in one space is worth one look in the
+      // other before giving up, and only ever on a miss, so the ordinary
+      // path costs nothing.
+      if (!supportsTv) return null;
+      const other: MediaType = wanted === "tv" ? "movie" : "tv";
+      return (
+        (await searchTmdbPreferringYear(match.movie_title, match.release_year, other))[0] ??
+        null
+      );
     } catch (err) {
       warn?.({ match, err }, "pipeline: TMDB search failed for match");
       return null;
@@ -195,7 +252,10 @@ export async function enrichAndSaveMatches(
     sanitised.map((match, i) => ({ match, i })),
     TMDB_CONCURRENCY,
     async ({ match, i }) => {
-      if (hits[i]) return null; // a film was found; nothing needs explaining
+      if (hits[i]) return null; // something was found; nothing needs explaining
+      // A build that CAN save a series has already had one looked for
+      // above and found nothing, so there is nothing left to explain.
+      if (supportsTv) return null;
       if (match.confidence_score < TV_CHECK_FLOOR) return null;
       try {
         return await searchTmdbTv(match.movie_title, match.release_year);
@@ -211,7 +271,7 @@ export async function enrichAndSaveMatches(
   // Sequential and cheap (no I/O), so result ordering and de-duplication stay
   // exactly as before — highest confidence first, first occurrence of a given
   // TMDB id wins.
-  const seenTmdb = new Set<number>();
+  const seenTmdb = new Set<string>();
   const enrichedMatches: EnrichedMatch[] = [];
   const toSave: NonNullable<(typeof hits)[number]>[] = [];
 
@@ -234,13 +294,19 @@ export async function enrichAndSaveMatches(
     enrichedMatches.push({
       ...match,
       tmdb_id: hit.tmdbId,
+      // What TMDB actually matched, which is not always what Gemini said —
+      // the fallback search above may have found it in the other space.
+      media_type: hit.mediaType,
       poster_url: hit.posterUrl,
       title: hit.title,
       overview: hit.overview,
     });
 
-    if (seenTmdb.has(hit.tmdbId)) return;
-    seenTmdb.add(hit.tmdbId);
+    // Keyed by kind and id: a post naming both a film and the series made
+    // from it is two titles, and on the id alone one of them vanishes.
+    const key = `${hit.mediaType}:${hit.tmdbId}`;
+    if (seenTmdb.has(key)) return;
+    seenTmdb.add(key);
     toSave.push(hit);
   });
 
@@ -257,13 +323,19 @@ export async function enrichAndSaveMatches(
   const savedOrNull = await mapWithConcurrency(toSave, TMDB_CONCURRENCY, async (hit) => {
     try {
       // Fetch full details (director, cast, genres, language, watch providers)
-      const details = await fetchMovieDetails(hit.tmdbId).catch((err) => {
-        warn?.({ err, tmdbId: hit.tmdbId }, "pipeline: fetchMovieDetails failed — using basic data");
-        return null;
-      });
+      const details = await fetchMovieDetails(hit.tmdbId, DEFAULT_REGION, hit.mediaType).catch(
+        (err) => {
+          warn?.(
+            { err, tmdbId: hit.tmdbId, mediaType: hit.mediaType },
+            "pipeline: fetchMovieDetails failed — using basic data",
+          );
+          return null;
+        },
+      );
 
       const values = {
         tmdbId: hit.tmdbId,
+        mediaType: hit.mediaType,
         clerkUserId,
         title: details?.title ?? hit.title,
         releaseYear: details?.releaseYear ?? hit.releaseYear,
@@ -300,7 +372,10 @@ export async function enrichAndSaveMatches(
           .insert(moviesTable)
           .values(values)
           .onConflictDoUpdate({
-            target: [moviesTable.tmdbId, moviesTable.clerkUserId],
+            // Matches the unique index, which includes media_type. Without
+            // it this would claim a conflict target Postgres has no index
+            // for and the statement would simply error.
+            target: [moviesTable.tmdbId, moviesTable.clerkUserId, moviesTable.mediaType],
             set: {
               director: values.director,
               cast: values.cast,
@@ -338,6 +413,7 @@ export async function enrichAndSaveMatches(
             .where(
               and(
                 eq(moviesTable.tmdbId, hit.tmdbId),
+                eq(moviesTable.mediaType, hit.mediaType),
                 eq(moviesTable.clerkUserId, clerkUserId),
               )
             )
@@ -383,12 +459,28 @@ export async function runMoviePipeline(
   const { movies: rawMatches, list_title: listTitle } = await extractMoviesWithGemini(text);
 
   if (rawMatches.length === 0 && treatAsLiteralTitle) {
-    const hits = await searchTmdb(text).catch(() => []);
-    const hit = hits[0];
+    // Films first, then series — and only for a client that can save one.
+    // A title Gemini could not place is as likely to be a series as a
+    // film, and "Chernobyl" pasted in plain text found nothing at all
+    // before this.
+    let hit = (await searchTmdb(text).catch(() => []))[0];
+    if (!hit && options.supportsTv) {
+      hit = (await searchTmdb(text, undefined, "tv").catch(() => []))[0];
+    }
     if (hit) {
-      warn?.({ text, tmdbId: hit.tmdbId }, "pipeline: Gemini found no reference — direct TMDB search matched");
+      warn?.(
+        { text, tmdbId: hit.tmdbId, mediaType: hit.mediaType },
+        "pipeline: Gemini found no reference — direct TMDB search matched",
+      );
       return enrichAndSaveMatches(
-        [{ movie_title: hit.title, release_year: hit.releaseYear, confidence_score: 1 }],
+        [
+          {
+            movie_title: hit.title,
+            release_year: hit.releaseYear,
+            confidence_score: 1,
+            media_type: hit.mediaType,
+          },
+        ],
         warn,
         dryRun,
         clerkUserId,

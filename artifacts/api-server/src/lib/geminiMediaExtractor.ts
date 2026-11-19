@@ -20,7 +20,7 @@ export const MEDIA_RESPONSE_SCHEMA = {
   properties: {
     movies: {
       type: Type.ARRAY,
-      description: "All movies or films referenced in the media",
+      description: "All films and television series referenced in the media",
       items: {
         type: Type.OBJECT,
         properties: {
@@ -35,8 +35,16 @@ export const MEDIA_RESPONSE_SCHEMA = {
           confidence_score: {
             type: Type.NUMBER,
             description:
-              "Confidence 0.0–1.0 that this is a genuine movie reference. " +
-              "1.0 = unmistakably a film title. 0.0 = almost certainly not.",
+              "Confidence 0.0–1.0 that this is a genuine film or series " +
+              "reference. 1.0 = unmistakably a title. 0.0 = almost certainly not.",
+          },
+          media_type: {
+            type: Type.STRING,
+            enum: ["movie", "tv"],
+            description:
+              "'tv' for a television series, miniseries or limited series; " +
+              "'movie' for a feature film, including a television film. " +
+              "Several titles exist as both — say which one this is.",
           },
           identified_from: {
             type: Type.STRING,
@@ -49,7 +57,7 @@ export const MEDIA_RESPONSE_SCHEMA = {
               "film is a judgement and will be shown to the user as one.",
           },
         },
-        required: ["movie_title", "release_year", "confidence_score"],
+        required: ["movie_title", "release_year", "confidence_score", "media_type"],
       },
     },
     list_title: {
@@ -172,6 +180,12 @@ export async function uploadAndAnalyzeMedia(
         // the client shows as nothing rather than as "read from text".
         ...(m.identified_from === "text" || m.identified_from === "imagery"
           ? { identified_from: m.identified_from }
+          : {}),
+        // Same rule: only a literal "tv" or "movie" counts. Anything else
+        // is left undefined, which the pipeline reads as "look it up as a
+        // film", the behaviour this had before series were allowed in.
+        ...(m.media_type === "movie" || m.media_type === "tv"
+          ? { media_type: m.media_type }
           : {}),
       }));
 
