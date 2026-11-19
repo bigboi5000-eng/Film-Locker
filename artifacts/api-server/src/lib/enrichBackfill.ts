@@ -23,7 +23,7 @@
  */
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
-import { fetchMovieDetails } from "./tmdb";
+import { fetchMovieDetails, normalizeMediaType, DEFAULT_REGION, type MediaType } from "./tmdb";
 import { logger as rootLogger } from "./logger";
 
 /** Pared-back logger interface, so the route can pass its request logger. */
@@ -72,28 +72,40 @@ export interface BackfillResult {
  * table. Only rows actually missing something are collected; a row with
  * nothing missing is simply left alone, null `enriched_at` and all.
  */
-async function filmsNeedingVisit(limit: number, clerkUserId?: string): Promise<number[]> {
+async function filmsNeedingVisit(
+  limit: number,
+  clerkUserId?: string,
+): Promise<Array<{ tmdbId: number; mediaType: MediaType }>> {
   const missing = sql`(
     array_length(${moviesTable.genres}, 1) IS NULL
-    OR ${moviesTable.runtime} IS NULL
+    -- Runtime is a film's question. TMDB's episode_run_time is minutes
+    -- per episode and is deliberately not stored, so a series' runtime is
+    -- permanently null and would keep it in this queue for good.
+    OR (${moviesTable.mediaType} = 'movie' AND ${moviesTable.runtime} IS NULL)
     OR ${moviesTable.tmdbRating} IS NULL
   )`;
 
   const rows = await db
-    .select({ tmdbId: moviesTable.tmdbId, oldest: sql<string>`min(${moviesTable.addedAt})` })
+    .select({
+      tmdbId: moviesTable.tmdbId,
+      // Grouped with the id, not dropped: film 1399 and series 1399 are two
+      // titles needing two different TMDB requests.
+      mediaType: moviesTable.mediaType,
+      oldest: sql<string>`min(${moviesTable.addedAt})`,
+    })
     .from(moviesTable)
     .where(
       clerkUserId
         ? and(isNull(moviesTable.enrichedAt), missing, eq(moviesTable.clerkUserId, clerkUserId))
         : and(isNull(moviesTable.enrichedAt), missing),
     )
-    .groupBy(moviesTable.tmdbId)
+    .groupBy(moviesTable.tmdbId, moviesTable.mediaType)
     // Oldest first, so a run that hits the cap makes deterministic progress
     // instead of revisiting whichever films the planner happened to return.
     .orderBy(asc(sql`min(${moviesTable.addedAt})`))
     .limit(limit);
 
-  return rows.map((r) => r.tmdbId);
+  return rows.map((r) => ({ tmdbId: r.tmdbId, mediaType: normalizeMediaType(r.mediaType) }));
 }
 
 /**
@@ -106,18 +118,18 @@ async function filmsNeedingVisit(limit: number, clerkUserId?: string): Promise<n
 export async function backfillEnrichment(options: BackfillOptions = {}): Promise<BackfillResult> {
   const { limit = 400, spacingMs = 300, clerkUserId, logger = rootLogger } = options;
 
-  const tmdbIds = await filmsNeedingVisit(limit, clerkUserId);
-  if (tmdbIds.length === 0) return { films: 0, enriched: 0, failed: 0, rows: 0, more: false };
+  const titles = await filmsNeedingVisit(limit, clerkUserId);
+  if (titles.length === 0) return { films: 0, enriched: 0, failed: 0, rows: 0, more: false };
 
-  logger.info({ films: tmdbIds.length, clerkUserId: clerkUserId ?? null }, "enrich backfill: starting");
+  logger.info({ films: titles.length, clerkUserId: clerkUserId ?? null }, "enrich backfill: starting");
 
   let enriched = 0;
   let failed = 0;
   let rows = 0;
 
-  for (const tmdbId of tmdbIds) {
+  for (const { tmdbId, mediaType } of titles) {
     try {
-      const details = await fetchMovieDetails(tmdbId);
+      const details = await fetchMovieDetails(tmdbId, DEFAULT_REGION, mediaType);
       if (!details) {
         // A null here is the details request itself failing, which is as
         // likely to be a blip as a deleted film — and blips are not cached.
@@ -149,23 +161,25 @@ export async function backfillEnrichment(options: BackfillOptions = {}): Promise
           enrichedAt: new Date(),
         })
         .where(
-          clerkUserId
-            ? and(eq(moviesTable.tmdbId, tmdbId), eq(moviesTable.clerkUserId, clerkUserId))
-            : eq(moviesTable.tmdbId, tmdbId),
+          and(
+            eq(moviesTable.tmdbId, tmdbId),
+            eq(moviesTable.mediaType, mediaType),
+            clerkUserId ? eq(moviesTable.clerkUserId, clerkUserId) : undefined,
+          ),
         )
         .returning({ id: moviesTable.id });
 
       enriched++;
       rows += written.length;
     } catch (err) {
-      logger.warn({ err, tmdbId }, "enrich backfill: film failed");
+      logger.warn({ err, tmdbId, mediaType }, "enrich backfill: title failed");
       failed++;
     }
 
     await new Promise((r) => setTimeout(r, spacingMs));
   }
 
-  const result: BackfillResult = { films: tmdbIds.length, enriched, failed, rows, more: tmdbIds.length === limit };
+  const result: BackfillResult = { films: titles.length, enriched, failed, rows, more: titles.length === limit };
   logger.info(result, "enrich backfill: finished");
   return result;
 }
@@ -177,11 +191,16 @@ export async function backfillEnrichment(options: BackfillOptions = {}): Promise
 export async function countFilmsNeedingVisit(clerkUserId?: string): Promise<number> {
   const missing = sql`(
     array_length(${moviesTable.genres}, 1) IS NULL
-    OR ${moviesTable.runtime} IS NULL
+    -- Runtime is a film's question. TMDB's episode_run_time is minutes
+    -- per episode and is deliberately not stored, so a series' runtime is
+    -- permanently null and would keep it in this queue for good.
+    OR (${moviesTable.mediaType} = 'movie' AND ${moviesTable.runtime} IS NULL)
     OR ${moviesTable.tmdbRating} IS NULL
   )`;
   const result = await db
-    .select({ films: sql<string>`count(distinct ${moviesTable.tmdbId})` })
+    .select({
+      films: sql<string>`count(distinct (${moviesTable.tmdbId}, ${moviesTable.mediaType}))`,
+    })
     .from(moviesTable)
     .where(
       clerkUserId

@@ -222,15 +222,27 @@ paths:
       operationId: getSimilarMovies
       tags: [movies]
       summary: >
-        Films worth watching next. Built from TMDB's recommendations, which
-        reflect what people who watched this film went on to watch, falling
-        back to keyword and genre similarity when that list is thin.
+        Films or series worth watching next. Built from TMDB's
+        recommendations, which reflect what people who watched this went on
+        to watch, falling back to keyword and genre similarity when that
+        list is thin. Always the same kind as the title asked about.
       parameters:
         - name: tmdbId
           in: path
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
       responses:
         "200":
           description: Similar films
@@ -276,13 +288,24 @@ paths:
       tags: [movies]
       summary: >
         Fetch full TMDB details (director, cast, genres, watch providers) for
-        any movie by TMDB ID without saving it to the locker.
+        any film or series by TMDB ID without saving it to the locker.
       parameters:
         - name: tmdbId
           in: path
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
         - name: region
           in: query
           required: false
@@ -407,6 +430,17 @@ paths:
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
       responses:
         "200":
           description: Community score
@@ -426,6 +460,17 @@ paths:
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
       requestBody:
         required: true
         content:
@@ -456,6 +501,17 @@ paths:
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
       responses:
         "200":
           description: Rating removed, with the recalculated score
@@ -475,6 +531,17 @@ paths:
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
         - name: page
           in: query
           required: false
@@ -499,6 +566,17 @@ paths:
           required: true
           schema:
             type: integer
+        - name: mediaType
+          in: query
+          required: false
+          description: >
+            Whether tmdbId names a film or a television series. TMDB numbers
+            the two in separate sequences, so the same id is two different
+            titles. Omitted means film, which is what every client built
+            before TV support ever meant.
+          schema:
+            type: string
+            enum: [movie, tv]
       requestBody:
         required: true
         content:
@@ -1763,6 +1841,13 @@ components:
       properties:
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         title:
           type: string
         releaseYear:
@@ -1810,6 +1895,13 @@ components:
       properties:
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         title:
           type: string
         releaseYear:
@@ -2041,6 +2133,13 @@ components:
       properties:
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         title:
           type: string
         releaseYear:
@@ -2235,6 +2334,13 @@ components:
       properties:
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         average:
           type: number
           format: float
@@ -2260,6 +2366,13 @@ components:
     SetCommunityRatingBody:
       type: object
       properties:
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         rating:
           type: number
           minimum: 0.5
@@ -2281,6 +2394,13 @@ components:
           type: integer
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         userId:
           type: string
           description: Clerk user ID of the author
@@ -2340,6 +2460,13 @@ components:
     PostCommentBody:
       type: object
       properties:
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         body:
           type: string
           minLength: 1
@@ -2370,6 +2497,13 @@ components:
           description: Clerk user ID of the recipient
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         filmTitle:
           type: string
         posterUrl:
@@ -2418,6 +2552,13 @@ components:
           description: Clerk user ID of the recipient
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         filmTitle:
           type: string
         posterUrl:
@@ -2574,6 +2715,13 @@ components:
         tmdbId:
           type: integer
           nullable: true
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         filmTitle:
           type: string
           nullable: true
@@ -2641,6 +2789,13 @@ components:
           type: integer
           nullable: true
           description: The film, on everything but a "playlist" item.
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         title:
           type: string
           nullable: true
@@ -2864,6 +3019,13 @@ components:
       properties:
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         title:
           type: string
           nullable: true
@@ -3502,6 +3664,13 @@ components:
       properties:
         tmdbId:
           type: integer
+        mediaType:
+          type: string
+          enum: [movie, tv]
+          description: >
+            Whether this is a film or a television series. TMDB numbers the
+            two in separate sequences, so tmdbId alone does not identify a
+            title and this is needed to tell them apart. Absent means film.
         filmTitle:
           type: string
         posterUrl:

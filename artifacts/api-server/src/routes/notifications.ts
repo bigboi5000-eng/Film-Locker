@@ -16,6 +16,7 @@ import { areFilmPals } from "../lib/filmPals";
 import { sendPush } from "../lib/push";
 import { logger } from "../lib/logger";
 import { isBlockedEitherWay, getMutualBlockSet } from "../lib/blocks";
+import { normalizeMediaType } from "../lib/tmdb";
 
 
 const router: IRouter = Router();
@@ -106,6 +107,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
         fromUserId: filmNotificationsTable.fromUserId,
         toUserId: filmNotificationsTable.toUserId,
         tmdbId: filmNotificationsTable.tmdbId,
+        mediaType: filmNotificationsTable.mediaType,
         filmTitle: filmNotificationsTable.filmTitle,
         posterUrl: filmNotificationsTable.posterUrl,
         isRead: filmNotificationsTable.isRead,
@@ -179,6 +181,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
     toUserId: string;
     createdAt: Date;
     tmdbId: number | null;
+    mediaType: string | null;
     filmTitle: string | null;
     posterUrl: string | null;
     isRead: boolean | null;
@@ -209,6 +212,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
       toUserId: r.toUserId,
       createdAt: r.createdAt,
       tmdbId: r.tmdbId,
+      mediaType: r.mediaType,
       filmTitle: r.filmTitle,
       posterUrl: r.posterUrl,
       isRead: r.isRead,
@@ -233,6 +237,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
       toUserId: m.toUserId,
       createdAt: m.createdAt,
       tmdbId: null,
+      mediaType: null,
       filmTitle: null,
       posterUrl: null,
       isRead: m.isRead,
@@ -254,6 +259,7 @@ router.get("/notifications/conversations", requireAuth, async (req, res): Promis
       toUserId: p.toUserId,
       createdAt: p.createdAt,
       tmdbId: null,
+      mediaType: null,
       filmTitle: null,
       posterUrl: null,
       isRead: p.isRead,
@@ -313,6 +319,7 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
       fromUserId: filmNotificationsTable.fromUserId,
       toUserId: filmNotificationsTable.toUserId,
       tmdbId: filmNotificationsTable.tmdbId,
+      mediaType: filmNotificationsTable.mediaType,
       filmTitle: filmNotificationsTable.filmTitle,
       posterUrl: filmNotificationsTable.posterUrl,
       isRead: filmNotificationsTable.isRead,
@@ -336,6 +343,7 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
     fromAvatarUrl: r.fromAvatarUrl ?? null,
     toUserId: r.toUserId,
     tmdbId: r.tmdbId,
+    mediaType: r.mediaType,
     filmTitle: r.filmTitle,
     posterUrl: r.posterUrl,
     isRead: r.isRead,
@@ -357,6 +365,11 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
   }
 
   const { toUserId, tmdbId, filmTitle, posterUrl } = body.data;
+  // Stored on the recommendation, not worked out later: it is the only
+  // thing saying which of TMDB's two id spaces this id belongs to, so
+  // without it a tap on a recommended series opens the film that happens
+  // to share its number.
+  const mediaType = normalizeMediaType(body.data.mediaType);
 
   // Cannot recommend to yourself
   if (toUserId === clerkUserId) {
@@ -403,7 +416,7 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
 
   const [inserted] = await db
     .insert(filmNotificationsTable)
-    .values({ fromUserId: clerkUserId, toUserId, tmdbId, filmTitle, posterUrl })
+    .values({ fromUserId: clerkUserId, toUserId, tmdbId, mediaType, filmTitle, posterUrl })
     .returning();
 
   // Look up sender info and recipient's push token in parallel
@@ -446,6 +459,7 @@ router.post("/notifications", requireAuth, async (req, res): Promise<void> => {
       fromAvatarUrl: sender?.avatarUrl ?? null,
       toUserId: inserted.toUserId,
       tmdbId: inserted.tmdbId,
+      mediaType: inserted.mediaType,
       filmTitle: inserted.filmTitle,
       posterUrl: inserted.posterUrl,
       isRead: inserted.isRead,
@@ -498,6 +512,7 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
       fromAvatarUrl: sender?.avatarUrl ?? null,
       toUserId: updated.toUserId,
       tmdbId: updated.tmdbId,
+      mediaType: updated.mediaType,
       filmTitle: updated.filmTitle,
       posterUrl: updated.posterUrl,
       isRead: updated.isRead,
@@ -536,6 +551,7 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
         fromUserId: filmNotificationsTable.fromUserId,
         toUserId: filmNotificationsTable.toUserId,
         tmdbId: filmNotificationsTable.tmdbId,
+        mediaType: filmNotificationsTable.mediaType,
         filmTitle: filmNotificationsTable.filmTitle,
         posterUrl: filmNotificationsTable.posterUrl,
         isRead: filmNotificationsTable.isRead,
@@ -599,6 +615,7 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       toUserId: r.toUserId,
       createdAt: r.createdAt,
       tmdbId: r.tmdbId,
+      mediaType: r.mediaType,
       filmTitle: r.filmTitle,
       posterUrl: r.posterUrl,
       isRead: r.isRead,
@@ -615,6 +632,7 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       toUserId: m.toUserId,
       createdAt: m.createdAt,
       tmdbId: null,
+      mediaType: null,
       filmTitle: null,
       posterUrl: null,
       isRead: m.isRead,
@@ -631,6 +649,7 @@ router.get("/notifications/thread/:userId", requireAuth, async (req, res): Promi
       toUserId: p.toUserId,
       createdAt: p.createdAt,
       tmdbId: null,
+      mediaType: null,
       filmTitle: null,
       posterUrl: null,
       isRead: p.isRead,
@@ -776,6 +795,7 @@ router.post("/notifications/thread/:userId/messages", requireAuth, async (req, r
     toUserId: inserted.toUserId,
     createdAt: inserted.createdAt,
     tmdbId: null,
+    mediaType: null,
     filmTitle: null,
     posterUrl: null,
     isRead: inserted.isRead,

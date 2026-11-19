@@ -28,6 +28,7 @@ import {
 import { requireAuth, type AuthedRequest } from "../../middlewares/requireAuth";
 import { moderateText } from "../../lib/moderateText";
 import { getMutualBlockSet } from "../../lib/blocks";
+import { normalizeMediaType } from "../../lib/tmdb";
 
 const router: IRouter = Router();
 
@@ -42,6 +43,15 @@ router.get("/films/:tmdbId/community-score", async (req, res): Promise<void> => 
     return;
   }
   const { tmdbId } = params.data;
+  // Every query in this file matches on the kind as well as the id. A
+  // tmdb_id on its own is not a title — film 1399 and series 1399 are
+  // different things — so without it a series would be served the film's
+  // score, and a star given to one would land on the other.
+  const mediaType = normalizeMediaType(req.query.mediaType);
+  const isThisTitle = and(
+    eq(filmCommunityRatingsTable.tmdbId, tmdbId),
+    eq(filmCommunityRatingsTable.mediaType, mediaType),
+  );
 
   // Optional auth — identify if the user is logged in to return their own rating
   const clerkUserId: string | undefined = getAuth(req)?.userId ?? undefined;
@@ -52,19 +62,14 @@ router.get("/films/:tmdbId/community-score", async (req, res): Promise<void> => 
       count: count(filmCommunityRatingsTable.id),
     })
     .from(filmCommunityRatingsTable)
-    .where(eq(filmCommunityRatingsTable.tmdbId, tmdbId));
+    .where(isThisTitle);
 
   let userRating: number | null = null;
   if (clerkUserId) {
     const [own] = await db
       .select({ rating: filmCommunityRatingsTable.rating })
       .from(filmCommunityRatingsTable)
-      .where(
-        and(
-          eq(filmCommunityRatingsTable.tmdbId, tmdbId),
-          eq(filmCommunityRatingsTable.userId, clerkUserId)
-        )
-      );
+      .where(and(isThisTitle, eq(filmCommunityRatingsTable.userId, clerkUserId)));
     userRating = own?.rating ?? null;
   }
 
@@ -99,12 +104,26 @@ router.post("/films/:tmdbId/community-rating", requireAuth, async (req, res): Pr
 
   const { tmdbId } = params.data;
   const { rating } = body.data;
+  // Body first, then query string: the generated client sends it in the
+  // body, and the query param is there for anything hitting the URL
+  // directly. Either way an absent one is a film.
+  const mediaType = normalizeMediaType(body.data.mediaType ?? req.query.mediaType);
+  const isThisTitle = and(
+    eq(filmCommunityRatingsTable.tmdbId, tmdbId),
+    eq(filmCommunityRatingsTable.mediaType, mediaType),
+  );
 
   await db
     .insert(filmCommunityRatingsTable)
-    .values({ userId: clerkUserId, tmdbId, rating })
+    .values({ userId: clerkUserId, tmdbId, mediaType, rating })
     .onConflictDoUpdate({
-      target: [filmCommunityRatingsTable.userId, filmCommunityRatingsTable.tmdbId],
+      // Matches the unique index, which includes media_type — rating a
+      // series must not overwrite your rating of the film with the same id.
+      target: [
+        filmCommunityRatingsTable.userId,
+        filmCommunityRatingsTable.tmdbId,
+        filmCommunityRatingsTable.mediaType,
+      ],
       set: { rating },
     });
 
@@ -122,7 +141,13 @@ router.post("/films/:tmdbId/community-rating", requireAuth, async (req, res): Pr
   const mirrored = await db
     .update(moviesTable)
     .set({ rating })
-    .where(and(eq(moviesTable.clerkUserId, clerkUserId), eq(moviesTable.tmdbId, tmdbId)))
+    .where(
+      and(
+        eq(moviesTable.clerkUserId, clerkUserId),
+        eq(moviesTable.tmdbId, tmdbId),
+        eq(moviesTable.mediaType, mediaType),
+      ),
+    )
     .returning({ id: moviesTable.id });
 
   req.log.info(
@@ -136,7 +161,7 @@ router.post("/films/:tmdbId/community-rating", requireAuth, async (req, res): Pr
       count: count(filmCommunityRatingsTable.id),
     })
     .from(filmCommunityRatingsTable)
-    .where(eq(filmCommunityRatingsTable.tmdbId, tmdbId));
+    .where(isThisTitle);
 
   const average = agg?.average ? parseFloat(String(agg.average)) : null;
   const total = agg?.count ? Number(agg.count) : 0;
@@ -163,15 +188,15 @@ router.delete("/films/:tmdbId/community-rating", requireAuth, async (req, res): 
   }
 
   const { tmdbId } = params.data;
+  const mediaType = normalizeMediaType(req.query.mediaType);
+  const isThisTitle = and(
+    eq(filmCommunityRatingsTable.tmdbId, tmdbId),
+    eq(filmCommunityRatingsTable.mediaType, mediaType),
+  );
 
   await db
     .delete(filmCommunityRatingsTable)
-    .where(
-      and(
-        eq(filmCommunityRatingsTable.userId, clerkUserId),
-        eq(filmCommunityRatingsTable.tmdbId, tmdbId)
-      )
-    );
+    .where(and(isThisTitle, eq(filmCommunityRatingsTable.userId, clerkUserId)));
 
   // Your own rating of the film is deliberately left alone. Setting a
   // community rating copies across to it, so you are not asked for the same
@@ -185,7 +210,7 @@ router.delete("/films/:tmdbId/community-rating", requireAuth, async (req, res): 
       count: count(filmCommunityRatingsTable.id),
     })
     .from(filmCommunityRatingsTable)
-    .where(eq(filmCommunityRatingsTable.tmdbId, tmdbId));
+    .where(isThisTitle);
 
   const average = agg?.average ? parseFloat(String(agg.average)) : null;
   const total = agg?.count ? Number(agg.count) : 0;
@@ -217,6 +242,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
   }
 
   const { tmdbId } = params.data;
+  const mediaType = normalizeMediaType(req.query.mediaType);
   const page = query.data.page ?? 1;
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -235,6 +261,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
 
   const visibleToViewer = and(
     eq(filmCommentsTable.tmdbId, tmdbId),
+    eq(filmCommentsTable.mediaType, mediaType),
     blockedIds.size > 0 ? notInArray(filmCommentsTable.userId, [...blockedIds]) : undefined,
     or(
       eq(usersTable.isPrivate, false),
@@ -257,6 +284,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
     .select({
       id: filmCommentsTable.id,
       tmdbId: filmCommentsTable.tmdbId,
+      mediaType: filmCommentsTable.mediaType,
       userId: filmCommentsTable.userId,
       body: filmCommentsTable.body,
       createdAt: filmCommentsTable.createdAt,
@@ -273,6 +301,9 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
       filmCommunityRatingsTable,
       and(
         eq(filmCommunityRatingsTable.tmdbId, filmCommentsTable.tmdbId),
+        // Joined on the kind too, or a comment on a series would carry the
+        // author's rating of the film that shares its id.
+        eq(filmCommunityRatingsTable.mediaType, filmCommentsTable.mediaType),
         eq(filmCommunityRatingsTable.userId, filmCommentsTable.userId)
       )
     )
@@ -288,6 +319,7 @@ router.get("/films/:tmdbId/comments", async (req, res): Promise<void> => {
     .map((r) => ({
       id: r.id,
       tmdbId: r.tmdbId,
+      mediaType: r.mediaType,
       userId: r.userId,
       username: r.username ?? null,
       avatarUrl: r.avatarUrl ?? null,
@@ -318,6 +350,7 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
   }
 
   const { tmdbId } = params.data;
+  const mediaType = normalizeMediaType(body.data.mediaType ?? req.query.mediaType);
 
   // Filter before storing, not after reporting. Guideline 1.2 asks for both,
   // and reporting alone means the objectionable comment is published first
@@ -341,7 +374,7 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
 
   const [inserted] = await db
     .insert(filmCommentsTable)
-    .values({ userId: clerkUserId, tmdbId, body: body.data.body })
+    .values({ userId: clerkUserId, tmdbId, mediaType, body: body.data.body })
     .returning();
 
   // Look up user profile and their own community rating for this film, for the response
@@ -356,6 +389,7 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
     .where(
       and(
         eq(filmCommunityRatingsTable.tmdbId, tmdbId),
+        eq(filmCommunityRatingsTable.mediaType, mediaType),
         eq(filmCommunityRatingsTable.userId, clerkUserId)
       )
     );
@@ -364,6 +398,7 @@ router.post("/films/:tmdbId/comments", requireAuth, async (req, res): Promise<vo
     PostFilmCommentResponse.parse({
       id: inserted.id,
       tmdbId: inserted.tmdbId,
+      mediaType: inserted.mediaType,
       userId: inserted.userId,
       username: user?.username ?? null,
       avatarUrl: user?.avatarUrl ?? null,

@@ -19,17 +19,35 @@
  */
 import { inArray } from "drizzle-orm";
 import { db, moviesTable } from "@workspace/db";
-import { fetchMovieDetails } from "./tmdb";
+import { fetchMovieDetails, normalizeMediaType, DEFAULT_REGION, type MediaType } from "./tmdb";
 
 export interface FilmCard {
   tmdbId: number;
+  mediaType: MediaType;
   title: string | null;
   posterUrl: string | null;
   releaseYear: string | null;
 }
 
+/** What a caller knows about a title before it has been resolved. */
+export interface FilmCardRef {
+  tmdbId: number;
+  mediaType?: string | null;
+}
+
 /**
- * Resolve every id given, keyed by tmdbId.
+ * The map key.
+ *
+ * A bare tmdb_id is not a title: TMDB numbers films and series separately,
+ * so 1399 is a Star Trek film and also Game of Thrones. Keyed on the id
+ * alone, a feed showing both would draw one of them twice.
+ */
+export function filmCardKey(ref: FilmCardRef): string {
+  return `${normalizeMediaType(ref.mediaType)}:${ref.tmdbId}`;
+}
+
+/**
+ * Resolve every title given, keyed by `filmCardKey` — NOT by tmdbId.
  *
  * An id that neither source can answer is simply absent from the map rather
  * than present-but-empty: callers decide whether a film they cannot
@@ -37,26 +55,43 @@ export interface FilmCard {
  * dropping the row would silently shorten the list and misrepresent how
  * active they have been.
  */
-export async function resolveFilmCards(tmdbIds: number[]): Promise<Map<number, FilmCard>> {
-  const wanted = [...new Set(tmdbIds)].filter((id) => Number.isInteger(id) && id > 0);
-  const out = new Map<number, FilmCard>();
-  if (wanted.length === 0) return out;
+export async function resolveFilmCards(
+  refs: FilmCardRef[],
+): Promise<Map<string, FilmCard>> {
+  const out = new Map<string, FilmCard>();
 
+  const wanted = new Map<string, { tmdbId: number; mediaType: MediaType }>();
+  for (const ref of refs) {
+    if (!Number.isInteger(ref.tmdbId) || ref.tmdbId <= 0) continue;
+    wanted.set(filmCardKey(ref), {
+      tmdbId: ref.tmdbId,
+      mediaType: normalizeMediaType(ref.mediaType),
+    });
+  }
+  if (wanted.size === 0) return out;
+
+  // Narrowed by id only and then matched on the kind in JS. A tuple IN
+  // would be exact, but the ids are already a short page's worth and the
+  // extra rows this pulls back are a film and a series that happen to
+  // share a number — a handful at most, thrown away immediately below.
   const localRows = await db
     .select({
       tmdbId: moviesTable.tmdbId,
+      mediaType: moviesTable.mediaType,
       title: moviesTable.title,
       posterUrl: moviesTable.posterUrl,
       releaseYear: moviesTable.releaseYear,
     })
     .from(moviesTable)
-    .where(inArray(moviesTable.tmdbId, wanted));
+    .where(inArray(moviesTable.tmdbId, [...wanted.values()].map((w) => w.tmdbId)));
 
   for (const row of localRows) {
-    // First row wins; duplicates are the same film saved by other people.
-    if (!out.has(row.tmdbId)) {
-      out.set(row.tmdbId, {
+    const k = filmCardKey(row);
+    // First row wins; duplicates are the same title saved by other people.
+    if (wanted.has(k) && !out.has(k)) {
+      out.set(k, {
         tmdbId: row.tmdbId,
+        mediaType: normalizeMediaType(row.mediaType),
         title: row.title,
         posterUrl: row.posterUrl || null,
         releaseYear: row.releaseYear || null,
@@ -64,18 +99,18 @@ export async function resolveFilmCards(tmdbIds: number[]): Promise<Map<number, F
     }
   }
 
-  const missing = wanted.filter((id) => !out.has(id));
+  const missing = [...wanted.entries()].filter(([k]) => !out.has(k));
   if (missing.length === 0) return out;
 
   // Bounded by the caller's own page size, and cached for half an hour, so
   // this is a handful of requests on a cold profile and none on a warm one.
   const fetched = await Promise.all(
-    missing.map(async (tmdbId) => {
+    missing.map(async ([k, { tmdbId, mediaType }]) => {
       try {
-        const details = await fetchMovieDetails(tmdbId);
-        return details ? { tmdbId, details } : null;
+        const details = await fetchMovieDetails(tmdbId, DEFAULT_REGION, mediaType);
+        return details ? { k, tmdbId, mediaType, details } : null;
       } catch {
-        // A film we cannot name is not a reason to fail the whole screen.
+        // A title we cannot name is not a reason to fail the whole screen.
         return null;
       }
     })
@@ -83,8 +118,9 @@ export async function resolveFilmCards(tmdbIds: number[]): Promise<Map<number, F
 
   for (const hit of fetched) {
     if (!hit) continue;
-    out.set(hit.tmdbId, {
+    out.set(hit.k, {
       tmdbId: hit.tmdbId,
+      mediaType: hit.mediaType,
       title: hit.details.title,
       posterUrl: hit.details.posterUrl || null,
       releaseYear: hit.details.releaseYear || null,

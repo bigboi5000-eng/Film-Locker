@@ -31,6 +31,7 @@ export const GetRecommendationsQueryParams = zod.object({
 export const GetRecommendationsResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -61,6 +62,7 @@ export const GetTrendingQueryParams = zod.object({
 export const GetTrendingResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -91,6 +93,7 @@ export const GetNewReleasesQueryParams = zod.object({
 export const GetNewReleasesResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -124,6 +127,7 @@ export const SearchMoviesQueryParams = zod.object({
 export const SearchMoviesResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -401,16 +405,21 @@ export const RecommendMoviesResponse = zod.object({
 
 
 /**
- * @summary Films worth watching next. Built from TMDB's recommendations, which reflect what people who watched this film went on to watch, falling back to keyword and genre similarity when that list is thin.
+ * @summary Films or series worth watching next. Built from TMDB's recommendations, which reflect what people who watched this went on to watch, falling back to keyword and genre similarity when that list is thin. Always the same kind as the title asked about.
 
  */
 export const GetSimilarMoviesParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const GetSimilarMoviesQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n')
+})
+
 export const GetSimilarMoviesResponse = zod.object({
   "movies": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -447,6 +456,7 @@ export const GetPersonResponse = zod.object({
   "knownFor": zod.string().describe('TMDB\'s known_for_department, e.g. \"Directing\" or \"Acting\".'),
   "actedIn": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -466,6 +476,7 @@ export const GetPersonResponse = zod.object({
 })).describe('Films they appeared in, newest first.'),
   "directed": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -487,7 +498,7 @@ export const GetPersonResponse = zod.object({
 
 
 /**
- * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any movie by TMDB ID without saving it to the locker.
+ * @summary Fetch full TMDB details (director, cast, genres, watch providers) for any film or series by TMDB ID without saving it to the locker.
 
  */
 export const GetMovieDetailsParams = zod.object({
@@ -495,11 +506,13 @@ export const GetMovieDetailsParams = zod.object({
 })
 
 export const GetMovieDetailsQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n'),
   "region": zod.coerce.string().optional().describe('ISO 3166-1 alpha-2 country code used to pick which country\'s watch providers to return. Defaults to US when omitted or invalid.\n')
 })
 
 export const GetMovieDetailsResponse = zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -577,6 +590,7 @@ export const ListMoviesResponse = zod.object({
  */
 export const AddMovieBody = zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -744,6 +758,10 @@ export const GetFilmCommunityScoreParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const GetFilmCommunityScoreQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n')
+})
+
 export const getFilmCommunityScoreResponseUserRatingMin = 0.5;
 export const getFilmCommunityScoreResponseUserRatingMax = 5;
 export const getFilmCommunityScoreResponseUserRatingMultipleOf = 0.5;
@@ -752,6 +770,7 @@ export const getFilmCommunityScoreResponseUserRatingMultipleOf = 0.5;
 
 export const GetFilmCommunityScoreResponse = zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
   "count": zod.number().describe('Total number of community ratings'),
   "userRating": zod.number().min(getFilmCommunityScoreResponseUserRatingMin).max(getFilmCommunityScoreResponseUserRatingMax).multipleOf(getFilmCommunityScoreResponseUserRatingMultipleOf).nullish().describe('The authenticated user\'s own community rating, in half-star steps (null if not rated or not logged in).\n')
@@ -765,6 +784,10 @@ export const SetFilmCommunityRatingParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const SetFilmCommunityRatingQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n')
+})
+
 export const setFilmCommunityRatingBodyRatingMin = 0.5;
 export const setFilmCommunityRatingBodyRatingMax = 5;
 export const setFilmCommunityRatingBodyRatingMultipleOf = 0.5;
@@ -772,6 +795,7 @@ export const setFilmCommunityRatingBodyRatingMultipleOf = 0.5;
 
 
 export const SetFilmCommunityRatingBody = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "rating": zod.number().min(setFilmCommunityRatingBodyRatingMin).max(setFilmCommunityRatingBodyRatingMax).multipleOf(setFilmCommunityRatingBodyRatingMultipleOf).describe('Half-star steps, so ten positions rather than five — the same scale as a private rating, written by the same control. This was an integer while movies.rating was already a real, so the stars in the community section rejected a half that the identical stars one section below accepted.\n')
 })
 
@@ -783,6 +807,7 @@ export const setFilmCommunityRatingResponseUserRatingMultipleOf = 0.5;
 
 export const SetFilmCommunityRatingResponse = zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
   "count": zod.number().describe('Total number of community ratings'),
   "userRating": zod.number().min(setFilmCommunityRatingResponseUserRatingMin).max(setFilmCommunityRatingResponseUserRatingMax).multipleOf(setFilmCommunityRatingResponseUserRatingMultipleOf).nullish().describe('The authenticated user\'s own community rating, in half-star steps (null if not rated or not logged in).\n')
@@ -797,6 +822,10 @@ export const DeleteFilmCommunityRatingParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const DeleteFilmCommunityRatingQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n')
+})
+
 export const deleteFilmCommunityRatingResponseUserRatingMin = 0.5;
 export const deleteFilmCommunityRatingResponseUserRatingMax = 5;
 export const deleteFilmCommunityRatingResponseUserRatingMultipleOf = 0.5;
@@ -805,6 +834,7 @@ export const deleteFilmCommunityRatingResponseUserRatingMultipleOf = 0.5;
 
 export const DeleteFilmCommunityRatingResponse = zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "average": zod.number().nullable().describe('Average star rating across all community ratings, null when no ratings exist'),
   "count": zod.number().describe('Total number of community ratings'),
   "userRating": zod.number().min(deleteFilmCommunityRatingResponseUserRatingMin).max(deleteFilmCommunityRatingResponseUserRatingMax).multipleOf(deleteFilmCommunityRatingResponseUserRatingMultipleOf).nullish().describe('The authenticated user\'s own community rating, in half-star steps (null if not rated or not logged in).\n')
@@ -823,6 +853,7 @@ export const getFilmCommentsQueryPageDefault = 1;
 
 
 export const GetFilmCommentsQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n'),
   "page": zod.coerce.number().min(1).default(getFilmCommentsQueryPageDefault)
 })
 
@@ -836,6 +867,7 @@ export const GetFilmCommentsResponse = zod.object({
   "comments": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "userId": zod.string().describe('Clerk user ID of the author'),
   "username": zod.string().nullish().describe('Display username of the author'),
   "avatarUrl": zod.string().nullish(),
@@ -857,11 +889,16 @@ export const PostFilmCommentParams = zod.object({
   "tmdbId": zod.coerce.number()
 })
 
+export const PostFilmCommentQueryParams = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.\n')
+})
+
 export const postFilmCommentBodyBodyMax = 280;
 
 
 
 export const PostFilmCommentBody = zod.object({
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "body": zod.string().min(1).max(postFilmCommentBodyBodyMax)
 })
 
@@ -874,6 +911,7 @@ export const postFilmCommentResponseRatingMultipleOf = 0.5;
 export const PostFilmCommentResponse = zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "userId": zod.string().describe('Clerk user ID of the author'),
   "username": zod.string().nullish().describe('Display username of the author'),
   "avatarUrl": zod.string().nullish(),
@@ -918,6 +956,7 @@ export const GetNotificationsResponse = zod.object({
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "isRead": zod.boolean(),
@@ -935,6 +974,7 @@ export const GetNotificationsResponse = zod.object({
 export const SendNotificationBody = zod.object({
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string(),
   "posterUrl": zod.string()
 })
@@ -947,6 +987,7 @@ export const SendNotificationResponse = zod.object({
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "isRead": zod.boolean(),
@@ -985,6 +1026,7 @@ export const MarkNotificationReadResponse = zod.object({
   "fromAvatarUrl": zod.string().nullish(),
   "toUserId": zod.string().describe('Clerk user ID of the recipient'),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "isRead": zod.boolean(),
@@ -1017,6 +1059,7 @@ export const GetConversationsResponse = zod.object({
   "toUserId": zod.string(),
   "createdAt": zod.coerce.date(),
   "tmdbId": zod.number().nullish(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "isRead": zod.boolean().nullish(),
@@ -1056,6 +1099,7 @@ export const GetNotificationThreadResponse = zod.object({
   "toUserId": zod.string(),
   "createdAt": zod.coerce.date(),
   "tmdbId": zod.number().nullish(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "isRead": zod.boolean().nullish(),
@@ -1088,6 +1132,7 @@ export const SendConversationMessageResponse = zod.object({
   "toUserId": zod.string(),
   "createdAt": zod.coerce.date(),
   "tmdbId": zod.number().nullish(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "isRead": zod.boolean().nullish(),
@@ -1139,6 +1184,7 @@ export const GetFeedResponse = zod.object({
   "isFilmPal": zod.boolean().optional().describe('Whether this person follows the caller back, making them Film Pals. The list itself is everyone the caller follows, which is the right set for recommending a film — that only needs the one direction. Collaborating on a playlist needs both, so the sheet that offers it filters on this rather than offering people the server will refuse.\n')
 }),
   "tmdbId": zod.number().nullish().describe('The film, on everything but a \"playlist\" item.'),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
@@ -1369,6 +1415,7 @@ export const GetUserProfileResponse = zod.object({
 })).nullable().describe('Null when the account is private and the caller isn\'t an accepted follower (and isn\'t the account itself) — use stats.publicPlaylistCount as the headline figure in that case instead of listing them.\n'),
   "recentRatings": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
@@ -1378,6 +1425,7 @@ export const GetUserProfileResponse = zod.object({
 }).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has rated in the community, newest first, with `rating` set. Null under the same privacy rule as publicPlaylists.\n'),
   "recentComments": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
@@ -1387,6 +1435,7 @@ export const GetUserProfileResponse = zod.object({
 }).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has written about, newest first, with `comment` set. Null under the same privacy rule as publicPlaylists.\n'),
   "recentWatched": zod.array(zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "title": zod.string().nullish(),
   "posterUrl": zod.string().nullish(),
   "releaseYear": zod.string().nullish(),
@@ -1897,6 +1946,7 @@ export const AddPlaylistItemParams = zod.object({
 
 export const AddPlaylistItemBody = zod.object({
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "sourceUrl": zod.string().nullish().describe('The social post this film was identified from, so the film\'s page can offer a way back to it. Omit for a film added by search or by hand, which came from no post.\n')

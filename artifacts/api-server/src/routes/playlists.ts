@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { and, eq, ilike, desc, count, sql, or, isNull, inArray } from "drizzle-orm";
 import { db, playlistsTable, playlistItemsTable, playlistFollowsTable, playlistSharesTable, playlistCollaboratorsTable, usersTable, followsTable, moviesTable } from "@workspace/db";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
+import { normalizeMediaType } from "../lib/tmdb";
 import { isBlockedEitherWay } from "../lib/blocks";
 import { areFilmPals } from "../lib/filmPals";
 import { sendPush } from "../lib/push";
@@ -46,6 +47,10 @@ const AddCollaboratorBody = z.object({
 
 const AddItemBody = z.object({
   tmdbId: z.number().int(),
+  // Optional, defaulted here rather than at the insert, so every use of
+  // parsed.data below — the insert, the "already there" lookup — sees the
+  // same kind. An older app build sends nothing and means a film.
+  mediaType: z.enum(["movie", "tv"]).default("movie"),
   filmTitle: z.string().min(1),
   posterUrl: z.string().min(1),
   sourceUrl: z.string().nullish(),
@@ -433,7 +438,7 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
    * land at the end.
    */
   let collaborators: CollaboratorProfile[] | undefined;
-  let watchedBy: Map<number, string[]> | undefined;
+  let watchedBy: Map<string, string[]> | undefined;
 
   if (collaboratorIds.length > 0) {
     const everyone = [playlist.userId, ...collaboratorIds];
@@ -443,16 +448,26 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
       listCollaboratorProfiles(id, playlist.userId),
       tmdbIds.length > 0
         ? db
-            .select({ tmdbId: moviesTable.tmdbId, clerkUserId: moviesTable.clerkUserId })
+            .select({
+              tmdbId: moviesTable.tmdbId,
+              mediaType: moviesTable.mediaType,
+              clerkUserId: moviesTable.clerkUserId,
+            })
             .from(moviesTable)
             .where(
               and(
                 inArray(moviesTable.clerkUserId, everyone),
+                // Still narrowed by id alone — the kind is matched when the
+                // rows are bucketed below. Adding media_type to the IN here
+                // would need a tuple comparison for no gain: a stray film
+                // that shares a series' id is pulled back and then dropped.
                 inArray(moviesTable.tmdbId, tmdbIds),
                 eq(moviesTable.isWatched, true)
               )
             )
-        : Promise.resolve([] as { tmdbId: number; clerkUserId: string }[]),
+        : Promise.resolve(
+            [] as { tmdbId: number; mediaType: string; clerkUserId: string }[],
+          ),
     ]);
 
     collaborators = profiles;
@@ -460,21 +475,30 @@ router.get("/playlists/:id", async (req, res): Promise<void> => {
     // Collected into sets first and then emitted in `everyone` order, so
     // the badges on a poster come back in the same order as the avatars at
     // the top of the screen however the rows happened to arrive.
-    const seen = new Map<number, Set<string>>();
+    // Keyed by kind and id together. On id alone, a collaborator who had
+    // watched the FILM with a series' number would show as having watched
+    // the series.
+    const key = (r: { tmdbId: number; mediaType?: string | null }) =>
+      `${r.mediaType ?? "movie"}:${r.tmdbId}`;
+
+    const seen = new Map<string, Set<string>>();
     for (const r of watchedRows) {
-      const set = seen.get(r.tmdbId) ?? new Set<string>();
+      const set = seen.get(key(r)) ?? new Set<string>();
       set.add(r.clerkUserId);
-      seen.set(r.tmdbId, set);
+      seen.set(key(r), set);
     }
     watchedBy = new Map(
-      [...seen.entries()].map(([tmdbId, set]) => [tmdbId, everyone.filter((u) => set.has(u))])
+      [...seen.entries()].map(([k, set]) => [k, everyone.filter((u) => set.has(u))])
     );
   }
 
   res.json({
     ...playlist,
     items: watchedBy
-      ? items.map((i) => ({ ...i, watchedBy: watchedBy.get(i.tmdbId) ?? [] }))
+      ? items.map((i) => ({
+          ...i,
+          watchedBy: watchedBy.get(`${i.mediaType ?? "movie"}:${i.tmdbId}`) ?? [],
+        }))
       : items,
     isOwner,
     isFollowed: followRows.length > 0,
@@ -842,6 +866,9 @@ router.post("/playlists/:id/items", requireAuth, async (req, res): Promise<void>
         and(
           eq(playlistItemsTable.playlistId, id),
           eq(playlistItemsTable.tmdbId, parsed.data.tmdbId),
+          // The unique index is (playlist_id, tmdb_id, media_type), so the
+          // row the insert above collided with is the one of THIS kind.
+          eq(playlistItemsTable.mediaType, parsed.data.mediaType),
           isNull(playlistItemsTable.sourceUrl)
         )
       );
@@ -954,7 +981,10 @@ router.delete("/playlists/:id/items/:tmdbId", requireAuth, async (req, res): Pro
     .where(
       and(
         eq(playlistItemsTable.playlistId, id),
-        eq(playlistItemsTable.tmdbId, tmdbId)
+        eq(playlistItemsTable.tmdbId, tmdbId),
+        // Without this, removing a series from a list that also holds the
+        // film with the same id removes both.
+        eq(playlistItemsTable.mediaType, normalizeMediaType(req.query.mediaType)),
       )
     );
 

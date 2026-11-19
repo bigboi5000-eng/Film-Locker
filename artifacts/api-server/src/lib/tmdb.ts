@@ -37,6 +37,62 @@ interface TmdbSearchResponse {
   total_results: number;
 }
 
+/**
+ * Film or series.
+ *
+ * TMDB mirrors almost every endpoint between /movie and /tv, with the same
+ * shapes under different field names — `title`/`name`,
+ * `release_date`/`first_air_date`, `runtime`/`episode_run_time`. So rather
+ * than a second copy of this module, the path segment and the field
+ * mapping are parameterised and everything else is shared.
+ */
+export type MediaType = "movie" | "tv";
+
+/**
+ * A series as TMDB returns it, in the places the shapes diverge.
+ *
+ * Only the fields that differ are listed; the rest are identical to a
+ * film's and are read through the shared mapper.
+ */
+interface TmdbTvDetail {
+  id: number;
+  name: string;
+  first_air_date: string;
+  poster_path: string | null;
+  overview?: string;
+  genres: Array<{ id: number; name: string }>;
+  original_language: string;
+  vote_average: number;
+  vote_count: number;
+  /**
+   * Minutes PER EPISODE, and an array because a series can have several
+   * typical lengths (a 60-minute drama with 90-minute specials). TMDB
+   * returns an empty array for plenty of series.
+   *
+   * Deliberately not written to movies.runtime: that column means "how
+   * long is this thing", which for a series is a question about an episode
+   * and not about the series. Filtering by it would compare a film's whole
+   * length against one episode of a show. See the Kind filter, which hides
+   * the runtime slider for TV.
+   */
+  episode_run_time?: number[];
+  /** A series has creators where a film has a director. */
+  created_by?: Array<{ id: number; name: string }>;
+  number_of_seasons?: number;
+  number_of_episodes?: number;
+}
+
+interface TmdbTvListItem {
+  id: number;
+  name: string;
+  first_air_date?: string;
+  poster_path: string | null;
+  overview?: string;
+  genre_ids?: number[];
+  original_language?: string;
+  popularity: number;
+}
+
 interface TmdbCredits {
   cast: Array<{ id: number; name: string; order: number }>;
   crew: Array<{ id: number; name: string; job: string; department: string }>;
@@ -71,6 +127,19 @@ interface TmdbProvidersResponse {
 /** Default region when the caller doesn't specify one. */
 export const DEFAULT_REGION = "US";
 
+/**
+ * Read a kind off a query string or a database row.
+ *
+ * Anything that is not the literal "tv" is a film. That covers the three
+ * cases that matter and treats them identically, which is the point: a
+ * column default written before TV existed, an app build that does not
+ * send the parameter, and junk. None of them should 400 — a film is what
+ * every one of them meant.
+ */
+export function normalizeMediaType(input: unknown): MediaType {
+  return input === "tv" ? "tv" : "movie";
+}
+
 /** Loose sanitization — just enough to avoid passing junk through to TMDB. */
 export function normalizeRegion(input: unknown): string {
   const s = typeof input === "string" ? input.trim().toUpperCase() : "";
@@ -79,6 +148,13 @@ export function normalizeRegion(input: unknown): string {
 
 export interface TmdbCandidate {
   tmdbId: number;
+  /**
+   * Film or series. Required, not optional with a default, because TMDB
+   * numbers the two separately — film 1399 and series 1399 are different
+   * things — so a candidate without it is not identifiable, and a default
+   * would quietly make every series a film.
+   */
+  mediaType: MediaType;
   title: string;
   releaseYear: string;
   posterUrl: string;
@@ -140,6 +216,29 @@ const TMDB_GENRE_MAP: Record<number, string> = {
   10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
 };
 
+/**
+ * TMDB keeps a SEPARATE genre list for television, and the ids overlap.
+ *
+ * Eight ids mean the same thing in both lists (Comedy 35, Drama 18 and so
+ * on), but the rest do not: 10759 is "Action & Adventure" and exists only
+ * for TV, while 28 "Action" and 878 "Science Fiction" exist only for film.
+ * Reading a series' genre_ids through the film map therefore does not fail
+ * loudly — it drops the TV-only ids and keeps the shared ones, so a
+ * sci-fi series comes back tagged only "Drama". Hence two maps.
+ */
+const TMDB_TV_GENRE_MAP: Record<number, string> = {
+  10759: "Action & Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+  99: "Documentary", 18: "Drama", 10751: "Family", 10762: "Kids",
+  9648: "Mystery", 10763: "News", 10764: "Reality",
+  10765: "Sci-Fi & Fantasy", 10766: "Soap", 10767: "Talk",
+  10768: "War & Politics", 37: "Western",
+};
+
+function genreNames(ids: number[] | undefined, mediaType: MediaType): string[] {
+  const map = mediaType === "tv" ? TMDB_TV_GENRE_MAP : TMDB_GENRE_MAP;
+  return (ids ?? []).map((id) => map[id]).filter(Boolean) as string[];
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -196,14 +295,29 @@ function languageName(langCode: string | undefined): string | undefined {
   }
 }
 
-function movieToCandidate(m: TmdbMovie): TmdbCandidate {
+/**
+ * One entry of a TMDB list response — a search page, a trending page, a
+ * recommendations page — as either kind.
+ *
+ * The caller always knows which kind it asked for, because the kind is in
+ * the URL it requested; nothing here infers it from the payload.
+ */
+function movieToCandidate(
+  m: TmdbMovie | TmdbTvListItem,
+  mediaType: MediaType = "movie",
+): TmdbCandidate {
+  const title = mediaType === "tv" ? (m as TmdbTvListItem).name : (m as TmdbMovie).title;
+  const date =
+    mediaType === "tv" ? (m as TmdbTvListItem).first_air_date : (m as TmdbMovie).release_date;
+
   return {
     tmdbId: m.id,
-    title: m.title,
-    releaseYear: getReleaseYear(m.release_date),
+    mediaType,
+    title: title ?? "",
+    releaseYear: getReleaseYear(date ?? ""),
     posterUrl: getPosterUrl(m.poster_path),
     overview: m.overview ?? "",
-    genres: (m.genre_ids ?? []).map((id) => TMDB_GENRE_MAP[id]).filter(Boolean) as string[],
+    genres: genreNames(m.genre_ids, mediaType),
     language: languageName(m.original_language),
   };
 }
@@ -234,6 +348,26 @@ export async function enrichCandidates(
 
   return Promise.all(
     candidates.map(async (c) => {
+      // A series needs no extra requests here. fetchMovieDetails already
+      // fetches its detail, credits and providers together and caches the
+      // lot, and unlike a film its "director" comes off the detail
+      // response (created_by) rather than the credits crew — so going
+      // through it is both cheaper and the only way to get the creators.
+      if (c.mediaType === "tv") {
+        const details = await fetchMovieDetails(c.tmdbId, region, "tv").catch((err) => {
+          logger.warn({ tmdbId: c.tmdbId, err: String(err) }, "TMDB enrich failed for series");
+          return null;
+        });
+        if (!details) return c;
+        return {
+          ...c,
+          director: details.director || undefined,
+          cast: details.cast.length > 0 ? details.cast : undefined,
+          watchProviders: details.watchProviders,
+          runtime: null,
+        };
+      }
+
       const [creditsResult, providersResult, detailsResult] = await Promise.allSettled([
         tmdbFetch(`${TMDB_BASE}/movie/${c.tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
           okJson<TmdbCredits>(r)
@@ -371,7 +505,7 @@ export async function searchTmdb(query: string, year?: string): Promise<TmdbCand
         ? candidates
         : [...candidates].sort((a, b) => b.popularity - a.popularity);
 
-      return ordered.slice(0, 3).map(movieToCandidate);
+      return ordered.slice(0, 3).map((m) => movieToCandidate(m, "movie"));
     },
     // Never remember a miss: a film TMDB hasn't indexed yet, or a title
     // Gemini garbled, would otherwise stay "not found" for the full hour
@@ -499,7 +633,8 @@ export async function searchTmdbTv(query: string, year?: string): Promise<TmdbTv
  */
 export async function fetchMovieDetails(
   tmdbId: number,
-  region: string = DEFAULT_REGION
+  region: string = DEFAULT_REGION,
+  mediaType: MediaType = "movie",
 ): Promise<TmdbMovieDetails | null> {
   // Three upstream requests per call, and the same films recur constantly —
   // a shared post identified by several users, or one list mentioning a film
@@ -510,10 +645,14 @@ export async function fetchMovieDetails(
   // gave a perfectly valid-looking film with no cast and nothing to watch
   // it on, and caching that pinned the gap in place for thirty minutes
   // after TMDB had recovered.
+  // The kind is part of the key and cannot be left out: TMDB numbers films
+  // and series separately, so 1399 is Star Trek: First Contact as a film
+  // and Game of Thrones as a series. A shared key would serve whichever was
+  // asked for first.
   return cached(
-    `tmdb:details:${tmdbId}:${region}`,
+    `tmdb:details:${mediaType}:${tmdbId}:${region}`,
     DETAILS_CACHE_TTL_MS,
-    () => fetchMovieDetailsUncached(tmdbId, region),
+    () => fetchMovieDetailsUncached(tmdbId, region, mediaType),
     { shouldCache: (result) => result !== null && !result.degraded },
   );
 }
@@ -526,7 +665,8 @@ const DETAILS_CACHE_TTL_MS = 30 * 60 * 1000;
 
 async function fetchMovieDetailsUncached(
   tmdbId: number,
-  region: string
+  region: string,
+  mediaType: MediaType = "movie",
 ): Promise<TmdbMovieDetails | null> {
   const apiKey = getApiKey();
 
@@ -535,15 +675,17 @@ async function fetchMovieDetailsUncached(
     return res.json() as Promise<T>;
   };
 
+  // /movie/{id} and /tv/{id} mirror each other all the way down, credits and
+  // watch providers included, so only the path segment changes.
   const [detailsResult, creditsResult, providersResult] =
     await Promise.allSettled([
-      tmdbFetch(`${TMDB_BASE}/movie/${tmdbId}?api_key=${apiKey}&language=en-US`).then((r) =>
-        okJson<TmdbMovieDetail>(r)
+      tmdbFetch(`${TMDB_BASE}/${mediaType}/${tmdbId}?api_key=${apiKey}&language=en-US`).then((r) =>
+        okJson<TmdbMovieDetail | TmdbTvDetail>(r)
       ),
-      tmdbFetch(`${TMDB_BASE}/movie/${tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
+      tmdbFetch(`${TMDB_BASE}/${mediaType}/${tmdbId}/credits?api_key=${apiKey}&language=en-US`).then((r) =>
         okJson<TmdbCredits>(r)
       ),
-      tmdbFetch(`${TMDB_BASE}/movie/${tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
+      tmdbFetch(`${TMDB_BASE}/${mediaType}/${tmdbId}/watch/providers?api_key=${apiKey}`).then((r) =>
         okJson<TmdbProvidersResponse>(r)
       ),
     ]);
@@ -569,11 +711,27 @@ async function fetchMovieDetailsUncached(
   }
 
   const details = detailsResult.value;
+  const isTv = mediaType === "tv";
+  const asTv = details as TmdbTvDetail;
+  const asFilm = details as TmdbMovieDetail;
 
-  // Director — first crew member with job "Director"
+  // Who made it. A film has one director in the credits crew; a series has
+  // creators, which TMDB puts on the detail response and NOT in the crew
+  // (a series' credits crew is producers and the odd writer, with no
+  // "Director" job on it at all — read that way every series would come
+  // back uncredited).
+  //
+  // Several creators are joined into the one string because `movies.director`
+  // is a single column and every screen renders it as one line. directorRef
+  // keeps the first, since a tap has to go to one person's page.
   let director = "";
   let directorRef: TmdbPersonRef | null = null;
-  if (creditsResult.status === "fulfilled") {
+  if (isTv) {
+    const creators = asTv.created_by ?? [];
+    director = creators.map((c) => c.name).join(", ");
+    const first = creators[0];
+    directorRef = first ? { id: first.id, name: first.name } : null;
+  } else if (creditsResult.status === "fulfilled") {
     const found = creditsResult.value.crew.find((c) => c.job === "Director");
     director = found?.name ?? "";
     directorRef = found ? { id: found.id, name: found.name } : null;
@@ -639,12 +797,21 @@ async function fetchMovieDetailsUncached(
 
   // TMDB uses both null and 0 for "we don't know the runtime"; neither is a
   // real length, so both become null rather than being rendered as "0m".
-  const runtime = typeof details.runtime === "number" && details.runtime > 0 ? details.runtime : null;
+  //
+  // Always null for a series. TMDB's episode_run_time is minutes per
+  // EPISODE, which is not the same question — putting it here would have
+  // the Length filter compare a two-hour film against a forty-minute
+  // episode of a sixty-hour show, and have the detail screen claim a
+  // series is 40m long. The Kind filter hides the Length slider for TV
+  // for the same reason.
+  const runtime =
+    !isTv && typeof asFilm.runtime === "number" && asFilm.runtime > 0 ? asFilm.runtime : null;
 
   return {
     tmdbId: details.id,
-    title: details.title,
-    releaseYear: getReleaseYear(details.release_date),
+    mediaType,
+    title: (isTv ? asTv.name : asFilm.title) ?? "",
+    releaseYear: getReleaseYear((isTv ? asTv.first_air_date : asFilm.release_date) ?? ""),
     posterUrl: getPosterUrl(details.poster_path),
     overview: details.overview ?? "",
     director,
@@ -662,50 +829,156 @@ async function fetchMovieDetailsUncached(
 }
 
 /**
- * Search TMDB by title for the UI — returns up to 20 poster-bearing results
- * sorted by popularity. Distinct from `searchTmdb` which caps at 3 for the
- * AI pipeline.
+ * Search TMDB by title for the UI — films and series together, up to 20
+ * poster-bearing results sorted by popularity. Distinct from `searchTmdb`
+ * which caps at 3 and is films-only, for the AI pipeline.
+ *
+ * Deliberately one merged list rather than two sections. A title is
+ * usually one or the other, and the person typing "Fargo" wants whichever
+ * they meant without first having to say which kind it is. Popularity
+ * across both is the ranking, so the Coen film outranks the series on
+ * "Fargo" and "Chernobyl" returns the series, which is the only thing of
+ * that name.
+ *
+ * A failure of one kind does not fail the other: searching while TMDB is
+ * throttling should return the films it did give us, not nothing.
  */
 export async function searchMoviesUI(query: string): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
-  const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${apiKey}&include_adult=false&language=en-US&page=1`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TMDB search failed: ${res.status} ${res.statusText}`);
-  const data = (await res.json()) as TmdbSearchResponse;
-  return data.results
-    .filter((m) => m.poster_path)
+  const q = encodeURIComponent(query);
+
+  const [films, series] = await Promise.allSettled([
+    tmdbFetch(
+      `${TMDB_BASE}/search/movie?query=${q}&api_key=${apiKey}&include_adult=false&language=en-US&page=1`,
+    ),
+    tmdbFetch(
+      `${TMDB_BASE}/search/tv?query=${q}&api_key=${apiKey}&include_adult=false&language=en-US&page=1`,
+    ),
+  ]);
+
+  const read = async (
+    settled: PromiseSettledResult<Response>,
+    mediaType: MediaType,
+  ): Promise<Array<TmdbCandidate & { popularity: number }>> => {
+    if (settled.status === "rejected" || !settled.value.ok) {
+      logger.warn(
+        {
+          mediaType,
+          reason:
+            settled.status === "rejected" ? String(settled.reason) : settled.value.status,
+        },
+        "TMDB UI search failed for one kind",
+      );
+      return [];
+    }
+    const data = (await settled.value.json()) as {
+      results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
+    };
+    return data.results
+      .filter((m) => m.poster_path)
+      .map((m) => ({ ...movieToCandidate(m, mediaType), popularity: m.popularity }));
+  };
+
+  const merged = [...(await read(films, "movie")), ...(await read(series, "tv"))];
+  if (merged.length === 0 && films.status === "fulfilled" && !films.value.ok) {
+    throw new Error(`TMDB search failed: ${films.value.status} ${films.value.statusText}`);
+  }
+
+  return merged
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 20)
-    .map(movieToCandidate);
+    .map(({ popularity: _popularity, ...c }) => c);
 }
 
 // ── Discovery (home screen) ───────────────────────────────────────────────────
 
+/**
+ * What is trending this week, films and series together.
+ *
+ * `/trending/all/week` rather than one call per kind: TMDB ranks the two
+ * against each other on this endpoint and tags every row with its
+ * media_type, so the ordering is its own rather than something invented
+ * here by interleaving two lists. It also returns `person` rows, which are
+ * not something that can go in a locker and are dropped.
+ *
+ * This is the one place a media_type is read off the payload instead of
+ * being known from the URL, because here it genuinely is the payload that
+ * decides.
+ */
 export async function fetchTrending(): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
-  const res = await fetch(
-    `${TMDB_BASE}/trending/movie/week?api_key=${apiKey}&language=en-US`
+  const res = await tmdbFetch(
+    `${TMDB_BASE}/trending/all/week?api_key=${apiKey}&language=en-US`
   );
   if (!res.ok) throw new Error(`TMDB trending failed: ${res.status}`);
-  const data = (await res.json()) as TmdbSearchResponse;
+  const data = (await res.json()) as {
+    results: Array<(TmdbMovie | TmdbTvListItem) & { media_type?: string }>;
+  };
   return data.results
-    .filter((m) => m.poster_path)
+    .filter((m) => m.poster_path && (m.media_type === "movie" || m.media_type === "tv"))
     .slice(0, 20)
-    .map(movieToCandidate);
+    .map((m) => movieToCandidate(m, m.media_type as MediaType));
 }
 
+/**
+ * What is out now: films in cinemas, and series currently airing.
+ *
+ * There is no single TMDB endpoint for this across both kinds the way
+ * there is for trending, so it is two calls merged. `/tv/on_the_air` is
+ * the closest analogue to `/movie/now_playing` — series with an episode
+ * in the next week — rather than `/tv/airing_today`, which is a one-day
+ * window and too thin to fill a rail.
+ *
+ * Interleaved rather than sorted by popularity across both, because the
+ * two endpoints' popularity numbers are not on a comparable scale: a
+ * long-running series accumulates far more than a film that opened on
+ * Friday, so a straight sort buries every new release under television.
+ * Each list is sorted within itself and then they are zipped, which keeps
+ * the rail mixed however lopsided the raw numbers are.
+ */
 export async function fetchNowPlaying(region: string = DEFAULT_REGION): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
-  const res = await fetch(
-    `${TMDB_BASE}/movie/now_playing?api_key=${apiKey}&language=en-US&region=${region}`
-  );
-  if (!res.ok) throw new Error(`TMDB now_playing failed: ${res.status}`);
-  const data = (await res.json()) as TmdbSearchResponse;
-  return data.results
-    .filter((m) => m.poster_path)
-    .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 20)
-    .map(movieToCandidate);
+
+  const get = async (path: string, mediaType: MediaType): Promise<TmdbCandidate[]> => {
+    const res = await tmdbFetch(`${TMDB_BASE}/${path}&api_key=${apiKey}&language=en-US`);
+    if (!res.ok) {
+      logger.warn({ path, status: res.status }, "TMDB new-releases call failed for one kind");
+      return [];
+    }
+    const data = (await res.json()) as {
+      results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
+    };
+    return data.results
+      .filter((m) => m.poster_path)
+      .sort((a, b) => b.popularity - a.popularity)
+      .map((m) => movieToCandidate(m, mediaType));
+  };
+
+  const [films, series] = await Promise.all([
+    get(`movie/now_playing?region=${region}`, "movie"),
+    get(`tv/on_the_air?`, "tv"),
+  ]);
+
+  if (films.length === 0 && series.length === 0) {
+    throw new Error("TMDB new releases failed for both films and series");
+  }
+
+  // Two films to each series: this rail is still mostly about what opened
+  // this week, and a 50/50 split pushed half the cinema listings off it.
+  const out: TmdbCandidate[] = [];
+  let f = 0;
+  let t = 0;
+  while (out.length < 20 && (f < films.length || t < series.length)) {
+    for (let i = 0; i < 2 && f < films.length && out.length < 20; i += 1, f += 1) {
+      out.push(films[f]!);
+    }
+    if (t < series.length && out.length < 20) {
+      out.push(series[t]!);
+      t += 1;
+    }
+    if (f >= films.length && t >= series.length) break;
+  }
+  return out;
 }
 
 /**
@@ -723,23 +996,28 @@ export async function fetchNowPlaying(region: string = DEFAULT_REGION): Promise<
  * its pool, or all of it, with nothing said anywhere.
  */
 export async function fetchTmdbRecommendations(
-  tmdbId: number
+  tmdbId: number,
+  mediaType: MediaType = "movie",
 ): Promise<TmdbCandidate[]> {
   const apiKey = getApiKey();
   const res = await tmdbFetch(
-    `${TMDB_BASE}/movie/${tmdbId}/recommendations?api_key=${apiKey}&language=en-US&page=1`
+    `${TMDB_BASE}/${mediaType}/${tmdbId}/recommendations?api_key=${apiKey}&language=en-US&page=1`
   );
   if (!res.ok) {
     // A 404 here just means TMDB doesn't know this ID — treat as empty
     if (res.status === 404) return [];
-    throw new Error(`TMDB recommendations failed for ${tmdbId}: ${res.status}`);
+    throw new Error(`TMDB recommendations failed for ${mediaType} ${tmdbId}: ${res.status}`);
   }
-  const data = (await res.json()) as TmdbSearchResponse;
+  // TMDB's recommendations for a series are series and for a film are
+  // films, so the kind asked for is the kind that comes back.
+  const data = (await res.json()) as {
+    results: Array<(TmdbMovie | TmdbTvListItem) & { popularity: number }>;
+  };
   return data.results
     .filter((m) => m.poster_path)
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 20)
-    .map(movieToCandidate);
+    .map((m) => movieToCandidate(m, mediaType));
 }
 
 
@@ -757,24 +1035,27 @@ export async function fetchTmdbRecommendations(
  */
 export async function fetchSimilarMovies(
   tmdbId: number,
-  limit = 12
+  limit = 12,
+  mediaType: MediaType = "movie",
 ): Promise<TmdbCandidate[]> {
   return cached(
-    `tmdb:similar:${tmdbId}:${limit}`,
+    `tmdb:similar:${mediaType}:${tmdbId}:${limit}`,
     SEARCH_CACHE_TTL_MS,
     async () => {
       const apiKey = getApiKey();
 
       const get = async (path: string): Promise<TmdbCandidate[]> => {
-        const res = await fetch(
-          `${TMDB_BASE}/movie/${tmdbId}/${path}?api_key=${apiKey}&language=en-US&page=1`
+        const res = await tmdbFetch(
+          `${TMDB_BASE}/${mediaType}/${tmdbId}/${path}?api_key=${apiKey}&language=en-US&page=1`
         );
         if (!res.ok) return [];
-        const data = (await res.json()) as TmdbSearchResponse;
+        const data = (await res.json()) as {
+          results: Array<TmdbMovie | TmdbTvListItem>;
+        };
         return data.results
           .filter((m) => m.poster_path)
           .slice(0, limit)
-          .map(movieToCandidate);
+          .map((m) => movieToCandidate(m, mediaType));
       };
 
       const recommended = await get("recommendations");
@@ -817,6 +1098,11 @@ interface TmdbPersonCredits {
   crew: Array<TmdbMovie & { id: number; job: string }>;
 }
 
+interface TmdbPersonTvCredits {
+  cast: Array<TmdbTvListItem>;
+  crew: Array<TmdbTvListItem & { job: string }>;
+}
+
 /**
  * A person and their filmography.
  *
@@ -832,12 +1118,19 @@ export async function fetchPersonDetails(personId: number): Promise<TmdbPersonDe
     async () => {
       const apiKey = getApiKey();
 
-      const [personResult, creditsResult] = await Promise.allSettled([
-        fetch(`${TMDB_BASE}/person/${personId}?api_key=${apiKey}&language=en-US`).then((r) =>
+      const [personResult, creditsResult, tvCreditsResult] = await Promise.allSettled([
+        tmdbFetch(`${TMDB_BASE}/person/${personId}?api_key=${apiKey}&language=en-US`).then((r) =>
           r.ok ? (r.json() as Promise<TmdbPerson>) : Promise.reject(new Error(String(r.status)))
         ),
-        fetch(`${TMDB_BASE}/person/${personId}/movie_credits?api_key=${apiKey}&language=en-US`).then(
+        tmdbFetch(`${TMDB_BASE}/person/${personId}/movie_credits?api_key=${apiKey}&language=en-US`).then(
           (r) => (r.ok ? (r.json() as Promise<TmdbPersonCredits>) : Promise.reject(new Error(String(r.status))))
+        ),
+        // Separate endpoint: /person/{id}/movie_credits has no television on
+        // it at all. Without this an actor who has spent a decade in series
+        // reads as having barely worked, and a series creator tapped from a
+        // detail screen opens a page with nothing on it.
+        tmdbFetch(`${TMDB_BASE}/person/${personId}/tv_credits?api_key=${apiKey}&language=en-US`).then(
+          (r) => (r.ok ? (r.json() as Promise<TmdbPersonTvCredits>) : Promise.reject(new Error(String(r.status))))
         ),
       ]);
 
@@ -850,13 +1143,47 @@ export async function fetchPersonDetails(personId: number): Promise<TmdbPersonDe
         films
           .filter((m) => m.poster_path)
           .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
-          .map(movieToCandidate);
+          .map((m) => movieToCandidate(m, "movie"));
+
+      const orderTv = (shows: TmdbTvListItem[]) =>
+        shows
+          .filter((m) => m.poster_path)
+          .sort((a, b) => (b.first_air_date ?? "").localeCompare(a.first_air_date ?? ""))
+          .map((m) => movieToCandidate(m, "tv"));
 
       let actedIn: TmdbCandidate[] = [];
       let directed: TmdbCandidate[] = [];
       if (creditsResult.status === "fulfilled") {
         actedIn = order(creditsResult.value.cast ?? []);
         directed = order((creditsResult.value.crew ?? []).filter((c) => c.job === "Director"));
+      }
+
+      if (tvCreditsResult.status === "fulfilled") {
+        // Newest first across both kinds once merged, so a career reads as
+        // one timeline rather than all the films and then all the series.
+        const byYear = (a: TmdbCandidate, b: TmdbCandidate) =>
+          b.releaseYear.localeCompare(a.releaseYear);
+
+        actedIn = [...actedIn, ...orderTv(tvCreditsResult.value.cast ?? [])].sort(byYear);
+
+        // "Creator" is what TMDB puts against the people it lists in a
+        // series' created_by, which is what the detail screen shows as the
+        // series' director — so this is the credit that has to be here for
+        // that name to lead anywhere. "Director" catches episode directors.
+        // If TMDB words either differently the list is merely shorter.
+        const made = (tvCreditsResult.value.crew ?? []).filter(
+          (c) => c.job === "Creator" || c.job === "Director",
+        );
+        // Dedupe: directing four episodes of one series is four crew rows.
+        const seen = new Set<number>();
+        directed = [
+          ...directed,
+          ...orderTv(made).filter((c) => {
+            if (seen.has(c.tmdbId)) return false;
+            seen.add(c.tmdbId);
+            return true;
+          }),
+        ].sort(byYear);
       }
 
       return {

@@ -34,6 +34,8 @@ import {
   fetchTmdbRecommendations,
   enrichCandidates,
   normalizeRegion,
+  DEFAULT_REGION,
+  normalizeMediaType,
   fetchSimilarMovies,
   fetchPersonDetails,
   type TmdbCandidate,
@@ -110,7 +112,8 @@ router.get("/movies/tmdb/:tmdbId", async (req, res): Promise<void> => {
   }
   try {
     const region = normalizeRegion(req.query.region);
-    const details = await fetchMovieDetails(params.data.tmdbId, region);
+    const mediaType = normalizeMediaType(req.query.mediaType);
+    const details = await fetchMovieDetails(params.data.tmdbId, region, mediaType);
     if (!details) {
       res.status(404).json({ error: "Movie not found on TMDB" });
       return;
@@ -132,7 +135,11 @@ router.get("/movies/tmdb/:tmdbId/similar", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const movies = await fetchSimilarMovies(params.data.tmdbId);
+    const movies = await fetchSimilarMovies(
+      params.data.tmdbId,
+      12,
+      normalizeMediaType(req.query.mediaType),
+    );
     res.json({ movies });
   } catch (err) {
     req.log.error({ err, tmdbId: params.data.tmdbId }, "TMDB similar fetch failed");
@@ -190,14 +197,20 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
       return;
     }
 
-    const savedTmdbIds = new Set(watchlist.map((m) => m.tmdbId));
+    // Keyed by kind as well as id throughout. Film 1399 and series 1399
+    // are different titles, so a set of bare ids would have a film in the
+    // locker suppress an unrelated series from the rail, and vice versa.
+    const key = (c: { tmdbId: number; mediaType?: string | null }) =>
+      `${normalizeMediaType(c.mediaType)}:${c.tmdbId}`;
+
+    const savedTmdbIds = new Set(watchlist.map(key));
     const seeds = pickSeeds(watchlist, SEED_COUNT);
 
     const results = await Promise.allSettled(
-      seeds.map((s) => fetchTmdbRecommendations(s.tmdbId))
+      seeds.map((s) => fetchTmdbRecommendations(s.tmdbId, normalizeMediaType(s.mediaType)))
     );
 
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     const recommendations: TmdbCandidate[] = [];
     const failures: { tmdbId: number; err: unknown }[] = [];
 
@@ -211,9 +224,9 @@ router.get("/movies/recommendations", requireAuth, async (req, res): Promise<voi
         continue;
       }
       for (const movie of result.value) {
-        if (savedTmdbIds.has(movie.tmdbId)) continue;
-        if (seen.has(movie.tmdbId)) continue;
-        seen.add(movie.tmdbId);
+        if (savedTmdbIds.has(key(movie))) continue;
+        if (seen.has(key(movie))) continue;
+        seen.add(key(movie));
         recommendations.push(movie);
       }
     }
@@ -304,10 +317,23 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
   // meant two round trips and a film that was briefly on the wrong list.
   const { isWatched, ...film } = parsed.data;
 
+  // Every lookup below has to carry the kind, not just the id. The unique
+  // index on movies is (tmdb_id, clerk_user_id, media_type), so without it
+  // an "already in your locker" check for series 1399 matches the FILM
+  // 1399 row — and the response says the series was added while handing
+  // back a different title entirely.
+  const mediaType = normalizeMediaType(film.mediaType);
+  const sameTitle = and(
+    eq(moviesTable.tmdbId, parsed.data.tmdbId),
+    eq(moviesTable.clerkUserId, clerkUserId),
+    eq(moviesTable.mediaType, mediaType),
+  );
+
   const [movie] = await db
     .insert(moviesTable)
     .values({
       ...film,
+      mediaType,
       clerkUserId,
       isWatched: isWatched ?? false,
       watchedAt: isWatched ? new Date() : null,
@@ -326,13 +352,7 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
       await db
         .update(moviesTable)
         .set({ sourceUrl: film.sourceUrl })
-        .where(
-          and(
-            eq(moviesTable.tmdbId, parsed.data.tmdbId),
-            eq(moviesTable.clerkUserId, clerkUserId),
-            isNull(moviesTable.sourceUrl)
-          )
-        );
+        .where(and(sameTitle, isNull(moviesTable.sourceUrl)));
     }
 
     // Adding it as watched should still mark it so,
@@ -342,13 +362,7 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
       const [promoted] = await db
         .update(moviesTable)
         .set({ isWatched: true, watchedAt: new Date() })
-        .where(
-          and(
-            eq(moviesTable.tmdbId, parsed.data.tmdbId),
-            eq(moviesTable.clerkUserId, clerkUserId),
-            eq(moviesTable.isWatched, false)
-          )
-        )
+        .where(and(sameTitle, eq(moviesTable.isWatched, false)))
         .returning();
       if (promoted) {
         res.status(200).json(AddMovieResponse.parse(promoted));
@@ -356,22 +370,14 @@ router.post("/movies", requireAuth, async (req, res): Promise<void> => {
       }
     }
 
-    const [existing] = await db
-      .select()
-      .from(moviesTable)
-      .where(
-        and(
-          eq(moviesTable.tmdbId, parsed.data.tmdbId),
-          eq(moviesTable.clerkUserId, clerkUserId)
-        )
-      );
+    const [existing] = await db.select().from(moviesTable).where(sameTitle);
     res.status(200).json(AddMovieResponse.parse(existing));
     return;
   }
 
   res.status(201).json(AddMovieResponse.parse(movie));
 
-  fetchMovieDetails(movie.tmdbId)
+  fetchMovieDetails(movie.tmdbId, DEFAULT_REGION, mediaType)
     .then(async (details) => {
       if (!details) return;
       await db

@@ -86,8 +86,21 @@ export interface Movie {
   addedAt: string;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type TmdbMovieCardMediaType = typeof TmdbMovieCardMediaType[keyof typeof TmdbMovieCardMediaType];
+
+
+export const TmdbMovieCardMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface TmdbMovieCard {
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: TmdbMovieCardMediaType;
   title: string;
   releaseYear: string;
   posterUrl: string;
@@ -104,6 +117,17 @@ export interface TmdbMovieCard {
 }
 
 /**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type TmdbMovieDetailsResponseMediaType = typeof TmdbMovieDetailsResponseMediaType[keyof typeof TmdbMovieDetailsResponseMediaType];
+
+
+export const TmdbMovieDetailsResponseMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+/**
  * A named person on a film, with the id to open their filmography.
  */
 export interface PersonRef {
@@ -113,6 +137,8 @@ export interface PersonRef {
 
 export interface TmdbMovieDetailsResponse {
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: TmdbMovieDetailsResponseMediaType;
   title: string;
   releaseYear: string;
   posterUrl: string;
@@ -201,8 +227,21 @@ export interface PersonResponse {
   directed: TmdbMovieCard[];
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type AddMovieBodyMediaType = typeof AddMovieBodyMediaType[keyof typeof AddMovieBodyMediaType];
+
+
+export const AddMovieBodyMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface AddMovieBody {
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: AddMovieBodyMediaType;
   title: string;
   releaseYear: string;
   posterUrl: string;
@@ -301,8 +340,21 @@ export interface PatchRatingBody {
   rating: number | null;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type FilmCommunityScoreMediaType = typeof FilmCommunityScoreMediaType[keyof typeof FilmCommunityScoreMediaType];
+
+
+export const FilmCommunityScoreMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface FilmCommunityScore {
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: FilmCommunityScoreMediaType;
   /** Average star rating across all community ratings, null when no ratings exist */
   average: number | null;
   /** Total number of community ratings */
@@ -315,7 +367,20 @@ export interface FilmCommunityScore {
   userRating?: number | null;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type SetCommunityRatingBodyMediaType = typeof SetCommunityRatingBodyMediaType[keyof typeof SetCommunityRatingBodyMediaType];
+
+
+export const SetCommunityRatingBodyMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface SetCommunityRatingBody {
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: SetCommunityRatingBodyMediaType;
   /**
      * Half-star steps, so ten positions rather than five — the same scale as a private rating, written by the same control. This was an integer while movies.rating was already a real, so the stars in the community section rejected a half that the identical stars one section below accepted.
      * @minimum 0.5
@@ -324,9 +389,22 @@ export interface SetCommunityRatingBody {
   rating: number;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type FilmCommentMediaType = typeof FilmCommentMediaType[keyof typeof FilmCommentMediaType];
+
+
+export const FilmCommentMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface FilmComment {
   id: number;
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: FilmCommentMediaType;
   /** Clerk user ID of the author */
   userId: string;
   /** Display username of the author */
@@ -351,13 +429,37 @@ export interface FilmCommentsResponse {
   hasMore: boolean;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type PostCommentBodyMediaType = typeof PostCommentBodyMediaType[keyof typeof PostCommentBodyMediaType];
+
+
+export const PostCommentBodyMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface PostCommentBody {
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: PostCommentBodyMediaType;
   /**
      * @minLength 1
      * @maxLength 280
      */
   body: string;
 }
+
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type FilmNotificationMediaType = typeof FilmNotificationMediaType[keyof typeof FilmNotificationMediaType];
+
+
+export const FilmNotificationMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
 
 export interface FilmNotification {
   id: number;
@@ -370,6 +472,8 @@ export interface FilmNotification {
   /** Clerk user ID of the recipient */
   toUserId: string;
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: FilmNotificationMediaType;
   filmTitle: string;
   posterUrl: string;
   isRead: boolean;
@@ -384,10 +488,23 @@ export interface NotificationsResponse {
   unreadCount: number;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type SendNotificationBodyMediaType = typeof SendNotificationBodyMediaType[keyof typeof SendNotificationBodyMediaType];
+
+
+export const SendNotificationBodyMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface SendNotificationBody {
   /** Clerk user ID of the recipient */
   toUserId: string;
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: SendNotificationBodyMediaType;
   filmTitle: string;
   posterUrl: string;
 }
@@ -486,6 +603,17 @@ export const ConversationFeedItemType = {
 } as const;
 
 /**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type ConversationFeedItemMediaType = typeof ConversationFeedItemMediaType[keyof typeof ConversationFeedItemMediaType];
+
+
+export const ConversationFeedItemMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+/**
  * One entry in a merged, chronological chat feed between two users — a film recommendation, a reaction/message, or a playlist somebody sent, distinguished by "type".
  */
 export interface ConversationFeedItem {
@@ -495,6 +623,8 @@ export interface ConversationFeedItem {
   toUserId: string;
   createdAt: string;
   tmdbId?: number | null;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: ConversationFeedItemMediaType;
   filmTitle?: string | null;
   posterUrl?: string | null;
   isRead?: boolean | null;
@@ -520,6 +650,17 @@ export const FeedItemType = {
 } as const;
 
 /**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type FeedItemMediaType = typeof FeedItemMediaType[keyof typeof FeedItemMediaType];
+
+
+export const FeedItemMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+/**
  * One thing somebody the caller follows did to a film.
  */
 export interface FeedItem {
@@ -534,6 +675,8 @@ export interface FeedItem {
   user: NotificationUser;
   /** The film, on everything but a "playlist" item. */
   tmdbId?: number | null;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: FeedItemMediaType;
   title?: string | null;
   posterUrl?: string | null;
   releaseYear?: string | null;
@@ -624,12 +767,25 @@ export interface PublicUserProfile {
 }
 
 /**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type ProfileFilmCardMediaType = typeof ProfileFilmCardMediaType[keyof typeof ProfileFilmCardMediaType];
+
+
+export const ProfileFilmCardMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+/**
  * One film on someone's profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person's own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.
  *
  * Title and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.
  */
 export interface ProfileFilmCard {
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: ProfileFilmCardMediaType;
   title?: string | null;
   posterUrl?: string | null;
   releaseYear?: string | null;
@@ -959,8 +1115,21 @@ export interface SharePlaylistResponse {
   sent: number;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ */
+export type AddPlaylistItemBodyMediaType = typeof AddPlaylistItemBodyMediaType[keyof typeof AddPlaylistItemBodyMediaType];
+
+
+export const AddPlaylistItemBodyMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface AddPlaylistItemBody {
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  mediaType?: AddPlaylistItemBodyMediaType;
   filmTitle: string;
   posterUrl: string;
   /** The social post this film was identified from, so the film's page can offer a way back to it. Omit for a film added by search or by hand, which came from no post. */
@@ -995,23 +1164,122 @@ export type SearchMoviesParams = {
 q: string;
 };
 
+export type GetSimilarMoviesParams = {
+/**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: GetSimilarMoviesMediaType;
+};
+
+export type GetSimilarMoviesMediaType = typeof GetSimilarMoviesMediaType[keyof typeof GetSimilarMoviesMediaType];
+
+
+export const GetSimilarMoviesMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export type GetSimilarMovies200 = {
   movies: TmdbMovieCard[];
 };
 
 export type GetMovieDetailsParams = {
 /**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: GetMovieDetailsMediaType;
+/**
  * ISO 3166-1 alpha-2 country code used to pick which country's watch providers to return. Defaults to US when omitted or invalid.
  */
 region?: string;
 };
 
+export type GetMovieDetailsMediaType = typeof GetMovieDetailsMediaType[keyof typeof GetMovieDetailsMediaType];
+
+
+export const GetMovieDetailsMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+export type GetFilmCommunityScoreParams = {
+/**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: GetFilmCommunityScoreMediaType;
+};
+
+export type GetFilmCommunityScoreMediaType = typeof GetFilmCommunityScoreMediaType[keyof typeof GetFilmCommunityScoreMediaType];
+
+
+export const GetFilmCommunityScoreMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+export type SetFilmCommunityRatingParams = {
+/**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: SetFilmCommunityRatingMediaType;
+};
+
+export type SetFilmCommunityRatingMediaType = typeof SetFilmCommunityRatingMediaType[keyof typeof SetFilmCommunityRatingMediaType];
+
+
+export const SetFilmCommunityRatingMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+export type DeleteFilmCommunityRatingParams = {
+/**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: DeleteFilmCommunityRatingMediaType;
+};
+
+export type DeleteFilmCommunityRatingMediaType = typeof DeleteFilmCommunityRatingMediaType[keyof typeof DeleteFilmCommunityRatingMediaType];
+
+
+export const DeleteFilmCommunityRatingMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export type GetFilmCommentsParams = {
+/**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: GetFilmCommentsMediaType;
 /**
  * @minimum 1
  */
 page?: number;
 };
+
+export type GetFilmCommentsMediaType = typeof GetFilmCommentsMediaType[keyof typeof GetFilmCommentsMediaType];
+
+
+export const GetFilmCommentsMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
+export type PostFilmCommentParams = {
+/**
+ * Whether tmdbId names a film or a television series. TMDB numbers the two in separate sequences, so the same id is two different titles. Omitted means film, which is what every client built before TV support ever meant.
+ */
+mediaType?: PostFilmCommentMediaType;
+};
+
+export type PostFilmCommentMediaType = typeof PostFilmCommentMediaType[keyof typeof PostFilmCommentMediaType];
+
+
+export const PostFilmCommentMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
 
 export type GetFeedParams = {
 /**

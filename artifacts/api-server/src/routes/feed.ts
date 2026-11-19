@@ -40,7 +40,7 @@ import {
 import { GetFeedResponse, MarkFeedSeenBody } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { getMutualBlockSet } from "../lib/blocks";
-import { resolveFilmCards } from "../lib/filmCards";
+import { resolveFilmCards, filmCardKey } from "../lib/filmCards";
 
 const router: IRouter = Router();
 
@@ -106,7 +106,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   // they are most likely to still care about.
   const MY_FILMS_CONSIDERED = 300;
   const myFilmRows = await db
-    .select({ tmdbId: moviesTable.tmdbId })
+    .select({ tmdbId: moviesTable.tmdbId, mediaType: moviesTable.mediaType })
     .from(moviesTable)
     .where(eq(moviesTable.clerkUserId, clerkUserId))
     .orderBy(desc(moviesTable.addedAt))
@@ -140,6 +140,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
             id: moviesTable.id,
             userId: moviesTable.clerkUserId,
             tmdbId: moviesTable.tmdbId,
+            mediaType: moviesTable.mediaType,
             title: moviesTable.title,
             posterUrl: moviesTable.posterUrl,
             releaseYear: moviesTable.releaseYear,
@@ -162,6 +163,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
             id: filmCommunityRatingsTable.id,
             userId: filmCommunityRatingsTable.userId,
             tmdbId: filmCommunityRatingsTable.tmdbId,
+            mediaType: filmCommunityRatingsTable.mediaType,
             rating: filmCommunityRatingsTable.rating,
             at: filmCommunityRatingsTable.createdAt,
           })
@@ -177,6 +179,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
             id: filmCommentsTable.id,
             userId: filmCommentsTable.userId,
             tmdbId: filmCommentsTable.tmdbId,
+            mediaType: filmCommentsTable.mediaType,
             body: filmCommentsTable.body,
             at: filmCommentsTable.createdAt,
           })
@@ -216,6 +219,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
             id: filmCommunityRatingsTable.id,
             userId: filmCommunityRatingsTable.userId,
             tmdbId: filmCommunityRatingsTable.tmdbId,
+            mediaType: filmCommunityRatingsTable.mediaType,
             rating: filmCommunityRatingsTable.rating,
             at: filmCommunityRatingsTable.createdAt,
           })
@@ -241,6 +245,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
             id: filmCommentsTable.id,
             userId: filmCommentsTable.userId,
             tmdbId: filmCommentsTable.tmdbId,
+            mediaType: filmCommentsTable.mediaType,
             body: filmCommentsTable.body,
             at: filmCommentsTable.createdAt,
           })
@@ -291,10 +296,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   // Ratings and comments keep a TMDB id and nothing else, so one resolve
   // covers both. Watched rows carry their own metadata already.
   const cards = await resolveFilmCards([
-    ...ratingRows.map((r) => r.tmdbId),
-    ...commentRows.map((c) => c.tmdbId),
-    ...publicRatingRows.map((r) => r.tmdbId),
-    ...publicCommentRows.map((c) => c.tmdbId),
+    ...ratingRows,
+    ...commentRows,
+    ...publicRatingRows,
+    ...publicCommentRows,
   ]);
 
   const seenBefore = me.feedLastSeenAt;
@@ -307,6 +312,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     fromFollowed: boolean;
     user: Actor;
     tmdbId: number | null;
+    mediaType: string | null;
     title: string | null;
     posterUrl: string | null;
     releaseYear: string | null;
@@ -344,6 +350,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       at: new Date(w.at),
       userId: w.userId,
       tmdbId: w.tmdbId,
+      mediaType: w.mediaType,
       title: w.title,
       posterUrl: w.posterUrl || null,
       releaseYear: w.releaseYear || null,
@@ -363,9 +370,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       at: r.at,
       userId: r.userId,
       tmdbId: r.tmdbId,
-      title: cards.get(r.tmdbId)?.title ?? null,
-      posterUrl: cards.get(r.tmdbId)?.posterUrl ?? null,
-      releaseYear: cards.get(r.tmdbId)?.releaseYear ?? null,
+      mediaType: r.mediaType,
+      title: cards.get(filmCardKey(r))?.title ?? null,
+      posterUrl: cards.get(filmCardKey(r))?.posterUrl ?? null,
+      releaseYear: cards.get(filmCardKey(r))?.releaseYear ?? null,
       rating: r.rating,
       comment: null,
       playlistId: null,
@@ -382,9 +390,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       at: c.at,
       userId: c.userId,
       tmdbId: c.tmdbId,
-      title: cards.get(c.tmdbId)?.title ?? null,
-      posterUrl: cards.get(c.tmdbId)?.posterUrl ?? null,
-      releaseYear: cards.get(c.tmdbId)?.releaseYear ?? null,
+      mediaType: c.mediaType,
+      title: cards.get(filmCardKey(c))?.title ?? null,
+      posterUrl: cards.get(filmCardKey(c))?.posterUrl ?? null,
+      releaseYear: cards.get(filmCardKey(c))?.releaseYear ?? null,
       rating: null,
       comment: c.body,
       playlistId: null,
@@ -401,9 +410,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       at: r.at,
       userId: r.userId,
       tmdbId: r.tmdbId,
-      title: cards.get(r.tmdbId)?.title ?? null,
-      posterUrl: cards.get(r.tmdbId)?.posterUrl ?? null,
-      releaseYear: cards.get(r.tmdbId)?.releaseYear ?? null,
+      mediaType: r.mediaType,
+      title: cards.get(filmCardKey(r))?.title ?? null,
+      posterUrl: cards.get(filmCardKey(r))?.posterUrl ?? null,
+      releaseYear: cards.get(filmCardKey(r))?.releaseYear ?? null,
       rating: r.rating,
       comment: null,
       playlistId: null,
@@ -420,9 +430,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       at: c.at,
       userId: c.userId,
       tmdbId: c.tmdbId,
-      title: cards.get(c.tmdbId)?.title ?? null,
-      posterUrl: cards.get(c.tmdbId)?.posterUrl ?? null,
-      releaseYear: cards.get(c.tmdbId)?.releaseYear ?? null,
+      mediaType: c.mediaType,
+      title: cards.get(filmCardKey(c))?.title ?? null,
+      posterUrl: cards.get(filmCardKey(c))?.posterUrl ?? null,
+      releaseYear: cards.get(filmCardKey(c))?.releaseYear ?? null,
       rating: null,
       comment: c.body,
       playlistId: null,
@@ -439,6 +450,7 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
       at: pl.at,
       userId: pl.userId,
       tmdbId: null,
+      mediaType: null,
       title: null,
       posterUrl: null,
       releaseYear: null,
@@ -486,7 +498,10 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
     // Playlists are not about one film and have no pair to collapse — two
     // of them from the same person would otherwise fold into one.
     if (item.tmdbId == null) return true;
-    const key = `${item.user.clerkId}:${item.tmdbId}`;
+    // Kind included: somebody who watched the film and rated the series
+    // of the same number did two different things, and collapsing them
+    // would drop one of the two cards.
+    const key = `${item.user.clerkId}:${filmCardKey(item as { tmdbId: number; mediaType: string | null })}`;
     if (seenPairs.has(key)) return false;
     seenPairs.add(key);
     return true;
@@ -508,19 +523,29 @@ router.get("/feed", requireAuth, async (req, res): Promise<void> => {
   const pageTmdbIds = [...new Set(page.map((i) => i.tmdbId).filter((id): id is number => id != null))];
   const commentCounts = pageTmdbIds.length
     ? await db
-        .select({ tmdbId: filmCommentsTable.tmdbId, total: count(filmCommentsTable.id) })
+        .select({
+          tmdbId: filmCommentsTable.tmdbId,
+          // Grouped by kind as well, so a card for a series does not show
+          // the comment count of the film with the same number — or, worse,
+          // the two added together.
+          mediaType: filmCommentsTable.mediaType,
+          total: count(filmCommentsTable.id),
+        })
         .from(filmCommentsTable)
         .where(inArray(filmCommentsTable.tmdbId, pageTmdbIds))
-        .groupBy(filmCommentsTable.tmdbId)
+        .groupBy(filmCommentsTable.tmdbId, filmCommentsTable.mediaType)
     : [];
-  const countByTmdbId = new Map(commentCounts.map((r) => [r.tmdbId, Number(r.total)]));
+  const countByTitle = new Map(commentCounts.map((r) => [filmCardKey(r), Number(r.total)]));
 
   const withCounts = page.map((item) => ({
     ...item,
     // Zero rather than null for a film nobody has commented on — the card
     // draws the icon either way, and null would be "unknown" rather than
     // "none". Playlist cards are not about one film and keep null.
-    commentCount: item.tmdbId == null ? null : countByTmdbId.get(item.tmdbId) ?? 0,
+    commentCount:
+      item.tmdbId == null
+        ? null
+        : countByTitle.get(filmCardKey(item as { tmdbId: number; mediaType: string | null })) ?? 0,
   }));
 
   res.json(

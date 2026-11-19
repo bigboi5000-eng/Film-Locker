@@ -21,7 +21,7 @@ import {
 import { UpdatePushTokenBody, ListMoviesResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthedRequest } from "../middlewares/requireAuth";
 import { isBlockedEitherWay } from "../lib/blocks";
-import { resolveFilmCards, type FilmCard } from "../lib/filmCards";
+import { resolveFilmCards, filmCardKey, type FilmCard } from "../lib/filmCards";
 import { deleteUserData } from "../lib/deleteUserData";
 import { generateUsername } from "../lib/generateUsername";
 import { z } from "zod";
@@ -242,6 +242,7 @@ router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
       db
         .select({
           tmdbId: moviesTable.tmdbId,
+          mediaType: moviesTable.mediaType,
           title: moviesTable.title,
           releaseYear: moviesTable.releaseYear,
           isWatched: moviesTable.isWatched,
@@ -283,6 +284,7 @@ router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
       db
         .select({
           tmdbId: filmCommentsTable.tmdbId,
+          mediaType: filmCommentsTable.mediaType,
           body: filmCommentsTable.body,
           createdAt: filmCommentsTable.createdAt,
         })
@@ -291,6 +293,7 @@ router.get("/users/me/export", requireAuth, async (req, res): Promise<void> => {
       db
         .select({
           tmdbId: filmCommunityRatingsTable.tmdbId,
+          mediaType: filmCommunityRatingsTable.mediaType,
           rating: filmCommunityRatingsTable.rating,
         })
         .from(filmCommunityRatingsTable)
@@ -555,6 +558,7 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
       ? db
           .select({
             tmdbId: filmCommunityRatingsTable.tmdbId,
+            mediaType: filmCommunityRatingsTable.mediaType,
             rating: filmCommunityRatingsTable.rating,
             at: filmCommunityRatingsTable.createdAt,
           })
@@ -568,6 +572,7 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
       ? db
           .select({
             tmdbId: filmCommentsTable.tmdbId,
+            mediaType: filmCommentsTable.mediaType,
             body: filmCommentsTable.body,
             at: filmCommentsTable.createdAt,
           })
@@ -581,6 +586,7 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
       ? db
           .select({
             tmdbId: moviesTable.tmdbId,
+            mediaType: moviesTable.mediaType,
             title: moviesTable.title,
             posterUrl: moviesTable.posterUrl,
             releaseYear: moviesTable.releaseYear,
@@ -603,24 +609,25 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
   // Ratings and comments keep a TMDB id and nothing else, so one resolve
   // covers both — and the two sections overlap heavily in practice, since
   // people tend to write about the films they rate.
-  const needsResolving = [
-    ...(ratingRows ?? []).map((r) => r.tmdbId),
-    ...(commentRows ?? []).map((c) => c.tmdbId),
-  ];
-  const cards: Map<number, FilmCard> = needsResolving.length
+  const needsResolving = [...(ratingRows ?? []), ...(commentRows ?? [])];
+  const cards: Map<string, FilmCard> = needsResolving.length
     ? await resolveFilmCards(needsResolving)
     : new Map();
 
-  const card = (tmdbId: number) => cards.get(tmdbId);
+  // Keyed by kind and id together, because a tmdb_id on its own names two
+  // different titles.
+  const card = (ref: { tmdbId: number; mediaType?: string | null }) =>
+    cards.get(filmCardKey(ref));
 
   const recentRatings =
     ratingRows === null
       ? null
       : ratingRows.map((r) => ({
           tmdbId: r.tmdbId,
-          title: card(r.tmdbId)?.title ?? null,
-          posterUrl: card(r.tmdbId)?.posterUrl ?? null,
-          releaseYear: card(r.tmdbId)?.releaseYear ?? null,
+          mediaType: r.mediaType,
+          title: card(r)?.title ?? null,
+          posterUrl: card(r)?.posterUrl ?? null,
+          releaseYear: card(r)?.releaseYear ?? null,
           rating: r.rating,
           comment: null,
           at: r.at,
@@ -631,9 +638,10 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
       ? null
       : commentRows.map((c) => ({
           tmdbId: c.tmdbId,
-          title: card(c.tmdbId)?.title ?? null,
-          posterUrl: card(c.tmdbId)?.posterUrl ?? null,
-          releaseYear: card(c.tmdbId)?.releaseYear ?? null,
+          mediaType: c.mediaType,
+          title: card(c)?.title ?? null,
+          posterUrl: card(c)?.posterUrl ?? null,
+          releaseYear: card(c)?.releaseYear ?? null,
           rating: null,
           comment: c.body,
           at: c.at,
@@ -644,6 +652,7 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
       ? null
       : watchedRows.map((m) => ({
           tmdbId: m.tmdbId,
+          mediaType: m.mediaType,
           title: m.title,
           posterUrl: m.posterUrl || null,
           releaseYear: m.releaseYear || null,
@@ -818,6 +827,7 @@ router.get("/users/:id/watched", requireAuth, async (req, res): Promise<void> =>
     .select({
       id: moviesTable.id,
       tmdbId: moviesTable.tmdbId,
+      mediaType: moviesTable.mediaType,
       title: moviesTable.title,
       releaseYear: moviesTable.releaseYear,
       posterUrl: moviesTable.posterUrl,
