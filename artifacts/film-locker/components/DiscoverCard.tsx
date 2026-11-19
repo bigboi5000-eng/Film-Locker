@@ -3,7 +3,7 @@ import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import type { TmdbMovieCard } from '@workspace/api-client-react';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
-import { LockerBadge } from '@/components/LockerBadge';
+import { LockerBadge, MediaKindBadge } from '@/components/LockerBadge';
 import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
@@ -47,6 +47,7 @@ export function DiscoverCard({ movie, onPress, width, height, lockerStatus }: Di
         </View>
       </View>
       <LockerBadge status={lockerStatus ?? null} />
+      <MediaKindBadge mediaType={movie.mediaType} />
     </TouchableOpacity>
   );
 }

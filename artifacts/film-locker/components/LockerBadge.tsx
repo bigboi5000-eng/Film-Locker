@@ -55,6 +55,29 @@ export function LockerBadge({
   );
 }
 
+/**
+ * The mark that says "this is a series, not a film".
+ *
+ * Drawn for television only, and never for a film. A badge on everything
+ * is a badge on nothing, and the app is a film locker — a film is the
+ * unmarked case, so the mark is the exception rather than a label on
+ * every poster in the grid.
+ *
+ * Bottom-LEFT, deliberately: LockerBadge owns the top-right, and a series
+ * you have already watched has to show both at once. Overlapping them
+ * would hide whichever drew first, which is the kind of thing that only
+ * shows up once somebody has a watched series.
+ */
+export function MediaKindBadge({ mediaType }: { mediaType?: string | null }) {
+  const styles = useThemedStyles(makeStyles);
+  if (mediaType !== 'tv') return null;
+  return (
+    <View style={styles.kind} accessibilityLabel="Television series">
+      <Text style={styles.kindText}>TV</Text>
+    </View>
+  );
+}
+
 const makeStyles = (c: Palette) => StyleSheet.create({
   badge: {
     position: 'absolute',
@@ -76,4 +99,22 @@ const makeStyles = (c: Palette) => StyleSheet.create({
    */
   saved: { backgroundColor: c.star },
   tick: { color: c.onColor, fontFamily: 'Inter_700Bold' },
+  kind: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    // Dark and translucent rather than an accent colour: this is a label,
+    // not a status, and it must not compete with the two badges above it
+    // that say something the viewer can act on.
+    backgroundColor: 'rgba(0,0,0,0.72)',
+  },
+  kindText: {
+    color: '#fff',
+    fontSize: 9,
+    letterSpacing: 0.5,
+    fontFamily: 'Inter_700Bold',
+  },
 });

@@ -104,9 +104,11 @@ export function AiResultSheet({ visible, matches, saved, onClose }: AiResultShee
           <Text style={[styles.matchTitle, { color: colors.foreground }]} numberOfLines={1}>
             {item.movie_title}
           </Text>
-          {item.release_year ? (
+          {item.release_year || resolvedKind === 'tv' ? (
             <Text style={[styles.matchYear, { color: colors.primary }]}>
-              {item.release_year}
+              {[item.release_year, resolvedKind === 'tv' ? 'TV series' : null]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           ) : null}
           {/* Where the answer came from, not just how sure it is.

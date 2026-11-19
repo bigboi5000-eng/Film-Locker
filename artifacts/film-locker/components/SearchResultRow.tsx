@@ -56,7 +56,18 @@ export function SearchResultRow({
         <Text style={styles.resultTitle} numberOfLines={2}>
           {movie.title}
         </Text>
-        {movie.releaseYear ? <Text style={styles.resultYear}>{movie.releaseYear}</Text> : null}
+        {/* Year and kind on one line, because a search for "Fargo"
+            returns the 1996 film AND the 2014 series and the year alone
+            does not say which is which to anyone who does not already
+            know. Only a series is labelled: the app is a film locker, so
+            a film is the unmarked case. */}
+        {movie.releaseYear || movie.mediaType === 'tv' ? (
+          <Text style={styles.resultYear}>
+            {[movie.releaseYear, movie.mediaType === 'tv' ? 'TV series' : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        ) : null}
       </View>
       {isWatched && (
         <View style={[styles.badge, styles.watchedBadge]}>

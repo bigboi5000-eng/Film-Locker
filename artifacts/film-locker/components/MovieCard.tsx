@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
-import { LockerBadge } from '@/components/LockerBadge';
+import { LockerBadge, MediaKindBadge } from '@/components/LockerBadge';
 import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
@@ -81,6 +81,13 @@ export interface MovieCardProps {
    * screens that OFFER films pass the real status.
    */
   lockerStatus?: LockerStatus;
+  /**
+   * Film or series, so a series can be marked as one.
+   *
+   * Optional, and absent is a film — which is what every card that does
+   * not pass it has always been showing.
+   */
+  mediaType?: string | null;
   /** The owner's own score, 0.5–5 in half-star steps. */
   rating?: number | null;
   /**
@@ -130,6 +137,7 @@ export function MovieCard({
   onPress,
   onLongPress,
   lockerStatus,
+  mediaType,
   rating,
   badges,
 }: MovieCardProps) {
@@ -168,6 +176,7 @@ export function MovieCard({
       </View>
 
       <LockerBadge status={lockerStatus ?? null} />
+      <MediaKindBadge mediaType={mediaType} />
 
       {/* Who else has seen it. Capped at four with a +n, because five
           circles across a poster this wide covers the artwork and the

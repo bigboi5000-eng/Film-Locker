@@ -405,6 +405,7 @@ export default function WatchlistScreen() {
     ({ item }: { item: Movie }) => (
       <MovieCard
         id={item.id}
+        mediaType={item.mediaType}
         title={item.title}
         releaseYear={item.releaseYear}
         posterUrl={item.posterUrl}
@@ -649,6 +650,7 @@ export default function WatchlistScreen() {
                 renderItem={({ item }) => (
                   <MovieCard
                     id={item.tmdbId}
+                    mediaType={item.mediaType}
                     title={item.title}
                     releaseYear={item.releaseYear}
                     posterUrl={item.posterUrl}

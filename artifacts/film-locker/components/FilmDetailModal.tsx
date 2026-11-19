@@ -937,11 +937,14 @@ export function FilmDetailModal({
    * plenty of films share theirs with a band or a novel.
    */
   const openWebSearch = useCallback(() => {
-    const query = releaseYear ? `${title} ${releaseYear} film` : `${title} film`;
+    // The noun is part of the disambiguation, so searching for a series
+    // with "film" tacked on would work against the thing this is for.
+    const kindWord = mediaType === 'tv' ? 'TV series' : 'film';
+    const query = releaseYear ? `${title} ${releaseYear} ${kindWord}` : `${title} ${kindWord}`;
     Linking.openURL(`https://www.google.com/search?q=${encodeURIComponent(query)}`).catch(() => {
-      Alert.alert('Unable to open link', 'Could not open a web search for this film.');
+      Alert.alert('Unable to open link', 'Could not open a web search for this title.');
     });
-  }, [title, releaseYear]);
+  }, [title, releaseYear, mediaType]);
 
   /**
    * Back to the post the film was saved from.
@@ -1045,9 +1048,17 @@ export function FilmDetailModal({
               />
               <View style={styles.posterOverlay}>
                 <Text style={styles.posterTitle} numberOfLines={2}>{title}</Text>
+                {/* A series has no runtime to show — episode length is
+                    not the series' length — so this line would be a bare
+                    year with nothing to say what it is. "TV series" takes
+                    the slot the runtime would have had. */}
                 <Text style={styles.posterYear}>
                   {releaseYear}
-                  {displayRuntime ? ` · ${displayRuntime}` : ''}
+                  {mediaType === 'tv'
+                    ? ' · TV series'
+                    : displayRuntime
+                      ? ` · ${displayRuntime}`
+                      : ''}
                 </Text>
               </View>
             </View>
@@ -1090,8 +1101,18 @@ export function FilmDetailModal({
 
               {displayDirector ? (
                 <View style={styles.metaRow}>
-                  <Ionicons name="film-outline" size={15} color={colors.textMuted} style={styles.metaIcon} />
-                  <Text style={styles.metaLabel}>Director</Text>
+                  <Ionicons
+                    name={mediaType === 'tv' ? 'tv-outline' : 'film-outline'}
+                    size={15}
+                    color={colors.textMuted}
+                    style={styles.metaIcon}
+                  />
+                  {/* The column is called director and the server fills it
+                      from created_by for a series, which is a different
+                      credit and should be named as one. */}
+                  <Text style={styles.metaLabel}>
+                    {mediaType === 'tv' ? 'Creator' : 'Director'}
+                  </Text>
                   {directorRef ? (
                     <Text
                       style={[styles.metaValue, styles.metaValueLink]}

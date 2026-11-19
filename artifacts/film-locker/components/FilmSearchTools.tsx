@@ -148,7 +148,14 @@ export function AiResultRow({ match, isSaved, savedMovie, onPress }: AiResultRow
         <Text style={styles.resultTitle} numberOfLines={2}>
           {match.title ?? match.movie_title}
         </Text>
-        {match.release_year ? <Text style={styles.resultYear}>{match.release_year}</Text> : null}
+        {/* Only a series is labelled — a film is the unmarked case. */}
+        {match.release_year || match.media_type === 'tv' ? (
+          <Text style={styles.resultYear}>
+            {[match.release_year, match.media_type === 'tv' ? 'TV series' : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        ) : null}
         {match.synopsis ? (
           <Text style={styles.resultSynopsis} numberOfLines={2}>
             {match.synopsis}

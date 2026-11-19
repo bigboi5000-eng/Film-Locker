@@ -561,6 +561,7 @@ export default function PlaylistScreen() {
     return (
       <MovieCard
         id={item.tmdbId}
+        mediaType={item.mediaType}
         title={item.filmTitle}
         releaseYear={savedByTitle.get(titleKey(item))?.releaseYear ?? ''}
         posterUrl={item.posterUrl}
