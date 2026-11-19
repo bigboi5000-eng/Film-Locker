@@ -43,7 +43,20 @@ const SLIDER_W = DROPDOWN_W - 32;
  */
 export type FilterValues = string[];
 
+/**
+ * Films, series, or both.
+ *
+ * Absent means both, which is the default and the resting state of the
+ * Films tabs: a locker is a locker, and somebody opening it to see what
+ * they have should see what they have. Narrowing to one kind is a
+ * deliberate act, so it lives with the other filters rather than as a
+ * permanent switch on the screen.
+ */
+export type MediaFilter = 'movie' | 'tv';
+
 export interface FilterState {
+  /** Absent = everything. */
+  mediaType?: MediaFilter;
   genre?: FilterValues;
   director?: FilterValues;
   actor?: FilterValues;
@@ -127,6 +140,12 @@ export interface FilterableMovie {
   rating?: number | null;
   /** Whether the viewer has seen it. Undefined where it is not known. */
   isWatched?: boolean;
+  /**
+   * "movie" or "tv". Undefined on a row written before TV existed, and on
+   * anything the server has not told us about — treated as a film, which
+   * is what every such row is.
+   */
+  mediaType?: string | null;
 }
 
 /**
@@ -322,6 +341,14 @@ interface FilterBarProps {
    * Films tab has already decided, so this is off unless asked for.
    */
   showWatched?: boolean;
+  /**
+   * Offer the Films / TV cut.
+   *
+   * On by default: every list the app filters can hold both now. A caller
+   * that genuinely only ever holds one kind can turn it off rather than
+   * showing a control with one possible answer.
+   */
+  showMediaType?: boolean;
 }
 
 /** The filters that pick a value from the films in front of them. */
@@ -359,6 +386,8 @@ export function applyFilters<T extends FilterableMovie>(movies: T[], filters: Fi
     const anyOf = (chosen: FilterValues | undefined, has: (v: string) => boolean) =>
       !chosen || chosen.length === 0 || chosen.some(has);
 
+    // Kind first: it is the broadest cut, and the cheapest.
+    if (filters.mediaType && (m.mediaType ?? 'movie') !== filters.mediaType) return false;
     if (!anyOf(filters.genre, (g) => genres.includes(g))) return false;
     if (!anyOf(filters.director, (d) => m.director === d)) return false;
     if (!anyOf(filters.actor, (a) => cast.includes(a))) return false;
@@ -412,6 +441,7 @@ export function FilterBar({
   sortDefaultLabel,
   showMyRating = true,
   showWatched = false,
+  showMediaType = true,
 }: FilterBarProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -444,6 +474,7 @@ export function FilterBar({
     FILTER_KEYS.filter((k) => (filters[k]?.length ?? 0) > 0).length +
     (ratingActive ? 1 : 0) +
     (runtimeActive ? 1 : 0) +
+    (filters.mediaType ? 1 : 0) +
     (filters.watchedState ? 1 : 0);
 
   const setRuntime = useCallback(
@@ -513,6 +544,22 @@ export function FilterBar({
   );
 
   const clearAll = useCallback(() => onChange({}), [onChange]);
+
+  /**
+   * What to call the things being counted.
+   *
+   * "66 films" is wrong the moment a series can be among them, and
+   * "66 titles" is wrong when the user has just asked for films only. So
+   * it follows the cut: the sheet says what it is actually showing.
+   */
+  const noun = useCallback(
+    (n: number) => {
+      if (filters.mediaType === 'movie') return `film${n === 1 ? '' : 's'}`;
+      if (filters.mediaType === 'tv') return n === 1 ? 'series' : 'series';
+      return `title${n === 1 ? '' : 's'}`;
+    },
+    [filters.mediaType],
+  );
 
   const matching = useMemo(() => applyFilters(movies, filters).length, [movies, filters]);
 
@@ -590,7 +637,7 @@ export function FilterBar({
                     set is built, and the footer is below the fold on a
                     short phone once a category is open. */}
                 <Text style={styles.sheetCount}>
-                  {matching} of {movies.length} film{movies.length === 1 ? '' : 's'}
+                  {matching} of {movies.length} {noun(movies.length)}
                 </Text>
               </View>
               {activeCount > 0 ? (
@@ -604,6 +651,53 @@ export function FilterBar({
             </View>
 
             <ScrollView style={styles.sheetBody} bounces={false}>
+              {/* Kind first, because it changes what the rest of the sheet
+                  is even asking about — runtime stops applying the moment
+                  the answer is TV. Absent is both, and both is the default:
+                  a locker should open showing what is in it. */}
+              {showMediaType && (
+                <View style={styles.block}>
+                  <View style={styles.blockHead}>
+                    <Text style={styles.blockTitle}>Kind</Text>
+                    <Text style={styles.blockValue}>
+                      {filters.mediaType === 'movie'
+                        ? 'Films'
+                        : filters.mediaType === 'tv'
+                          ? 'TV'
+                          : 'All'}
+                    </Text>
+                  </View>
+                  <View style={styles.optionWrap}>
+                    {([
+                      { value: undefined, label: 'All' },
+                      { value: 'movie' as const, label: 'Films' },
+                      { value: 'tv' as const, label: 'TV' },
+                    ]).map(({ value, label }) => {
+                      const picked = filters.mediaType === value;
+                      return (
+                        <TouchableOpacity
+                          key={label}
+                          style={[styles.optionChip, picked && styles.optionChipPicked]}
+                          onPress={() => {
+                            const next = { ...filters };
+                            if (value) next.mediaType = value;
+                            else delete next.mediaType;
+                            onChange(next);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[styles.optionChipText, picked && styles.optionChipTextPicked]}
+                          >
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               {/* Ratings first: they are the two people reach for most and
                   the only ones that need a control rather than a list. */}
               <View style={styles.block}>
@@ -686,6 +780,11 @@ export function FilterBar({
               </View>
               )}
 
+              {/* Hidden for TV. A series has an episode length, not a
+                  running time, and the one stored on these rows is a
+                  film's — so offering the slider would filter series by a
+                  number that does not describe them. */}
+              {filters.mediaType !== 'tv' && (
               <View style={[styles.block, styles.blockDivided]}>
                 <View style={styles.blockHead}>
                   <Text style={styles.blockTitle}>Runtime</Text>
@@ -710,6 +809,7 @@ export function FilterBar({
                   <Text style={styles.scaleEnd}>{formatRuntime(bounds.max)}</Text>
                 </View>
               </View>
+              )}
 
               {/* The categorical ones, as rows that open in place. One at a
                   time, because a thousand actors expanded under six other
@@ -789,7 +889,7 @@ export function FilterBar({
                 <Text style={styles.applyBtnText}>
                   {/* The count, because the whole point of seeing every
                       filter at once is knowing what they add up to. */}
-                  Show {matching} film{matching === 1 ? '' : 's'}
+                  Show {matching} {noun(matching)}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -178,6 +178,7 @@ export const AiExtractResponse = zod.object({
   "saved": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -241,6 +242,7 @@ export const ProcessSocialLinkResponse = zod.object({
   "saved": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -306,6 +308,7 @@ export const ExtractFromImageResponse = zod.object({
   "saved": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -369,6 +372,7 @@ export const RecommendMoviesResponse = zod.object({
   "saved": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -541,6 +545,7 @@ export const ListMoviesResponse = zod.object({
   "movies": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -592,6 +597,7 @@ export const addMovieResponseRatingMultipleOf = 0.5;
 export const AddMovieResponse = zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -640,6 +646,7 @@ export const patchWatchedResponseRatingMultipleOf = 0.5;
 export const PatchWatchedResponse = zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -694,6 +701,7 @@ export const patchRatingResponseRatingMultipleOf = 0.5;
 export const PatchRatingResponse = zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -1410,6 +1418,7 @@ export const GetUserWatchedResponse = zod.object({
   "movies": zod.array(zod.object({
   "id": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "title": zod.string(),
   "releaseYear": zod.string(),
   "posterUrl": zod.string(),
@@ -1812,6 +1821,7 @@ export const GetPlaylistResponse = zod.object({
   "id": zod.number(),
   "playlistId": zod.number(),
   "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
   "filmTitle": zod.string(),
   "posterUrl": zod.string(),
   "sourceUrl": zod.string().nullish().describe('The social post this film was added to the playlist from. Unlike a locker film\'s sourceUrl this is not owner-private: a playlist may be public, and where a list came from is part of the list.\n'),

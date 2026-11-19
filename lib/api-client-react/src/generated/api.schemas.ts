@@ -37,9 +37,22 @@ export interface WatchProvider {
   link?: string;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.
+ */
+export type MovieMediaType = typeof MovieMediaType[keyof typeof MovieMediaType];
+
+
+export const MovieMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface Movie {
   id: number;
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film. */
+  mediaType?: MovieMediaType;
   title: string;
   releaseYear: string;
   posterUrl: string;
@@ -861,10 +874,23 @@ export interface CollaboratorsResponse {
   maxCollaborators: number;
 }
 
+/**
+ * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.
+ */
+export type PlaylistItemMediaType = typeof PlaylistItemMediaType[keyof typeof PlaylistItemMediaType];
+
+
+export const PlaylistItemMediaType = {
+  movie: 'movie',
+  tv: 'tv',
+} as const;
+
 export interface PlaylistItem {
   id: number;
   playlistId: number;
   tmdbId: number;
+  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film. */
+  mediaType?: PlaylistItemMediaType;
   filmTitle: string;
   posterUrl: string;
   /** The social post this film was added to the playlist from. Unlike a locker film's sourceUrl this is not owner-private: a playlist may be public, and where a list came from is part of the list. */

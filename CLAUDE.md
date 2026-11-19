@@ -55,6 +55,12 @@ There is **no test runner**. Verification is done by writing a throwaway
 script, running it with `tsx`, reading the output, and deleting it.
 
 - `tsx` is not in the root bin — use `lib/db/node_modules/.bin/tsx`.
+- **Anything that imports `react-native` cannot run under `tsx`**: RN's
+  entry point is Flow-typed and esbuild fails with `Unexpected "typeof"`.
+  So a component file is not executable here, however pure the function
+  inside it is. Verify client logic by transcribing the predicate into a
+  standalone script (say so when you do), or move the logic into an
+  RN-free module and import that.
 - A script needing workspace imports must live *inside* the package
   (e.g. `artifacts/api-server/src/__check.ts`), not in a temp directory,
   or module resolution fails.

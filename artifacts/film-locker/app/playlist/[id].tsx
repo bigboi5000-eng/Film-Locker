@@ -585,6 +585,9 @@ export default function PlaylistScreen() {
         // saved row, so that order is empty for films nobody here owns,
         // which the sort already handles by sinking them.
         title: item.filmTitle,
+        // Carried through so the Kind filter can tell a series from a film
+        // in somebody's list, which is a list that can hold both.
+        mediaType: item.mediaType,
         releaseYear: saved?.releaseYear,
         // Taken from the watched set rather than from `saved`, so a film
         // someone else put in this playlist is still ticked and still
