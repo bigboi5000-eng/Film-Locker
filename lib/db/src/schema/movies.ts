@@ -28,6 +28,18 @@ export const moviesTable = pgTable(
   {
     id: serial("id").primaryKey(),
     tmdbId: integer("tmdb_id").notNull(),
+  /**
+     * "movie" or "tv".
+     *
+     * TMDB numbers films and series in separate sequences, so a tmdb_id alone
+     * does not identify a title — movie 1399 and series 1399 are different
+     * things. Every uniqueness rule that mentions tmdb_id therefore mentions
+     * this too.
+     *
+     * Defaulted to "movie" because every row written before TV existed is
+     * one, which is also what makes the column safe to add to live tables.
+     */
+    mediaType: text("media_type").notNull().default("movie"),
     title: text("title").notNull(),
     releaseYear: text("release_year").notNull(),
     posterUrl: text("poster_url").notNull(),
@@ -79,7 +91,13 @@ export const moviesTable = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("movies_tmdb_user_unique").on(table.tmdbId, table.clerkUserId)],
+  (table) => [
+    uniqueIndex("movies_tmdb_user_media_unique").on(
+      table.tmdbId,
+      table.clerkUserId,
+      table.mediaType,
+    ),
+  ],
 );
 
 export const insertMovieSchema = createInsertSchema(moviesTable).omit({

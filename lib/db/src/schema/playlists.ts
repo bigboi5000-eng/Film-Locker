@@ -6,6 +6,7 @@ import {
   integer,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const playlistsTable = pgTable("playlists", {
@@ -128,6 +129,18 @@ export const playlistItemsTable = pgTable(
       .notNull()
       .references(() => playlistsTable.id, { onDelete: "cascade" }),
     tmdbId: integer("tmdb_id").notNull(),
+  /**
+     * "movie" or "tv".
+     *
+     * TMDB numbers films and series in separate sequences, so a tmdb_id alone
+     * does not identify a title — movie 1399 and series 1399 are different
+     * things. Every uniqueness rule that mentions tmdb_id therefore mentions
+     * this too.
+     *
+     * Defaulted to "movie" because every row written before TV existed is
+     * one, which is also what makes the column safe to add to live tables.
+     */
+    mediaType: text("media_type").notNull().default("movie"),
     filmTitle: text("film_title").notNull(),
     posterUrl: text("poster_url").notNull(),
     // The social post this film was added from, when it was added from one.
@@ -146,6 +159,10 @@ export const playlistItemsTable = pgTable(
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    uniquePlaylistFilm: unique().on(t.playlistId, t.tmdbId),
+    uniquePlaylistFilm: uniqueIndex("playlist_items_playlist_tmdb_media_unique").on(
+      t.playlistId,
+      t.tmdbId,
+      t.mediaType,
+    ),
   })
 );

@@ -21,14 +21,27 @@ export const filmCommunityRatingsTable = pgTable(
     // rating was rejected by the integer check while the identical control
     // one section below accepted it.
     rating: real("rating").notNull(), // 0.5–5, in steps of 0.5
+  /**
+     * "movie" or "tv".
+     *
+     * TMDB numbers films and series in separate sequences, so a tmdb_id alone
+     * does not identify a title — movie 1399 and series 1399 are different
+     * things. Every uniqueness rule that mentions tmdb_id therefore mentions
+     * this too.
+     *
+     * Defaulted to "movie" because every row written before TV existed is
+     * one, which is also what makes the column safe to add to live tables.
+     */
+    mediaType: text("media_type").notNull().default("movie"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("community_ratings_user_tmdb_unique").on(
+    uniqueIndex("community_ratings_user_tmdb_media_unique").on(
       table.userId,
-      table.tmdbId
+      table.tmdbId,
+      table.mediaType
     ),
   ]
 );
@@ -38,6 +51,18 @@ export const filmCommentsTable = pgTable("film_comments", {
   userId: text("user_id").notNull(), // Clerk user ID
   tmdbId: integer("tmdb_id").notNull(),
   body: text("body").notNull(),
+  /**
+   * "movie" or "tv".
+   *
+   * TMDB numbers films and series in separate sequences, so a tmdb_id alone
+   * does not identify a title — movie 1399 and series 1399 are different
+   * things. Every uniqueness rule that mentions tmdb_id therefore mentions
+   * this too.
+   *
+   * Defaulted to "movie" because every row written before TV existed is
+   * one, which is also what makes the column safe to add to live tables.
+   */
+  mediaType: text("media_type").notNull().default("movie"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

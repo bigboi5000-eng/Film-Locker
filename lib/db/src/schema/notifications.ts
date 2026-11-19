@@ -12,6 +12,18 @@ export const filmNotificationsTable = pgTable("film_notifications", {
   fromUserId: text("from_user_id").notNull(), // Clerk user ID of sender
   toUserId: text("to_user_id").notNull(),     // Clerk user ID of recipient
   tmdbId: integer("tmdb_id").notNull(),
+  /**
+   * "movie" or "tv".
+   *
+   * TMDB numbers films and series in separate sequences, so a tmdb_id alone
+   * does not identify a title — movie 1399 and series 1399 are different
+   * things. Every uniqueness rule that mentions tmdb_id therefore mentions
+   * this too.
+   *
+   * Defaulted to "movie" because every row written before TV existed is
+   * one, which is also what makes the column safe to add to live tables.
+   */
+  mediaType: text("media_type").notNull().default("movie"),
   filmTitle: text("film_title").notNull(),
   posterUrl: text("poster_url").notNull(),
   isRead: boolean("is_read").notNull().default(false),
