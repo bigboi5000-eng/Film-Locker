@@ -3,7 +3,7 @@ import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import type { TmdbMovieCard } from '@workspace/api-client-react';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
-import { LockerBadge, MediaKindBadge } from '@/components/LockerBadge';
+import { LockerBadge, MediaKindChip } from '@/components/LockerBadge';
 import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
@@ -41,13 +41,21 @@ export function DiscoverCard({ movie, onPress, width, height, lockerStatus }: Di
       <View style={styles.overlay}>
         <View style={styles.metaContainer}>
           <Text style={styles.title} numberOfLines={2}>{movie.title}</Text>
-          {movie.releaseYear ? (
-            <Text style={styles.year}>{movie.releaseYear}</Text>
+          {/* One row, so the kind reads as part of the same line of
+              metadata as the year instead of covering it. Rendered when
+              either is present: a series with no first-air year still
+              says what it is. */}
+          {movie.releaseYear || movie.mediaType === 'tv' ? (
+            <View style={styles.metaRow}>
+              <MediaKindChip mediaType={movie.mediaType} />
+              {movie.releaseYear ? (
+                <Text style={styles.year}>{movie.releaseYear}</Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
       </View>
       <LockerBadge status={lockerStatus ?? null} />
-      <MediaKindBadge mediaType={movie.mediaType} />
     </TouchableOpacity>
   );
 }
@@ -82,10 +90,14 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 15,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
   year: {
     color: c.star,
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    marginTop: 2,
   },
 });

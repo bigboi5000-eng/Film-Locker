@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
-import { LockerBadge, MediaKindBadge } from '@/components/LockerBadge';
+import { LockerBadge, MediaKindChip } from '@/components/LockerBadge';
 import type { LockerStatus } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
@@ -170,13 +170,18 @@ export function MovieCard({
           <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
-          {releaseYear ? <Text style={styles.year}>{releaseYear}</Text> : null}
+          {/* See DiscoverCard: inline, so it cannot sit on the year. */}
+          {releaseYear || mediaType === 'tv' ? (
+            <View style={styles.metaRow}>
+              <MediaKindChip mediaType={mediaType} />
+              {releaseYear ? <Text style={styles.year}>{releaseYear}</Text> : null}
+            </View>
+          ) : null}
           {typeof rating === 'number' && rating > 0 && <CardStars rating={rating} />}
         </View>
       </View>
 
       <LockerBadge status={lockerStatus ?? null} />
-      <MediaKindBadge mediaType={mediaType} />
 
       {/* Who else has seen it. Capped at four with a +n, because five
           circles across a poster this wide covers the artwork and the
@@ -239,11 +244,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     lineHeight: 16,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
   year: {
     color: c.star,
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    marginTop: 2,
   },
   badgeRow: {
     position: 'absolute',

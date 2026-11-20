@@ -63,12 +63,20 @@ export function LockerBadge({
  * unmarked case, so the mark is the exception rather than a label on
  * every poster in the grid.
  *
- * Bottom-LEFT, deliberately: LockerBadge owns the top-right, and a series
- * you have already watched has to show both at once. Overlapping them
- * would hide whichever drew first, which is the kind of thing that only
- * shows up once somebody has a watched series.
+ * INLINE, sitting beside the year inside the card's own caption, rather
+ * than floating over the artwork. It was absolutely positioned at the
+ * poster's bottom-left to begin with, which put it straight on top of the
+ * release year — the captions are bottom-aligned, so "TV" and "2026"
+ * occupied the same pixels and the year was unreadable underneath it.
+ *
+ * Every corner of a poster is already spoken for: LockerBadge has the
+ * top-right, the collaborator faces have the top-left, and the caption
+ * owns the whole bottom edge. There was no free corner to move it to, and
+ * a fifth thing floating over the artwork would be one too many anyway.
+ * In the caption it is what it actually is — a piece of metadata, read
+ * alongside the year rather than competing with it.
  */
-export function MediaKindBadge({ mediaType }: { mediaType?: string | null }) {
+export function MediaKindChip({ mediaType }: { mediaType?: string | null }) {
   const styles = useThemedStyles(makeStyles);
   if (mediaType !== 'tv') return null;
   return (
@@ -100,21 +108,21 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   saved: { backgroundColor: c.star },
   tick: { color: c.onColor, fontFamily: 'Inter_700Bold' },
   kind: {
-    position: 'absolute',
-    bottom: 6,
-    left: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    // Dark and translucent rather than an accent colour: this is a label,
-    // not a status, and it must not compete with the two badges above it
-    // that say something the viewer can act on.
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginRight: 5,
+    // A hairline outline rather than a filled block: it sits on a caption
+    // that is already a dark scrim, so a dark fill would be invisible and
+    // a bright one would shout louder than the title above it.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   kindText: {
     color: '#fff',
-    fontSize: 9,
+    fontSize: 8,
     letterSpacing: 0.5,
+    lineHeight: 11,
     fontFamily: 'Inter_700Bold',
   },
 });
