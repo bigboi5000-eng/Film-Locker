@@ -154,6 +154,19 @@ and `playlist_items` all carry a `media_type` of `movie` or `tv`.
   in the generated TYPES, so typecheck passes and the break only shows at
   runtime. Match the nullability of the sibling the field travels with
   (`tmdbId` on both of those is already `nullable: true`).
+- **Clerk's token lives in chunked Keychain entries, and the swap must
+  stay atomic.** SecureStore refuses values over 2048 bytes and Clerk's
+  JWTs exceed that, so `lib/clerkTokenCache.ts` splits them across
+  numbered keys behind a manifest. Chunks are written to whichever of two
+  generations is NOT live, and the manifest swap is the single step that
+  makes the new token current. Writing over the live chunks and saving
+  the manifest last looks equivalent and is not: an interrupted write
+  then leaves the manifest pointing at a mixture of two tokens, which
+  joins into a JWT that verifies as neither and reads as being signed
+  out. iOS suspends a backgrounded app mid-write where Android lets it
+  finish, so that bug was iPhone-only. Also: never delete the entry when
+  a READ throws — a momentary keychain failure becomes a permanent
+  sign-out, and returning null is already enough to make Clerk refresh.
 - **Silent failure is the recurring bug in this codebase.** Bare `catch`,
   discarded Expo push tickets, `Promise.allSettled` skipping rejections
   with no log. Nearly every long-lived mystery this project has had traced
