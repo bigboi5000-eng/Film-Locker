@@ -13,6 +13,14 @@ export interface HealthStatus {
   branch?: string | null;
   /** When this process started, ISO 8601. Together with commit it answers "is the running server the code I just merged, and when did it last restart" without reading deploy logs. */
   startedAt?: string | null;
+  /**
+     * Whether every migration in the repo has actually been applied to the database. False means the running code expects columns the database has not got, and anything touching one will 500.
+     *
+     * Null means the boot-time check has not finished yet, which is not the same as false and must not be shown as one.
+     */
+  schemaUpToDate?: boolean | null;
+  /** The newest migration the running code expects, by tag. */
+  latestMigration?: string | null;
 }
 
 /**

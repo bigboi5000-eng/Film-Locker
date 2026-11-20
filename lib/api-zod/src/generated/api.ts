@@ -16,7 +16,9 @@ export const HealthCheckResponse = zod.object({
   "status": zod.string(),
   "commit": zod.string().nullish().describe('The git commit this server is running, as the deployment platform reported it at boot. Null when the platform injects no git metadata, such as a local run.\n'),
   "branch": zod.string().nullish().describe('The branch that commit was deployed from.'),
-  "startedAt": zod.string().nullish().describe('When this process started, ISO 8601. Together with commit it answers \"is the running server the code I just merged, and when did it last restart\" without reading deploy logs.\n')
+  "startedAt": zod.string().nullish().describe('When this process started, ISO 8601. Together with commit it answers \"is the running server the code I just merged, and when did it last restart\" without reading deploy logs.\n'),
+  "schemaUpToDate": zod.boolean().nullish().describe('Whether every migration in the repo has actually been applied to the database. False means the running code expects columns the database has not got, and anything touching one will 500.\n\nNull means the boot-time check has not finished yet, which is not the same as false and must not be shown as one.\n'),
+  "latestMigration": zod.string().nullish().describe('The newest migration the running code expects, by tag.')
 })
 
 

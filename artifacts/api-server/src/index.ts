@@ -10,6 +10,7 @@ import {
   countFilmsNeedingVisit,
 } from "./lib/enrichBackfill";
 import { logger } from "./lib/logger";
+import { setSchemaStatus } from "./lib/schemaStatus";
 
 const execFileAsync = promisify(execFile);
 
@@ -208,6 +209,12 @@ app.listen(port, (err) => {
   void logYtDlpDiagnostics();
   void checkSchemaVersion().then((schema) => {
     logger.info(schema, "database schema check");
+    // Also published on /healthz, so this is answerable without deploy-log
+    // access — see lib/schemaStatus.ts.
+    setSchemaStatus({
+      schemaUpToDate: Boolean(schema["schemaUpToDate"]),
+      latestMigration: (schema["latestMigration"] as string | null) ?? null,
+    });
     // Only once the schema is known good: the backfill reads and writes
     // enriched_at, which a database still behind migration 0014 has not got.
     if (schema["schemaUpToDate"]) void runEnrichBackfill();

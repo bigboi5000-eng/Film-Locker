@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
+import { getSchemaStatus } from "../lib/schemaStatus";
 
 const router: IRouter = Router();
 
@@ -30,6 +31,10 @@ router.get("/healthz", (_req, res) => {
     commit: process.env["RAILWAY_GIT_COMMIT_SHA"] ?? null,
     branch: process.env["RAILWAY_GIT_BRANCH"] ?? null,
     startedAt: STARTED_AT,
+    // Null until the boot-time check completes, which is a different
+    // answer from false and is reported as such.
+    schemaUpToDate: getSchemaStatus()?.schemaUpToDate ?? null,
+    latestMigration: getSchemaStatus()?.latestMigration ?? null,
   });
   res.json(data);
 });
