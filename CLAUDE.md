@@ -141,6 +141,19 @@ and `playlist_items` all carry a `media_type` of `movie` or `tv`.
 
 ## Things that bite
 
+- **`optional` is not `nullable`, and the server validates its OWN
+  responses.** Every route ends in `SomeResponse.parse(...)` from
+  `@workspace/api-zod`, so a field the handler may set to `null` needs
+  `nullable: true` in `openapi.yaml` — not just an absent `required`.
+  Orval turns a plain optional into `.optional()`, which accepts a
+  MISSING key and rejects an explicit `null`, so the endpoint 500s on
+  exactly the rows that have nothing to put there. `mediaType` on
+  `FeedItem` and `ConversationFeedItem` did this: /feed died on any
+  playlist card and /conversations on any thread whose latest item was a
+  chat message. Note which way round it fails — the field looks optional
+  in the generated TYPES, so typecheck passes and the break only shows at
+  runtime. Match the nullability of the sibling the field travels with
+  (`tmdbId` on both of those is already `nullable: true`).
 - **Silent failure is the recurring bug in this codebase.** Bare `catch`,
   discarded Expo push tickets, `Promise.allSettled` skipping rejections
   with no log. Nearly every long-lived mystery this project has had traced

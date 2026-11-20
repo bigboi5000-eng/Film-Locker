@@ -617,8 +617,10 @@ export const ConversationFeedItemType = {
 
 /**
  * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ *
+ * NULL, like its sibling tmdbId, when the entry is not about a title at all — a playlist somebody made, a reaction with no film attached. Nullable rather than merely optional because the generated zod validates the server's own RESPONSES, and `.optional()` accepts a missing key but rejects an explicit null: sending one 500s the endpoint.
  */
-export type ConversationFeedItemMediaType = typeof ConversationFeedItemMediaType[keyof typeof ConversationFeedItemMediaType];
+export type ConversationFeedItemMediaType = typeof ConversationFeedItemMediaType[keyof typeof ConversationFeedItemMediaType] | null;
 
 
 export const ConversationFeedItemMediaType = {
@@ -636,7 +638,11 @@ export interface ConversationFeedItem {
   toUserId: string;
   createdAt: string;
   tmdbId?: number | null;
-  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  /**
+     * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+     *
+     * NULL, like its sibling tmdbId, when the entry is not about a title at all — a playlist somebody made, a reaction with no film attached. Nullable rather than merely optional because the generated zod validates the server's own RESPONSES, and `.optional()` accepts a missing key but rejects an explicit null: sending one 500s the endpoint.
+     */
   mediaType?: ConversationFeedItemMediaType;
   filmTitle?: string | null;
   posterUrl?: string | null;
@@ -664,8 +670,10 @@ export const FeedItemType = {
 
 /**
  * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+ *
+ * NULL, like its sibling tmdbId, when the entry is not about a title at all — a playlist somebody made, a reaction with no film attached. Nullable rather than merely optional because the generated zod validates the server's own RESPONSES, and `.optional()` accepts a missing key but rejects an explicit null: sending one 500s the endpoint.
  */
-export type FeedItemMediaType = typeof FeedItemMediaType[keyof typeof FeedItemMediaType];
+export type FeedItemMediaType = typeof FeedItemMediaType[keyof typeof FeedItemMediaType] | null;
 
 
 export const FeedItemMediaType = {
@@ -688,7 +696,11 @@ export interface FeedItem {
   user: NotificationUser;
   /** The film, on everything but a "playlist" item. */
   tmdbId?: number | null;
-  /** Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film. */
+  /**
+     * Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.
+     *
+     * NULL, like its sibling tmdbId, when the entry is not about a title at all — a playlist somebody made, a reaction with no film attached. Nullable rather than merely optional because the generated zod validates the server's own RESPONSES, and `.optional()` accepts a missing key but rejects an explicit null: sending one 500s the endpoint.
+     */
   mediaType?: FeedItemMediaType;
   title?: string | null;
   posterUrl?: string | null;

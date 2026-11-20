@@ -2736,10 +2736,19 @@ components:
         mediaType:
           type: string
           enum: [movie, tv]
+          nullable: true
           description: >
             Whether this is a film or a television series. TMDB numbers the
             two in separate sequences, so tmdbId alone does not identify a
             title and this is needed to tell them apart. Absent means film.
+
+
+            NULL, like its sibling tmdbId, when the entry is not about a
+            title at all — a playlist somebody made, a reaction with no film
+            attached. Nullable rather than merely optional because the
+            generated zod validates the server's own RESPONSES, and
+            `.optional()` accepts a missing key but rejects an explicit
+            null: sending one 500s the endpoint.
         filmTitle:
           type: string
           nullable: true
@@ -2810,10 +2819,19 @@ components:
         mediaType:
           type: string
           enum: [movie, tv]
+          nullable: true
           description: >
             Whether this is a film or a television series. TMDB numbers the
             two in separate sequences, so tmdbId alone does not identify a
             title and this is needed to tell them apart. Absent means film.
+
+
+            NULL, like its sibling tmdbId, when the entry is not about a
+            title at all — a playlist somebody made, a reaction with no film
+            attached. Nullable rather than merely optional because the
+            generated zod validates the server's own RESPONSES, and
+            `.optional()` accepts a missing key but rejects an explicit
+            null: sending one 500s the endpoint.
         title:
           type: string
           nullable: true
