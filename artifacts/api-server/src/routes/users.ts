@@ -486,12 +486,16 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
 
   const canViewDetails = isSelf || !target.isPrivate || followStatus === "accepted";
 
-  const [[watchedRow], [reviewRow], [playlistCountRow], [followerRow], [followingRow]] =
+  const [[watchedRow], [watchlistCountRow], [reviewRow], [playlistCountRow], [followerRow], [followingRow]] =
     await Promise.all([
       db
         .select({ value: count() })
         .from(moviesTable)
         .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true))),
+      db
+        .select({ value: count() })
+        .from(moviesTable)
+        .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, false))),
       db.select({ value: count() }).from(filmCommentsTable).where(eq(filmCommentsTable.userId, targetId)),
       db
         .select({ value: count() })
@@ -536,24 +540,31 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
   /**
    * What the profile actually shows.
    *
-   * Three sections, three different privacy bars, which is the whole reason
+   * Four sections, two different privacy bars, which is the whole reason
    * they are fetched separately rather than as one activity list:
    *
-   *  - ratings and comments ride on canViewDetails, the same one-way bar
-   *    the playlists use;
+   *  - ratings, comments and the WATCHLIST ride on canViewDetails, the
+   *    same one-way bar the playlists use;
    *  - watched films need a mutual follow, matching GET /users/:id/watched.
    *    That gate is why a profile's headline imagery cannot come from here:
    *    for anybody you have just discovered this is null, and a hero built
    *    on it would be blank exactly when a profile most needs to look
    *    worth following.
+   *
+   * The two halves of a locker are deliberately not equally private. What
+   * somebody has watched is a record of what they did; a watchlist is
+   * nearer a wishlist, and is the part that makes a stranger worth
+   * following — so it sits on the looser bar, and is the section the
+   * headline imagery CAN come from.
    */
   const RECENT_RATINGS = 12;
   const RECENT_COMMENTS = 3;
   const RECENT_WATCHED = 12;
+  const RECENT_WATCHLIST = 12;
 
   const canViewWatched = isSelf || (followStatus === "accepted" && followsYou);
 
-  const [ratingRows, commentRows, watchedRows] = await Promise.all([
+  const [ratingRows, commentRows, watchedRows, watchlistRows] = await Promise.all([
     canViewDetails
       ? db
           .select({
@@ -604,11 +615,39 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
           .orderBy(desc(sql`coalesce(${moviesTable.watchedAt}, ${moviesTable.addedAt})`))
           .limit(RECENT_WATCHED)
       : Promise.resolve(null),
+
+    // canViewDetails, not canViewWatched — see the note above on why the
+    // two halves of a locker sit on different bars.
+    canViewDetails
+      ? db
+          .select({
+            tmdbId: moviesTable.tmdbId,
+            mediaType: moviesTable.mediaType,
+            title: moviesTable.title,
+            posterUrl: moviesTable.posterUrl,
+            releaseYear: moviesTable.releaseYear,
+            // Their own score, which on an UNWATCHED film is almost always
+            // null — carried anyway rather than omitted, because somebody
+            // can rate a film they saw before they used the app and then
+            // save it to watch again.
+            rating: moviesTable.rating,
+            watchedAt: moviesTable.watchedAt,
+            addedAt: moviesTable.addedAt,
+          })
+          .from(moviesTable)
+          .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, false)))
+          // addedAt alone: watchedAt is null on every row here by
+          // definition, so there is nothing to coalesce.
+          .orderBy(desc(moviesTable.addedAt))
+          .limit(RECENT_WATCHLIST)
+      : Promise.resolve(null),
   ]);
 
   // Ratings and comments keep a TMDB id and nothing else, so one resolve
   // covers both — and the two sections overlap heavily in practice, since
   // people tend to write about the films they rate.
+  // Watched and watchlist rows carry their own title and poster, so only
+  // the ratings and comments need resolving.
   const needsResolving = [...(ratingRows ?? []), ...(commentRows ?? [])];
   const cards: Map<string, FilmCard> = needsResolving.length
     ? await resolveFilmCards(needsResolving)
@@ -662,12 +701,29 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
           at: m.watchedAt ?? m.addedAt,
         }));
 
+  const recentWatchlist =
+    watchlistRows === null
+      ? null
+      : watchlistRows.map((m) => ({
+          tmdbId: m.tmdbId,
+          mediaType: m.mediaType,
+          title: m.title,
+          posterUrl: m.posterUrl || null,
+          releaseYear: m.releaseYear || null,
+          rating: m.rating,
+          comment: null,
+          // When they saved it. There is no watchedAt on an unwatched
+          // film, so "at" is the only date this section can be about.
+          at: m.addedAt,
+        }));
+
   res.json({
     user: target,
     followStatus,
     followsYou,
     stats: {
       watchedCount: watchedRow.value,
+      watchlistCount: watchlistCountRow.value,
       reviewCount: reviewRow.value,
       publicPlaylistCount: playlistCountRow.value,
       followerCount: followerRow.value,
@@ -677,6 +733,7 @@ router.get("/users/:id/profile", requireAuth, async (req, res): Promise<void> =>
     recentRatings,
     recentComments,
     recentWatched,
+    recentWatchlist,
   });
 });
 
@@ -847,6 +904,70 @@ router.get("/users/:id/watched", requireAuth, async (req, res): Promise<void> =>
     .from(moviesTable)
     .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, true)))
     .orderBy(desc(moviesTable.watchedAt));
+
+  res.json(ListMoviesResponse.parse({ movies }));
+});
+
+// ── GET /users/:id/watchlist ─────────────────────────────────────────────────
+// Another user's watchlist: saved, not yet watched.
+//
+// The one-way accepted-follower gate, via resolveListAccess — the same bar
+// the playlists and the follower lists use, and deliberately LOOSER than
+// the mutual-follow gate on /users/:id/watched above.
+//
+// The two halves of a locker are not equally private. What somebody has
+// watched is a record of what they did; a watchlist is nearer a wishlist,
+// and it is the half that makes a stranger worth following in the first
+// place — a public profile that shows nothing until you have both followed
+// each other gives a visitor no reason to.
+//
+// resolveListAccess rather than the hand-rolled checks the watched route
+// uses, so the block handling and the "a block reads as 404" rule come
+// from one place instead of being restated.
+
+router.get("/users/:id/watchlist", requireAuth, async (req, res): Promise<void> => {
+  const { clerkUserId } = req as AuthedRequest;
+  const targetId = String(req.params.id ?? "").trim();
+  if (!targetId) {
+    res.status(400).json({ error: "id path param is required" });
+    return;
+  }
+
+  const access = await resolveListAccess(clerkUserId, targetId);
+  if (!access.ok) {
+    res.status(access.status).json({ error: access.error });
+    return;
+  }
+
+  // Columns listed rather than `select()`, for the same reason as the
+  // watched route: this is somebody ELSE'S locker, and source_url — the
+  // post they were reading when they saved the film — is theirs. A
+  // whole-row select would hand out every column the table ever gains.
+  const movies = await db
+    .select({
+      id: moviesTable.id,
+      tmdbId: moviesTable.tmdbId,
+      mediaType: moviesTable.mediaType,
+      title: moviesTable.title,
+      releaseYear: moviesTable.releaseYear,
+      posterUrl: moviesTable.posterUrl,
+      overview: moviesTable.overview,
+      director: moviesTable.director,
+      cast: moviesTable.cast,
+      genres: moviesTable.genres,
+      language: moviesTable.language,
+      runtime: moviesTable.runtime,
+      tmdbRating: moviesTable.tmdbRating,
+      watchProviders: moviesTable.watchProviders,
+      rating: moviesTable.rating,
+      isWatched: moviesTable.isWatched,
+      watchedAt: moviesTable.watchedAt,
+      addedAt: moviesTable.addedAt,
+    })
+    .from(moviesTable)
+    .where(and(eq(moviesTable.clerkUserId, targetId), eq(moviesTable.isWatched, false)))
+    // When they saved it: watchedAt is null on every row here.
+    .orderBy(desc(moviesTable.addedAt));
 
   res.json(ListMoviesResponse.parse({ movies }));
 });

@@ -1,10 +1,21 @@
 /**
- * WatchedFilmsSheet
+ * UserFilmsSheet
  *
- * Full-screen list of another user's watched films — only reachable from
- * the profile screen's "Watched" stat when both accounts follow each other.
- * Each row has an "Add to Watchlist" button on the right so a film pal's
- * watched film can be added straight to your own locker.
+ * Full-screen list of one half of another user's locker — what they have
+ * watched, or what they have saved to watch. Each row has an "Add to
+ * Watchlist" button on the right, so something off their list can go
+ * straight into yours.
+ *
+ * One component for both because they differ only in which endpoint they
+ * read and what the header says; the row, the already-in-your-locker
+ * check and the add button are identical. What is NOT identical is who
+ * may open them, and that is not this component's business — the server
+ * decides, and the two endpoints are gated differently:
+ *
+ *   watched   — mutual follow ("Film Pals"), the strictest bar in the app
+ *   watchlist — a public account, or an accepted follow on a private one
+ *
+ * so the profile screen only offers the tap when the viewer qualifies.
  */
 import React, { useCallback, useState } from 'react';
 import {
@@ -18,6 +29,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetUserWatched,
   getGetUserWatchedQueryKey,
+  useGetUserWatchlist,
+  getGetUserWatchlistQueryKey,
   useAddMovie,
   getListMoviesQueryKey,
   type Movie,
@@ -28,8 +41,12 @@ import { useColors } from '@/hooks/useColors';
 import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import type { Palette } from '@/constants/colors';
 
-interface WatchedFilmsSheetProps {
+/** Which half of the locker this sheet is showing. */
+export type UserFilmsMode = 'watched' | 'watchlist';
+
+interface UserFilmsSheetProps {
   visible: boolean;
+  mode: UserFilmsMode;
   clerkId: string;
   username: string;
   onClose: () => void;
@@ -44,9 +61,9 @@ function WatchedFilmRow({
   /**
    * Whether the VIEWER already has this film, watchlist or watched.
    *
-   * This list is somebody else's watched films, so a good share of it is
-   * normally already in your own locker — and without this the row offered
-   * to add every one of them, including the ones you had seen yourself.
+   * This is somebody else's locker, so a good share of it is normally
+   * already in your own — and without this the row offered to add every
+   * one of them, including the ones you had seen yourself.
    */
   alreadyInLocker: boolean;
   onAdded: () => void;
@@ -113,13 +130,28 @@ function WatchedFilmRow({
   );
 }
 
-export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: WatchedFilmsSheetProps) {
+export function UserFilmsSheet({ visible, mode, clerkId, username, onClose }: UserFilmsSheetProps) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const { data, isLoading } = useGetUserWatched(clerkId, {
-    query: { queryKey: getGetUserWatchedQueryKey(clerkId), enabled: visible && Boolean(clerkId) },
+
+  // Both hooks are called unconditionally — hooks cannot be called behind
+  // a branch — and the one for the other half is disabled, so only the
+  // sheet actually open makes a request.
+  const watched = useGetUserWatched(clerkId, {
+    query: {
+      queryKey: getGetUserWatchedQueryKey(clerkId),
+      enabled: visible && mode === 'watched' && Boolean(clerkId),
+    },
   });
+  const watchlist = useGetUserWatchlist(clerkId, {
+    query: {
+      queryKey: getGetUserWatchlistQueryKey(clerkId),
+      enabled: visible && mode === 'watchlist' && Boolean(clerkId),
+    },
+  });
+
+  const { data, isLoading } = mode === 'watched' ? watched : watchlist;
   const movies = data?.movies ?? [];
   // One shared read of the viewer's own locker for the whole sheet.
   const lockerStatusByTitle = useLockerStatusByTitle();
@@ -131,7 +163,9 @@ export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: Watch
           <TouchableOpacity onPress={onClose} style={styles.backBtn} activeOpacity={0.7}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>{username}'s Watched Films</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {mode === 'watched' ? `${username}'s Watched Films` : `${username}'s Watchlist`}
+          </Text>
         </View>
 
         {isLoading ? (
@@ -152,7 +186,9 @@ export function WatchedFilmsSheet({ visible, clerkId, username, onClose }: Watch
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Ionicons name="film-outline" size={48} color={colors.iconFaint} />
-                <Text style={styles.emptyText}>No watched films yet.</Text>
+                <Text style={styles.emptyText}>
+                  {mode === 'watched' ? 'No watched films yet.' : 'Nothing on the watchlist yet.'}
+                </Text>
               </View>
             }
           />

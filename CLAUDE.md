@@ -118,6 +118,34 @@ and `playlist_items` all carry a `media_type` of `movie` or `tv`.
   server therefore serves television only to a caller that sends the
   header, which `custom-fetch.ts` does unconditionally.
 
+## Who can see what
+
+Two bars, and they are not interchangeable. Both live in
+`routes/users.ts`; the server decides and sends `null` for a section the
+caller may not see, so no screen ever infers visibility from the
+relationship.
+
+- **One-way** (`canViewDetails`, and `resolveListAccess` for the standalone
+  endpoints): self, OR a public account, OR an accepted follow pointing at
+  the target. Used for ratings, comments, public playlists, the follower
+  and following lists, and **the watchlist**.
+- **Mutual** ("Film Pals"): self, OR the follow is accepted in BOTH
+  directions. Used for watched films only — `/users/:id/watched` and
+  `recentWatched`.
+- So the two halves of a locker are deliberately unequal: what somebody
+  watched is a record of what they did, a watchlist is nearer a wishlist.
+  Watched ⊆ watchlist always; never widen watched to match.
+- A **block** reads as 404 everywhere, so a response never reveals that one
+  exists. `resolveListAccess` already does this — prefer it to hand-rolled
+  follow checks.
+- Any endpoint serving somebody else's locker lists its columns explicitly.
+  `movies.source_url` is theirs, and a whole-row select hands out every
+  column the table later gains.
+- The profile has a **preview** mode that shows you your own profile as a
+  visitor sees it. Its rules are applied client-side (the server correctly
+  sends you everything about yourself), so a change to either bar must be
+  mirrored there or the preview starts lying.
+
 ## Adult content
 
 - **`include_adult=false` only works on /search and /discover.** TMDB

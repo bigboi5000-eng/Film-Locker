@@ -1385,6 +1385,10 @@ export const getUserProfileResponseRecentWatchedItemRatingMin = 0.5;
 export const getUserProfileResponseRecentWatchedItemRatingMax = 5;
 export const getUserProfileResponseRecentWatchedItemRatingMultipleOf = 0.5;
 
+export const getUserProfileResponseRecentWatchlistItemRatingMin = 0.5;
+export const getUserProfileResponseRecentWatchlistItemRatingMax = 5;
+export const getUserProfileResponseRecentWatchlistItemRatingMultipleOf = 0.5;
+
 
 
 export const GetUserProfileResponse = zod.object({
@@ -1399,6 +1403,7 @@ export const GetUserProfileResponse = zod.object({
   "followsYou": zod.boolean().describe('Whether this person has an accepted follow pointing back at the caller. Combined with followStatus it gives the full picture: both accepted means they are Film Pals, which is the state that permits messaging. Always false when viewing your own profile.\n'),
   "stats": zod.object({
   "watchedCount": zod.number(),
+  "watchlistCount": zod.number().describe('Saved but not yet watched. A headline figure like the others, so it is public even where the list itself is not.\n'),
   "reviewCount": zod.number(),
   "publicPlaylistCount": zod.number(),
   "followerCount": zod.number(),
@@ -1448,7 +1453,17 @@ export const GetUserProfileResponse = zod.object({
   "rating": zod.number().min(getUserProfileResponseRecentWatchedItemRatingMin).max(getUserProfileResponseRecentWatchedItemRatingMax).multipleOf(getUserProfileResponseRecentWatchedItemRatingMultipleOf).nullish().describe('Their own score, in half-star steps. This read movies.rating, which has been a real since 0013 — so a profile card for anyone who had given a half failed validation before this was widened.\n'),
   "comment": zod.string().nullish(),
   "at": zod.coerce.date()
-}).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has watched, newest first, with `rating` set to their own private 1-5 score where they gave one.\n\nGated more tightly than the rest: watched films need a MUTUAL accepted follow, matching GET \/users\/{id}\/watched, so this is null for a public account the caller does not follow back even though the ratings above are visible. Do not build a profile\'s headline imagery from this — for most profiles it is empty.\n')
+}).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has watched, newest first, with `rating` set to their own private 1-5 score where they gave one.\n\nGated more tightly than the rest: watched films need a MUTUAL accepted follow, matching GET \/users\/{id}\/watched, so this is null for a public account the caller does not follow back even though the ratings above are visible. Do not build a profile\'s headline imagery from this — for most profiles it is empty.\n'),
+  "recentWatchlist": zod.array(zod.object({
+  "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent means film.\n'),
+  "title": zod.string().nullish(),
+  "posterUrl": zod.string().nullish(),
+  "releaseYear": zod.string().nullish(),
+  "rating": zod.number().min(getUserProfileResponseRecentWatchlistItemRatingMin).max(getUserProfileResponseRecentWatchlistItemRatingMax).multipleOf(getUserProfileResponseRecentWatchlistItemRatingMultipleOf).nullish().describe('Their own score, in half-star steps. This read movies.rating, which has been a real since 0013 — so a profile card for anyone who had given a half failed validation before this was widened.\n'),
+  "comment": zod.string().nullish(),
+  "at": zod.coerce.date()
+}).describe('One film on someone\'s profile, with whatever the section it appears in is about. One shape for all three sections rather than three near-identical ones: `rating` carries the community rating under recentRatings and the person\'s own score under recentWatched, `comment` carries the body under recentComments, and `at` is when that thing happened.\n\nTitle and poster are nullable because neither film_community_ratings nor film_comments stores them — both keep a TMDB id alone — so they are resolved separately and a film that cannot be resolved still appears rather than silently shortening the list.\n')).nullish().describe('Films this person has saved and not yet watched, newest first.\n\nNull under the same privacy rule as publicPlaylists and the ratings above — a private account the caller does not follow — and NOT under the stricter mutual-follow rule that hides recentWatched. So this is populated for a public stranger where recentWatched is not, which makes it the section a profile\'s headline imagery can actually be built from.\n')
 })
 
 
@@ -1492,6 +1507,56 @@ export const GetUserWatchedResponse = zod.object({
   "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
   "tmdbRating": zod.number().min(getUserWatchedResponseMoviesItemTmdbRatingMin).max(getUserWatchedResponseMoviesItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
   "rating": zod.number().min(getUserWatchedResponseMoviesItemRatingMin).max(getUserWatchedResponseMoviesItemRatingMax).multipleOf(getUserWatchedResponseMoviesItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
+  "sourceUrl": zod.string().nullish().describe('The social post this film was added from, so the app can offer a way back to it. Null when the film came from a search, the camera, or was added before this was recorded — all of which mean \"no answer\" rather than \"not loaded yet\", so the app simply omits the link.\nPresent only on the owner\'s own films. Another person\'s watched list does not carry it: what somebody saved is social, what they were reading when they saved it is not.\n'),
+  "isWatched": zod.boolean(),
+  "watchedAt": zod.coerce.date().nullish(),
+  "addedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * What this person has saved and not yet watched, newest first.
+ *
+ * Visible for a public account, for the account itself, and to an accepted follower of a private account — the same one-way bar the playlists and the follower lists use, and a LOOSER one than GET /users/{id}/watched, which needs a mutual follow. The two halves of a locker are deliberately not equally private: what somebody has actually watched is a record of what they did, while a watchlist is closer to a wishlist and is the part worth discovering a stranger by.
+ * @summary Get another user's watchlist
+ */
+export const GetUserWatchlistParams = zod.object({
+  "id": zod.coerce.string().describe('Clerk user ID whose watchlist to view')
+})
+
+export const getUserWatchlistResponseMoviesItemTmdbRatingMin = 0;
+export const getUserWatchlistResponseMoviesItemTmdbRatingMax = 10;
+
+export const getUserWatchlistResponseMoviesItemRatingMin = 0.5;
+export const getUserWatchlistResponseMoviesItemRatingMax = 5;
+export const getUserWatchlistResponseMoviesItemRatingMultipleOf = 0.5;
+
+
+
+export const GetUserWatchlistResponse = zod.object({
+  "movies": zod.array(zod.object({
+  "id": zod.number(),
+  "tmdbId": zod.number(),
+  "mediaType": zod.enum(['movie', 'tv']).optional().describe('Whether this is a film or a television series. TMDB numbers the two in separate sequences, so tmdbId alone does not identify a title and this is needed to tell them apart. Absent on a row written before TV existed, which is a film.\n'),
+  "title": zod.string(),
+  "releaseYear": zod.string(),
+  "posterUrl": zod.string(),
+  "overview": zod.string(),
+  "director": zod.string(),
+  "cast": zod.array(zod.string()),
+  "genres": zod.array(zod.string()),
+  "language": zod.string(),
+  "watchProviders": zod.array(zod.object({
+  "provider_id": zod.number(),
+  "provider_name": zod.string(),
+  "logo_url": zod.string(),
+  "type": zod.enum(['flatrate', 'rent', 'buy']).optional().describe('Whether the title is included in a subscription (flatrate), or available to rent or buy individually.\n'),
+  "link": zod.string().optional().describe('JustWatch deep-link for this film (opens the film\'s page on JustWatch)')
+})),
+  "runtime": zod.number().nullish().describe('Running time in minutes. Null when TMDB has no runtime for the film, and also while a newly added film is still being enriched in the background — both mean \"unknown length\", and the app\'s length filter treats them the same way.\n'),
+  "tmdbRating": zod.number().min(getUserWatchlistResponseMoviesItemTmdbRatingMin).max(getUserWatchlistResponseMoviesItemTmdbRatingMax).nullish().describe('TMDB\'s own average out of 10. Null when TMDB has no score and also while a newly added film is still being enriched — both mean \"unknown\", which is how the rating filter treats them.\n'),
+  "rating": zod.number().min(getUserWatchlistResponseMoviesItemRatingMin).max(getUserWatchlistResponseMoviesItemRatingMax).multipleOf(getUserWatchlistResponseMoviesItemRatingMultipleOf).nullish().describe('The owner\'s own score out of 5, in half-star steps, so ten positions rather than five. Null means unrated, which is different from nought — there is no nought.\n'),
   "sourceUrl": zod.string().nullish().describe('The social post this film was added from, so the app can offer a way back to it. Null when the film came from a search, the camera, or was added before this was recorded — all of which mean \"no answer\" rather than \"not loaded yet\", so the app simply omits the link.\nPresent only on the owner\'s own films. Another person\'s watched list does not carry it: what somebody saved is social, what they were reading when they saved it is not.\n'),
   "isWatched": zod.boolean(),
   "watchedAt": zod.coerce.date().nullish(),

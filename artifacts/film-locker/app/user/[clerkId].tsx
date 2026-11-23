@@ -6,12 +6,17 @@
  * depends entirely on where the viewer stands, and the three bars are not
  * the same:
  *
- *  - ratings, reviews and playlists need a one-way accepted follow (or a
- *    public account);
+ *  - ratings, reviews, playlists and the WATCHLIST need a one-way accepted
+ *    follow (or a public account);
  *  - watched films need a mutual follow, which is the strictest bar in the
- *    app and the reason the hero imagery is not built from them — for
- *    anyone you have just discovered, recentWatched is null;
+ *    app and the reason the hero imagery is not built from them alone —
+ *    for anyone you have just discovered, recentWatched is null;
  *  - the follower and following counts are public, their lists are not.
+ *
+ * The two halves of a locker are deliberately not equally private. What
+ * somebody has watched is a record of what they did; a watchlist is nearer
+ * a wishlist, which is why it sits on the looser bar and is the one section
+ * of someone's films a stranger can actually see.
  *
  * The server decides all of that and sends null for a section the viewer
  * may not see, so nothing here infers visibility from the relationship.
@@ -52,7 +57,7 @@ import {
   type ProfileFilmCard,
 } from '@workspace/api-client-react';
 import { PlaylistCard } from '@/components/PlaylistCard';
-import { WatchedFilmsSheet } from '@/components/WatchedFilmsSheet';
+import { UserFilmsSheet, type UserFilmsMode } from '@/components/UserFilmsSheet';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
@@ -118,7 +123,8 @@ export default function UserProfileScreen() {
   const { clerkId } = useLocalSearchParams<{ clerkId: string }>();
 
   const [busy, setBusy] = useState(false);
-  const [watchedVisible, setWatchedVisible] = useState(false);
+  // Which half of their locker is open as a full list, or null for none.
+  const [filmsSheet, setFilmsSheet] = useState<UserFilmsMode | null>(null);
   /** On your own profile: render it as somebody who does not follow you. */
   const [preview, setPreview] = useState(false);
   const [selected, setSelected] = useState<ProfileFilmCard | null>(null);
@@ -160,6 +166,11 @@ export default function UserProfileScreen() {
     const asVisitor = data.followStatus === 'self' && preview;
     if (!asVisitor) for (const f of data.recentWatched ?? []) push(f.posterUrl);
     if (!(asVisitor && data.user.isPrivate)) {
+      // The watchlist comes before ratings here, and is the reason a
+      // stranger's profile has a hero at all: watched films are hidden
+      // until the follow is mutual, so for anybody newly discovered this
+      // is the only section of their FILMS that has anything in it.
+      for (const f of data.recentWatchlist ?? []) push(f.posterUrl);
       for (const f of data.recentRatings ?? []) push(f.posterUrl);
       for (const pl of data.publicPlaylists ?? []) (pl.coverPosters ?? []).forEach(push);
     }
@@ -235,6 +246,7 @@ export default function UserProfileScreen() {
     recentRatings,
     recentComments,
     recentWatched,
+    recentWatchlist,
   } = data;
   const initials = initialsFor(user.displayInitials, user.username);
   const them = user.username ?? 'them';
@@ -251,6 +263,9 @@ export default function UserProfileScreen() {
   const asVisitor = isSelf && preview;
   const hideAll = asVisitor && user.isPrivate;
   const shownWatched = asVisitor ? null : recentWatched;
+  // hideAll, not asVisitor: a visitor to a PUBLIC account does see this,
+  // which is the whole difference between the two bars.
+  const shownWatchlist = hideAll ? null : recentWatchlist;
   const shownRatings = hideAll ? null : recentRatings;
   const shownComments = hideAll ? null : recentComments;
   const shownPlaylists = hideAll ? null : publicPlaylists;
@@ -419,8 +434,11 @@ export default function UserProfileScreen() {
 
         {/* Headline stats */}
         <View style={styles.statsRow}>
+          {/* Tappable only where the viewer may actually see the list.
+              Watched needs a mutual follow; the count itself stays public
+              either way, which is why the tile renders regardless. */}
           {(isSelf && !preview) || isFilmPal ? (
-            <TouchableOpacity style={styles.statTile} onPress={() => setWatchedVisible(true)} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.statTile} onPress={() => setFilmsSheet('watched')} activeOpacity={0.7}>
               <Text style={styles.statValue}>{stats.watchedCount}</Text>
               <Text style={styles.statLabel}>Watched</Text>
             </TouchableOpacity>
@@ -428,6 +446,22 @@ export default function UserProfileScreen() {
             <View style={styles.statTile}>
               <Text style={styles.statValue}>{stats.watchedCount}</Text>
               <Text style={styles.statLabel}>Watched</Text>
+            </View>
+          )}
+          <View style={styles.statDivider} />
+          {/* The looser bar: whoever can see the watchlist SECTION can
+              open the full list. shownWatchlist is the server's answer to
+              that question, so the tap follows it rather than re-deriving
+              the rule from the relationship. */}
+          {shownWatchlist ? (
+            <TouchableOpacity style={styles.statTile} onPress={() => setFilmsSheet('watchlist')} activeOpacity={0.7}>
+              <Text style={styles.statValue}>{stats.watchlistCount}</Text>
+              <Text style={styles.statLabel}>Watchlist</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.statTile}>
+              <Text style={styles.statValue}>{stats.watchlistCount}</Text>
+              <Text style={styles.statLabel}>Watchlist</Text>
             </View>
           )}
           <View style={styles.statDivider} />
@@ -461,7 +495,7 @@ export default function UserProfileScreen() {
             <FlatList
               data={shownWatched}
               horizontal
-              keyExtractor={(f) => `w-${f.tmdbId}`}
+              keyExtractor={(f) => `w-${f.mediaType ?? 'movie'}-${f.tmdbId}`}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
@@ -476,13 +510,35 @@ export default function UserProfileScreen() {
           </View>
         ) : null}
 
+        {shownWatchlist && shownWatchlist.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Watchlist</Text>
+            <FlatList
+              data={shownWatchlist}
+              horizontal
+              keyExtractor={(f) => `wl-${f.mediaType ?? 'movie'}-${f.tmdbId}`}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+              renderItem={({ item }) => (
+                <FilmStripCard
+                  film={item}
+                  // No stars: these are unwatched, so a rating is the rare
+                  // exception rather than the thing the row is about.
+                  lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
+                  onPress={() => setSelected(item)}
+                />
+              )}
+            />
+          </View>
+        ) : null}
+
         {shownRatings && shownRatings.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Rated</Text>
             <FlatList
               data={shownRatings}
               horizontal
-              keyExtractor={(f) => `r-${f.tmdbId}`}
+              keyExtractor={(f) => `r-${f.mediaType ?? 'movie'}-${f.tmdbId}`}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
               renderItem={({ item }) => (
@@ -562,11 +618,12 @@ export default function UserProfileScreen() {
         ) : null}
       </ScrollView>
 
-      <WatchedFilmsSheet
-        visible={watchedVisible}
+      <UserFilmsSheet
+        visible={filmsSheet !== null}
+        mode={filmsSheet ?? 'watched'}
         clerkId={clerkId}
         username={user.username ?? 'Their'}
-        onClose={() => setWatchedVisible(false)}
+        onClose={() => setFilmsSheet(null)}
       />
 
       {selected && (

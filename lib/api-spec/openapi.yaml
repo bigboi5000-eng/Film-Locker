@@ -1052,6 +1052,44 @@ paths:
         "404":
           description: Not found
 
+  /users/{id}/watchlist:
+    get:
+      operationId: getUserWatchlist
+      tags: [users]
+      summary: Get another user's watchlist
+      description: >
+        What this person has saved and not yet watched, newest first.
+
+
+        Visible for a public account, for the account itself, and to an
+        accepted follower of a private account — the same one-way bar the
+        playlists and the follower lists use, and a LOOSER one than
+        GET /users/{id}/watched, which needs a mutual follow. The two
+        halves of a locker are deliberately not equally private: what
+        somebody has actually watched is a record of what they did, while
+        a watchlist is closer to a wishlist and is the part worth
+        discovering a stranger by.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Clerk user ID whose watchlist to view
+      responses:
+        "200":
+          description: Watchlist films
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMoviesResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: This account is private
+        "404":
+          description: Not found
+
   /users/{id}/followers:
     get:
       operationId: getUserFollowers
@@ -3140,6 +3178,11 @@ components:
           properties:
             watchedCount:
               type: integer
+            watchlistCount:
+              type: integer
+              description: >
+                Saved but not yet watched. A headline figure like the
+                others, so it is public even where the list itself is not.
             reviewCount:
               type: integer
             publicPlaylistCount:
@@ -3150,6 +3193,7 @@ components:
               type: integer
           required:
             - watchedCount
+            - watchlistCount
             - reviewCount
             - publicPlaylistCount
             - followerCount
@@ -3196,6 +3240,21 @@ components:
             null for a public account the caller does not follow back even
             though the ratings above are visible. Do not build a profile's
             headline imagery from this — for most profiles it is empty.
+          items:
+            $ref: "#/components/schemas/ProfileFilmCard"
+        recentWatchlist:
+          type: array
+          nullable: true
+          description: >
+            Films this person has saved and not yet watched, newest first.
+
+
+            Null under the same privacy rule as publicPlaylists and the
+            ratings above — a private account the caller does not follow —
+            and NOT under the stricter mutual-follow rule that hides
+            recentWatched. So this is populated for a public stranger where
+            recentWatched is not, which makes it the section a profile's
+            headline imagery can actually be built from.
           items:
             $ref: "#/components/schemas/ProfileFilmCard"
       required:

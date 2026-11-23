@@ -851,6 +851,8 @@ export const UserProfileResponseFollowStatus = {
 
 export type UserProfileResponseStats = {
   watchedCount: number;
+  /** Saved but not yet watched. A headline figure like the others, so it is public even where the list itself is not. */
+  watchlistCount: number;
   reviewCount: number;
   publicPlaylistCount: number;
   followerCount: number;
@@ -895,6 +897,12 @@ export interface UserProfileResponse {
      * Gated more tightly than the rest: watched films need a MUTUAL accepted follow, matching GET /users/{id}/watched, so this is null for a public account the caller does not follow back even though the ratings above are visible. Do not build a profile's headline imagery from this — for most profiles it is empty.
      */
   recentWatched?: ProfileFilmCard[] | null;
+  /**
+     * Films this person has saved and not yet watched, newest first.
+     *
+     * Null under the same privacy rule as publicPlaylists and the ratings above — a private account the caller does not follow — and NOT under the stricter mutual-follow rule that hides recentWatched. So this is populated for a public stranger where recentWatched is not, which makes it the section a profile's headline imagery can actually be built from.
+     */
+  recentWatchlist?: ProfileFilmCard[] | null;
 }
 
 export interface SyncUserBody {

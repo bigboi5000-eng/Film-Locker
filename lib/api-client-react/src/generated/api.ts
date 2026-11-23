@@ -3309,6 +3309,86 @@ export function useGetUserWatched<TData = Awaited<ReturnType<typeof getUserWatch
 
 
 
+export const getGetUserWatchlistUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/watchlist`
+}
+
+/**
+ * What this person has saved and not yet watched, newest first.
+ *
+ * Visible for a public account, for the account itself, and to an accepted follower of a private account — the same one-way bar the playlists and the follower lists use, and a LOOSER one than GET /users/{id}/watched, which needs a mutual follow. The two halves of a locker are deliberately not equally private: what somebody has actually watched is a record of what they did, while a watchlist is closer to a wishlist and is the part worth discovering a stranger by.
+ * @summary Get another user's watchlist
+ */
+export const getUserWatchlist = async (id: string, options?: RequestInit): Promise<ListMoviesResponse> => {
+
+  return customFetch<ListMoviesResponse>(getGetUserWatchlistUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserWatchlistQueryKey = (id: string,) => {
+    return [
+    `/api/users/${id}/watchlist`
+    ] as const;
+    }
+
+
+export const getGetUserWatchlistQueryOptions = <TData = Awaited<ReturnType<typeof getUserWatchlist>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserWatchlist>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserWatchlistQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserWatchlist>>> = ({ signal }) => getUserWatchlist(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserWatchlist>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserWatchlistQueryResult = NonNullable<Awaited<ReturnType<typeof getUserWatchlist>>>
+export type GetUserWatchlistQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get another user's watchlist
+ */
+
+export function useGetUserWatchlist<TData = Awaited<ReturnType<typeof getUserWatchlist>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserWatchlist>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserWatchlistQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetUserFollowersUrl = (id: string,) => {
 
 
