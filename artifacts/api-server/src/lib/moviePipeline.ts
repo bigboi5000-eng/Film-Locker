@@ -300,6 +300,21 @@ export async function enrichAndSaveMatches(
       poster_url: hit.posterUrl,
       title: hit.title,
       overview: hit.overview,
+      // TMDB's year, not the model's — and this line is the whole reason
+      // a film imported from a photo arrived with no date while the same
+      // film added from search had one.
+      //
+      // The three fields above were already being replaced with what
+      // TMDB returned; the year was left as the model read it, and the
+      // prompts tell it to send an empty string when it cannot tell. A
+      // poster very often does not print the year. Every client then
+      // saves `match.release_year` verbatim, so the blank went straight
+      // into the locker next to a title and a poster that had both come
+      // from TMDB — which is why it looked like the save had simply
+      // dropped the field.
+      //
+      // `||` so a year the model DID read survives TMDB not having one.
+      release_year: hit.releaseYear || match.release_year,
     });
 
     // Keyed by kind and id: a post naming both a film and the series made

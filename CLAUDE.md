@@ -195,6 +195,15 @@ relationship.
   finish, so that bug was iPhone-only. Also: never delete the entry when
   a READ throws — a momentary keychain failure becomes a permanent
   sign-out, and returning null is already enough to make Clerk refresh.
+- **An enriched match must carry TMDB's fields, not the model's.** In
+  `enrichAndSaveMatches`, `title`, `poster_url`, `overview` AND
+  `release_year` are all replaced with what the TMDB hit returned. The
+  year was once left as the model read it, and the prompts tell it to
+  send `""` when it cannot tell — a poster usually does not print a year
+  — so a film imported from a photo was saved with a blank year beside a
+  title and poster that had both come from TMDB. Every client sends
+  `match.release_year` verbatim, so whatever is on the match IS what
+  lands in the locker. Add any new card field to that overwrite list.
 - **TMDB returns empty strings, not nulls, for what it has not got
   yet.** `release_date`, `poster_path` and `overview` all come back `""`
   on a film indexed before it has them — which is the normal state of the
