@@ -17,7 +17,7 @@
  *
  * so the profile screen only offers the tap when the viewer qualifies.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, FlatList,
   TouchableOpacity, ActivityIndicator,
@@ -38,7 +38,14 @@ import {
 import { useToast } from '@/components/ToastProvider';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 import { useColors } from '@/hooks/useColors';
-import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
+import {
+  useLockerStatusByTitle,
+  titleKey,
+  asMediaType,
+  furtherLockerStatus,
+  type LockerStatus,
+} from '@/hooks/useLockerTitles';
+import { FilmDetailModal } from '@/components/FilmDetailModal';
 import type { Palette } from '@/constants/colors';
 
 /** Which half of the locker this sheet is showing. */
@@ -52,21 +59,27 @@ interface UserFilmsSheetProps {
   onClose: () => void;
 }
 
-function WatchedFilmRow({
+function UserFilmRow({
   movie,
-  alreadyInLocker,
+  lockerStatus,
   onAdded,
+  onOpen,
 }: {
   movie: Movie;
   /**
-   * Whether the VIEWER already has this film, watchlist or watched.
+   * Where this title sits in the VIEWER's locker — saved, watched, or
+   * not there at all.
    *
-   * This is somebody else's locker, so a good share of it is normally
-   * already in your own — and without this the row offered to add every
-   * one of them, including the ones you had seen yourself.
+   * A status rather than a boolean. This is somebody else's locker, so a
+   * good share of it is normally already in your own, and the row used to
+   * say only "Added" for both halves — so a film you had already SEEN was
+   * indistinguishable from one sitting unwatched on your list, which is
+   * the single most useful thing to know while reading somebody's
+   * watchlist.
    */
-  alreadyInLocker: boolean;
+  lockerStatus: LockerStatus;
   onAdded: () => void;
+  onOpen: () => void;
 }) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -74,9 +87,13 @@ function WatchedFilmRow({
   const queryClient = useQueryClient();
   const { mutateAsync: addMovie, isPending } = useAddMovie();
   // Only ever ahead of the server, for the moment between the write and
-  // the refetch; alreadyInLocker covers everything this session did not do.
+  // the refetch; lockerStatus covers everything this session did not do.
+  // Taking the FURTHER of the two is what stops a just-added film
+  // flickering back from "On your list" to nothing, and stops it
+  // overwriting a "Watched" the server already knew about.
   const [justAdded, setJustAdded] = useState(false);
-  const added = justAdded || alreadyInLocker;
+  const status = furtherLockerStatus(justAdded ? 'watchlist' : null, lockerStatus);
+  const added = status !== null;
 
   const handleAdd = useCallback(async () => {
     if (added || isPending) return;
@@ -100,7 +117,7 @@ function WatchedFilmRow({
   }, [added, isPending, addMovie, movie, queryClient, showToast, onAdded]);
 
   return (
-    <View style={styles.row}>
+    <TouchableOpacity style={styles.row} onPress={onOpen} activeOpacity={0.75}>
       {movie.posterUrl ? (
         <Image source={{ uri: movie.posterUrl }} style={styles.poster} contentFit="cover" />
       ) : (
@@ -113,9 +130,23 @@ function WatchedFilmRow({
         {movie.releaseYear ? <Text style={styles.year}>{movie.releaseYear}</Text> : null}
       </View>
       {added ? (
+        // Same two answers, and the same two colours, as the badge on a
+        // poster: a tick in the primary blue for something seen, a
+        // bookmark in the star amber for something saved.
         <View style={styles.addedPill}>
-          <Ionicons name="checkmark" size={14} color={colors.success} />
-          <Text style={styles.addedText}>Added</Text>
+          <Ionicons
+            name={status === 'watched' ? 'checkmark' : 'bookmark'}
+            size={13}
+            color={status === 'watched' ? colors.primary : colors.star}
+          />
+          <Text
+            style={[
+              styles.addedText,
+              { color: status === 'watched' ? colors.primary : colors.star },
+            ]}
+          >
+            {status === 'watched' ? 'Watched' : 'On your list'}
+          </Text>
         </View>
       ) : (
         <TouchableOpacity style={styles.addBtn} onPress={handleAdd} disabled={isPending} activeOpacity={0.8}>
@@ -126,7 +157,7 @@ function WatchedFilmRow({
           )}
         </TouchableOpacity>
       )}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -156,7 +187,14 @@ export function UserFilmsSheet({ visible, mode, clerkId, username, onClose }: Us
   // One shared read of the viewer's own locker for the whole sheet.
   const lockerStatusByTitle = useLockerStatusByTitle();
 
+  /** The row tapped open, or null. Cleared when the sheet is dismissed. */
+  const [openFilm, setOpenFilm] = useState<Movie | null>(null);
+  useEffect(() => {
+    if (!visible) setOpenFilm(null);
+  }, [visible]);
+
   return (
+    <>
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <View style={styles.header}>
@@ -176,10 +214,11 @@ export function UserFilmsSheet({ visible, mode, clerkId, username, onClose }: Us
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
             renderItem={({ item }) => (
-              <WatchedFilmRow
+              <UserFilmRow
                 movie={item}
-                alreadyInLocker={lockerStatusByTitle.has(titleKey(item))}
+                lockerStatus={lockerStatusByTitle.get(titleKey(item)) ?? null}
                 onAdded={() => {}}
+                onOpen={() => setOpenFilm(item)}
               />
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -195,6 +234,28 @@ export function UserFilmsSheet({ visible, mode, clerkId, username, onClose }: Us
         )}
       </View>
     </Modal>
+
+    {/* A SIBLING of the Modal above, never a child. A Modal nested inside
+        another Modal is unreliable on Android and has already produced a
+        blank-sheet bug in this codebase (see ShareFilmSheet).
+
+        savedMovie is deliberately not passed: these rows are somebody
+        ELSE'S locker row, and the sheet finds the viewer's own from the
+        shared movies query. Nor is sourceUrl — the post they were reading
+        is theirs, and the endpoint does not send it. */}
+    {openFilm ? (
+      <FilmDetailModal
+        visible
+        onClose={() => setOpenFilm(null)}
+        tmdbId={openFilm.tmdbId}
+        mediaType={asMediaType(openFilm.mediaType)}
+        title={openFilm.title}
+        posterUrl={openFilm.posterUrl}
+        releaseYear={openFilm.releaseYear}
+        overview={openFilm.overview}
+      />
+    ) : null}
+    </>
   );
 }
 

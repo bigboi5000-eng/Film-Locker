@@ -108,10 +108,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   saved: { backgroundColor: c.star },
   tick: { color: c.onColor, fontFamily: 'Inter_700Bold' },
   kind: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 3,
     marginRight: 5,
+    // Never compressed by the row it sits in. Without this the chip is an
+    // ordinary flex child beside the year, and on a narrow card it can be
+    // squeezed — which does not wrap a two-letter label, it clips it, so
+    // "TV" renders as "T".
+    flexShrink: 0,
     // A hairline outline rather than a filled block: it sits on a caption
     // that is already a dark scrim, so a dark fill would be invisible and
     // a bright one would shout louder than the title above it.
@@ -121,8 +126,14 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   kindText: {
     color: '#fff',
     fontSize: 8,
-    letterSpacing: 0.5,
     lineHeight: 11,
     fontFamily: 'Inter_700Bold',
+    // No letterSpacing, deliberately. It looked better on an all-caps
+    // label and it is the other half of the clipped "V": iOS adds the
+    // spacing after the LAST character too, but does not always include
+    // that trailing gap in the width it measures the text at — so the
+    // glyph sits a fraction outside the box that was sized for it and the
+    // edge cuts it off. Tight padding made it land on the V.
+    textAlign: 'center',
   },
 });
