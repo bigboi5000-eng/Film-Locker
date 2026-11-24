@@ -195,6 +195,20 @@ relationship.
   finish, so that bug was iPhone-only. Also: never delete the entry when
   a READ throws — a momentary keychain failure becomes a permanent
   sign-out, and returning null is already enough to make Clerk refresh.
+- **TMDB returns empty strings, not nulls, for what it has not got
+  yet.** `release_date`, `poster_path` and `overview` all come back `""`
+  on a film indexed before it has them — which is the normal state of the
+  upcoming titles this app is mostly used to save. So `??` is the wrong
+  operator on any of them: it falls through on null only, and happily
+  writes `""` over a good value. Use `||`. Worse, nothing used to repair
+  such a row afterwards — the save path's upsert touches enrichment
+  fields only, and the backfill never wrote `release_year` — so a film
+  saved without a year kept the blank for ever and deleting and re-adding
+  it was the only way out. The backfill now re-checks a yearless row
+  weekly (its `enriched_at` stamp is ignored for that one test, with a
+  week as the brake so a film TMDB genuinely has no date for is not
+  re-fetched every boot), and the upsert fills a blank with
+  `coalesce(nullif(existing, ''), new)` rather than leaving it.
 - **Silent failure is the recurring bug in this codebase.** Bare `catch`,
   discarded Expo push tickets, `Promise.allSettled` skipping rejections
   with no log. Nearly every long-lived mystery this project has had traced

@@ -72,10 +72,40 @@ export interface BackfillResult {
  * table. Only rows actually missing something are collected; a row with
  * nothing missing is simply left alone, null `enriched_at` and all.
  */
-async function filmsNeedingVisit(
-  limit: number,
-  clerkUserId?: string,
-): Promise<Array<{ tmdbId: number; mediaType: MediaType }>> {
+/**
+ * Which rows are worth a TMDB visit.
+ *
+ * Two different questions, which is why this is not one flat condition.
+ *
+ * The first is the original: a row that has never been enriched and is
+ * missing something. `enriched_at IS NULL` is what stops it re-running
+ * for ever — one successful visit stamps it and it leaves the queue.
+ *
+ * The second is a release year, and it deliberately ignores that stamp.
+ * A year can be MISSING FROM TMDB when the film is saved and appear
+ * weeks later — which is exactly what happens to the 2026 titles this
+ * app is mostly used to save — and nothing else ever repairs it. The
+ * save path does not (its upsert leaves title, poster and year alone on
+ * an existing row), and before this neither did the backfill, so an
+ * entry that arrived without a year kept the blank for good and the only
+ * way out was to delete it and add it again.
+ *
+ * Re-checking an already-enriched row needs a brake, or a film TMDB
+ * genuinely has no date for would be re-fetched on every boot. A week is
+ * that brake, and it is also about the right cadence for the thing being
+ * waited on: an unscheduled film does not get a date by the hour.
+ */
+const WITHOUT_A_YEAR_RECHECK_DAYS = 7;
+
+/**
+ * The queue's membership test, in one place.
+ *
+ * Shared by the queue and by the count that reports its size. They were
+ * two copies of the same condition, which is a standing invitation to
+ * change one and not the other — and then the boot log confidently
+ * announces a number of films that the run does not visit.
+ */
+function needsVisitCondition(clerkUserId?: string) {
   const missing = sql`(
     array_length(${moviesTable.genres}, 1) IS NULL
     -- Runtime is a film's question. TMDB's episode_run_time is minutes
@@ -85,6 +115,24 @@ async function filmsNeedingVisit(
     OR ${moviesTable.tmdbRating} IS NULL
   )`;
 
+  const needsVisit = sql`(
+    (${moviesTable.enrichedAt} IS NULL AND ${missing})
+    OR (
+      coalesce(${moviesTable.releaseYear}, '') = ''
+      AND (
+        ${moviesTable.enrichedAt} IS NULL
+        OR ${moviesTable.enrichedAt} < now() - interval '${sql.raw(String(WITHOUT_A_YEAR_RECHECK_DAYS))} days'
+      )
+    )
+  )`;
+
+  return clerkUserId ? and(needsVisit, eq(moviesTable.clerkUserId, clerkUserId)) : needsVisit;
+}
+
+async function filmsNeedingVisit(
+  limit: number,
+  clerkUserId?: string,
+): Promise<Array<{ tmdbId: number; mediaType: MediaType }>> {
   const rows = await db
     .select({
       tmdbId: moviesTable.tmdbId,
@@ -94,11 +142,7 @@ async function filmsNeedingVisit(
       oldest: sql<string>`min(${moviesTable.addedAt})`,
     })
     .from(moviesTable)
-    .where(
-      clerkUserId
-        ? and(isNull(moviesTable.enrichedAt), missing, eq(moviesTable.clerkUserId, clerkUserId))
-        : and(isNull(moviesTable.enrichedAt), missing),
-    )
+    .where(needsVisitCondition(clerkUserId))
     .groupBy(moviesTable.tmdbId, moviesTable.mediaType)
     // Oldest first, so a run that hits the cap makes deterministic progress
     // instead of revisiting whichever films the planner happened to return.
@@ -158,6 +202,10 @@ export async function backfillEnrichment(options: BackfillOptions = {}): Promise
           watchProviders: details.watchProviders,
           runtime: details.runtime,
           tmdbRating: details.tmdbRating,
+          // Only when TMDB actually has one. Writing it unconditionally
+          // would blank a year already on the row whenever TMDB answers
+          // without a date, which is the very state being repaired.
+          ...(details.releaseYear ? { releaseYear: details.releaseYear } : {}),
           enrichedAt: new Date(),
         })
         .where(
@@ -189,24 +237,12 @@ export async function backfillEnrichment(options: BackfillOptions = {}): Promise
  * boot log, so a deploy says up front whether there is anything to do.
  */
 export async function countFilmsNeedingVisit(clerkUserId?: string): Promise<number> {
-  const missing = sql`(
-    array_length(${moviesTable.genres}, 1) IS NULL
-    -- Runtime is a film's question. TMDB's episode_run_time is minutes
-    -- per episode and is deliberately not stored, so a series' runtime is
-    -- permanently null and would keep it in this queue for good.
-    OR (${moviesTable.mediaType} = 'movie' AND ${moviesTable.runtime} IS NULL)
-    OR ${moviesTable.tmdbRating} IS NULL
-  )`;
   const result = await db
     .select({
       films: sql<string>`count(distinct (${moviesTable.tmdbId}, ${moviesTable.mediaType}))`,
     })
     .from(moviesTable)
-    .where(
-      clerkUserId
-        ? and(isNull(moviesTable.enrichedAt), missing, eq(moviesTable.clerkUserId, clerkUserId))
-        : and(isNull(moviesTable.enrichedAt), missing),
-    );
+    .where(needsVisitCondition(clerkUserId));
   return Number(result[0]?.films ?? 0);
 }
 

@@ -337,10 +337,17 @@ export async function enrichAndSaveMatches(
         tmdbId: hit.tmdbId,
         mediaType: hit.mediaType,
         clerkUserId,
-        title: details?.title ?? hit.title,
-        releaseYear: details?.releaseYear ?? hit.releaseYear,
-        posterUrl: details?.posterUrl ?? hit.posterUrl,
-        overview: details?.overview ?? hit.overview,
+        // `||`, not `??`. These four are strings that TMDB returns EMPTY
+        // rather than absent — a film indexed before it has a release
+        // date, a poster or a synopsis, which is the normal state of the
+        // upcoming titles this app is mostly used to save. `??` only
+        // falls through on null, so an empty year from the details
+        // response was written over a perfectly good one from the search
+        // result, and the row kept the blank.
+        title: details?.title || hit.title,
+        releaseYear: details?.releaseYear || hit.releaseYear,
+        posterUrl: details?.posterUrl || hit.posterUrl,
+        overview: details?.overview || hit.overview,
         director: details?.director ?? "",
         cast: details?.cast ?? [],
         genres: details?.genres ?? [],
@@ -377,6 +384,16 @@ export async function enrichAndSaveMatches(
             // for and the statement would simply error.
             target: [moviesTable.tmdbId, moviesTable.clerkUserId, moviesTable.mediaType],
             set: {
+              // Repaired, not overwritten: coalesce(nullif(existing,''))
+              // keeps whatever is already on the row and fills it only
+              // when it is blank. Without these three the upsert touched
+              // enrichment fields alone, so a row that arrived with no
+              // year could never get one — re-saving the same film did
+              // nothing, and deleting and re-adding it was the only way
+              // out.
+              releaseYear: sql`coalesce(nullif(${moviesTable.releaseYear}, ''), ${values.releaseYear})`,
+              title: sql`coalesce(nullif(${moviesTable.title}, ''), ${values.title})`,
+              posterUrl: sql`coalesce(nullif(${moviesTable.posterUrl}, ''), ${values.posterUrl})`,
               director: values.director,
               cast: values.cast,
               genres: values.genres,
