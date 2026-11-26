@@ -190,6 +190,15 @@ export function ShareIntentHandler() {
     // cold launch, and the intent is still here when they do.
     if (!navigatorReady || !authLoaded) return;
 
+    // `hasShareIntent` and `shareIntent` come from the same context and
+    // are supposed to agree, but this effect runs on the first render
+    // after a cold launch — the one moment they could not — and reading
+    // `.files` off a null would throw where nothing can catch it. React
+    // does not catch a throw from inside an effect; an error boundary
+    // only sees render errors. So it would not be an error message, it
+    // would be the app dying on launch.
+    if (!shareIntent) return;
+
     // An image takes precedence over any text that came with it: someone
     // sharing a screenshot is sharing the picture, and the accompanying text
     // on a screenshot share is usually a filename.
