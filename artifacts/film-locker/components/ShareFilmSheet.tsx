@@ -520,6 +520,7 @@ function BulkAddPanel({
   initialName,
   sourceUrl,
   onDone,
+  doneLabel,
 }: {
   /** Already the user-selected subset — not the full match list. */
   candidates: GeminiMovieMatch[];
@@ -529,6 +530,12 @@ function BulkAddPanel({
   /** The link these films came from, recorded on whatever is saved. */
   sourceUrl?: string | null;
   onDone: () => void;
+  /**
+   * What the button at the end says — "Return to previous app" when the
+   * sheet was opened by a share from elsewhere, "Done" when it was not.
+   * The parent decides, because it is what knows how the sheet opened.
+   */
+  doneLabel: string;
 }) {
   const colors = useColors();
   const ppStyles = useThemedStyles(makePpStyles);
@@ -578,8 +585,7 @@ function BulkAddPanel({
     setAddingTo(null);
     setDone(true);
     showToast({ title: `Added ${added} film${added !== 1 ? 's' : ''} to watchlist`, variant: 'success' });
-    setTimeout(onDone, 1200);
-  }, [candidates, addMovie, queryClient, showToast, onDone]);
+  }, [candidates, addMovie, queryClient, showToast]);
 
   // Watchlist-only mode has no destination to pick — run immediately.
   useEffect(() => {
@@ -646,8 +652,7 @@ function BulkAddPanel({
       ? `Added ${added} film${added !== 1 ? 's' : ''} to playlist and watchlist`
       : `Added ${added} film${added !== 1 ? 's' : ''} to playlist`;
     showToast({ title: summary, variant: 'success' });
-    setTimeout(onDone, 1200);
-  }, [candidates, addItem, addMovie, alsoAddToWatchlist, queryClient, showToast, onDone]);
+  }, [candidates, addItem, addMovie, alsoAddToWatchlist, queryClient, showToast]);
 
   const handleCreateAndAdd = useCallback(async () => {
     const name = newName.trim();
@@ -668,6 +673,21 @@ function BulkAddPanel({
           <>
             <Ionicons name="checkmark-circle" size={44} color={colors.success} />
             <Text style={ppStyles.doneText}>Films added to watchlist!</Text>
+            {/* The same explicit button the per-film flow ends on.
+                Both of these completions used to call onDone on a 1.2s
+                timer instead — which on a share from another app means
+                BackHandler.exitApp(), so the app closed itself a moment
+                after saying it had saved, with nothing to read and no
+                say in it. Adding films one at a time never did that, so
+                the two halves of the same sheet behaved differently. */}
+            <TouchableOpacity
+              style={[ppStyles.doneBtn, { backgroundColor: colors.success }]}
+              onPress={onDone}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="arrow-back" size={18} color={colors.onColor} style={{ marginRight: 8 }} />
+              <Text style={ppStyles.doneBtnText}>{doneLabel}</Text>
+            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -686,6 +706,21 @@ function BulkAddPanel({
         <Text style={ppStyles.doneText}>
           {alsoAddToWatchlist ? 'Films added to playlist and watchlist!' : 'Films added to playlist!'}
         </Text>
+            {/* The same explicit button the per-film flow ends on.
+                Both of these completions used to call onDone on a 1.2s
+                timer instead — which on a share from another app means
+                BackHandler.exitApp(), so the app closed itself a moment
+                after saying it had saved, with nothing to read and no
+                say in it. Adding films one at a time never did that, so
+                the two halves of the same sheet behaved differently. */}
+            <TouchableOpacity
+              style={[ppStyles.doneBtn, { backgroundColor: colors.success }]}
+              onPress={onDone}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="arrow-back" size={18} color={colors.onColor} style={{ marginRight: 8 }} />
+              <Text style={ppStyles.doneBtnText}>{doneLabel}</Text>
+            </TouchableOpacity>
       </View>
     );
   }
@@ -778,6 +813,18 @@ const makePpStyles = (c: Palette) => StyleSheet.create({
   newCreateText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   doneWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
   doneText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.text },
+  // Matches the footer button the per-film flow ends on, so finishing a
+  // share looks the same whichever way the films were saved.
+  doneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  doneBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.onColor },
 });
 
 // ── Crash fallback ────────────────────────────────────────────────────────────
@@ -820,12 +867,19 @@ function LargeListPanel({
   listTitle,
   sourceUrl,
   onDone,
+  doneLabel,
 }: {
   identified: GeminiMovieMatch[];
   unidentified: GeminiMovieMatch[];
   listTitle?: string | null;
   sourceUrl?: string | null;
   onDone: () => void;
+  /**
+   * What the button at the end says — "Return to previous app" when the
+   * sheet was opened by a share from elsewhere, "Done" when it was not.
+   * The parent decides, because it is what knows how the sheet opened.
+   */
+  doneLabel: string;
 }) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
@@ -844,6 +898,7 @@ function LargeListPanel({
         initialName={listTitle}
         sourceUrl={sourceUrl}
         onDone={onDone}
+        doneLabel={doneLabel}
       />
     );
   }
@@ -1436,6 +1491,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
                 initialName={listTitle}
                 sourceUrl={sourceUrl}
                 onDone={handleReturn}
+                doneLabel={doneLabel}
               />
             ) : candidates.length === 0 ? (
               <>
@@ -1508,6 +1564,7 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
                 listTitle={listTitle}
                 sourceUrl={sourceUrl}
                 onDone={handleReturn}
+                doneLabel={doneLabel}
               />
             ) : isMultiFilm ? (
               <>
