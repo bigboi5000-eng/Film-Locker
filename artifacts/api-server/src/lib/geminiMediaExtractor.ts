@@ -46,6 +46,19 @@ export const MEDIA_RESPONSE_SCHEMA = {
               "'movie' for a feature film, including a television film. " +
               "Several titles exist as both — say which one this is.",
           },
+          caveat: {
+            type: Type.STRING,
+            description:
+              "A short, plain reason to doubt that this title is what the " +
+              "post actually shows — ONLY when the surrounding text or the " +
+              "comments say so outright. Use it for an AI-generated, " +
+              "fan-made, concept or parody trailer, or where people are " +
+              "saying the film does not exist. Quote the reason the way a " +
+              "person would say it, e.g. 'Comments say this is an " +
+              "AI-generated trailer, not a real film'. Leave it out " +
+              "entirely when the text raises no such doubt — an ordinary " +
+              "post about a real film must not carry one.",
+          },
           identified_from: {
             type: Type.STRING,
             enum: ["text", "imagery"],
@@ -186,6 +199,12 @@ export async function uploadAndAnalyzeMedia(
         // film", the behaviour this had before series were allowed in.
         ...(m.media_type === "movie" || m.media_type === "tv"
           ? { media_type: m.media_type }
+          : {}),
+        // Only a non-empty string counts. The model omits it for an
+        // ordinary post, which is the common case, and an empty one
+        // would render as a caveat with nothing in it.
+        ...(typeof m.caveat === "string" && m.caveat.trim().length > 0
+          ? { caveat: m.caveat.trim() }
           : {}),
       }));
 

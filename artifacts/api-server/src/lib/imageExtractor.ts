@@ -94,9 +94,52 @@ const IMAGE_PROMPT =
  * @param imageBase64 Raw base64 (no `data:` prefix).
  * @param mimeType    Must be a key of SUPPORTED_IMAGE_TYPES.
  */
+/**
+ * What the post says about itself, for the caveat.
+ *
+ * The caption and the comments, when the caller already has them. They
+ * are NOT used to identify anything — the picture does that — but they
+ * are the only thing that can contradict it. A frame recognised as
+ * Godzilla resolves at TMDB and looks perfectly correct; the comments
+ * underneath saying "this is AI generated" is the one piece of evidence
+ * that it is not, and the pipeline had already fetched them and thrown
+ * them away.
+ *
+ * Trimmed, because this rides along with an image upload and a whole
+ * comment thread is mostly noise.
+ */
+const MAX_CONTEXT_CHARS = 2000;
+
+/**
+ * How the post's own words are introduced to the model.
+ *
+ * Emphatic about what they are NOT for. Handing over a caption and a
+ * comment thread alongside the picture invites the model to read titles
+ * out of them, which is the job of a separate pass that has already run
+ * and already failed — anything it finds here would be a second-guess of
+ * that, from text the picture has nothing to do with.
+ */
+const CONTEXT_PREAMBLE =
+  "Below is the text posted WITH this image — its caption, and comments " +
+  "left underneath it. Do NOT extract titles from it: another pass has " +
+  "already read it and this image is being examined precisely because " +
+  "that found nothing. Use it for ONE purpose only — if it says outright " +
+  "that what is shown is AI-generated, fan-made, a concept or a parody, " +
+  "or that the film does not exist, set `caveat` on the match to a short " +
+  "plain sentence saying so. Say nothing when the text raises no such " +
+  "doubt. People joking or being rude about a real film is not a doubt.\n";
+
+export function buildImageContext(parts: Array<string | null | undefined>): string | undefined {
+  const text = parts.filter((p) => p && p.trim()).join("\n\n").trim();
+  if (!text) return undefined;
+  return text.length > MAX_CONTEXT_CHARS ? `${text.slice(0, MAX_CONTEXT_CHARS)}…` : text;
+}
+
 export async function extractMoviesFromImage(
   imageBase64: string,
-  mimeType: string
+  mimeType: string,
+  /** Caption and comments, when the caller has them. See buildImageContext. */
+  context?: string,
 ): Promise<GeminiExtractionResult> {
   const extension = SUPPORTED_IMAGE_TYPES[mimeType];
   if (!extension) {
@@ -121,7 +164,7 @@ export async function extractMoviesFromImage(
       getClient(),
       imagePath,
       mimeType,
-      IMAGE_PROMPT,
+      context ? `${IMAGE_PROMPT}\n\n${CONTEXT_PREAMBLE}\n${context}` : IMAGE_PROMPT,
       "user-supplied-image"
     );
   } finally {

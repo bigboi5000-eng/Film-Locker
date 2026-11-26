@@ -113,6 +113,45 @@ function RecognisedNote({ match }: { match: GeminiMovieMatch }) {
   );
 }
 /**
+ * What the post itself says that contradicts the match.
+ *
+ * Distinct from RecognisedNote above, and louder, because it is a
+ * different kind of statement. That one is a standing caution about HOW
+ * a film was identified; this one is evidence, quoted from the caption
+ * or the comments — the post saying outright that what it shows is
+ * AI-generated, fan-made, a concept, or not a film that exists.
+ *
+ * The case it was built for: an AI trailer captioned "this would be the
+ * best trailer ever", recognised from its imagery as Godzilla. The title
+ * resolves at TMDB, the confidence is high, and nothing after
+ * identification can tell it is wrong — but the comments underneath said
+ * so plainly, and had already been fetched and discarded.
+ *
+ * It does not hide or drop the match. The film is still listed and still
+ * tickable; it simply arrives UNTICKED, so saving it is a decision
+ * rather than a default.
+ */
+function CaveatNote({ match }: { match: GeminiMovieMatch }) {
+  const colors = useColors();
+  if (!match.caveat) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 4 }}>
+      <Ionicons name="alert-circle-outline" size={12} color={colors.star} style={{ marginTop: 1 }} />
+      <Text
+        style={{
+          flex: 1,
+          fontSize: 11,
+          fontFamily: 'Inter_500Medium',
+          color: colors.star,
+        }}
+      >
+        {match.caveat}
+      </Text>
+    </View>
+  );
+}
+
+/**
  * What to say about a film the viewer already has.
  *
  * Identifying a film from a post or a photo said nothing about whether it
@@ -231,6 +270,7 @@ function FilmCard({
           ) : null}
         </TouchableOpacity>
         <RecognisedNote match={match} />
+        <CaveatNote match={match} />
         {match.overview ? (
           <Text style={[cardStyles.overview, { color: colors.mutedForeground }]} numberOfLines={3}>
             {match.overview}
@@ -429,6 +469,7 @@ function FilmSelectRow({
           </View>
         ) : null}
         <RecognisedNote match={match} />
+        <CaveatNote match={match} />
         {/* The row itself toggles the checkbox, so opening the film needs
             its own target rather than the poster — a tap meant for
             selection must never open a sheet instead. */}
@@ -1383,10 +1424,16 @@ export function ShareFilmSheet({ visible, matches, listTitle, sourceUrl = null, 
       // add, and leaving them ticked means the Add button reports saving
       // films it did not save, because the server drops a duplicate.
       // Still tickable by hand — this is a default, not a prohibition.
+      //
+      // A caveated film starts unticked for the same reason and with the
+      // same escape: the post said outright that what it shows is not
+      // this film, so saving it should be something you chose rather
+      // than something that happened while you pressed Add All.
       setSelectedIds(new Set(matches
         .filter((m) =>
           m.confidence_score >= CONFIDENCE_THRESHOLD &&
           m.tmdb_id != null &&
+          !m.caveat &&
           !lockerRef.current.has(titleKey({ tmdbId: m.tmdb_id, mediaType: m.media_type }))
         )
         .map((m) => String(m.tmdb_id))

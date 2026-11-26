@@ -20,6 +20,23 @@ export interface GeminiMovieMatch {
    * pipeline did for its whole life before series were allowed in.
    */
   media_type?: "movie" | "tv";
+  /**
+   * A reason to doubt this match, in the post's own words, or absent.
+   *
+   * Set only from evidence in the surrounding TEXT — a caption, or the
+   * comments underneath — never from the model's own opinion of the
+   * picture. The case it exists for: an AI-generated trailer captioned
+   * "this would be the best trailer ever", recognised from its imagery as
+   * Godzilla and offered with full confidence, where the comments
+   * underneath said plainly that it was AI-generated and no such film
+   * exists. The title resolved at TMDB, so nothing downstream could catch
+   * it — the only correction available was the one already fetched and
+   * thrown away.
+   *
+   * A short phrase for a person to read, e.g. "Comments say this is an
+   * AI-generated trailer, not a real film".
+   */
+  caveat?: string;
   /** One-sentence hook — only populated by geminiRecommender.ts, absent elsewhere. */
   synopsis?: string;
   /**
@@ -93,6 +110,19 @@ const RESPONSE_SCHEMA = {
               "'tv' for a television series, miniseries or limited series; " +
               "'movie' for a feature film, including a television film. " +
               "Several titles exist as both — say which one the text means.",
+          },
+          caveat: {
+            type: Type.STRING,
+            description:
+              "A short, plain reason to doubt that this title is what the " +
+              "post actually shows — ONLY when the surrounding text or the " +
+              "comments say so outright. Use it for an AI-generated, " +
+              "fan-made, concept or parody trailer, or where people are " +
+              "saying the film does not exist. Quote the reason the way a " +
+              "person would say it, e.g. 'Comments say this is an " +
+              "AI-generated trailer, not a real film'. Leave it out " +
+              "entirely when the text raises no such doubt — an ordinary " +
+              "post about a real film must not carry one.",
           },
         },
         required: ["movie_title", "release_year", "confidence_score", "media_type"],

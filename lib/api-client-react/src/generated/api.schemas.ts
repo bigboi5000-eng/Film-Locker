@@ -199,6 +199,14 @@ export interface GeminiMovieMatch {
   tmdb_id?: number | null;
   /** Which of TMDB's two id sequences tmdb_id belongs to. Not simply what the model said — the lookup falls back to the other sequence on a miss, so this is what TMDB actually matched. Absent when nothing matched, and absent means film. */
   media_type?: GeminiMovieMatchMediaType;
+  /**
+     * A short reason to doubt this match, taken from what the post says about itself — its caption, or the comments underneath. Absent for an ordinary post, which is the common case.
+     *
+     * Set only on outright evidence: an AI-generated, fan-made, concept or parody trailer, or people saying the film does not exist. It exists because a frame recognised as a real film resolves at TMDB and looks correct, so nothing after identification can catch it — the comments are the only correction available, and they are already fetched.
+     *
+     * Most dangerous alongside identified_from: "imagery". Show it to the user; do not silently discard the match.
+     */
+  caveat?: string;
   poster_url?: string | null;
   title?: string | null;
   overview?: string | null;

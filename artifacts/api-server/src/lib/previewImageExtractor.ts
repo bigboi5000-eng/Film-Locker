@@ -73,7 +73,9 @@ export async function extractMoviesFromPreviewImage(
  * accepts, or is implausibly large. Only a Gemini failure throws.
  */
 export async function extractMoviesFromImageUrl(
-  imageUrl: string
+  imageUrl: string,
+  /** The post's own caption and comments, for the caveat. */
+  context?: string,
 ): Promise<GeminiExtractionResult | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -99,5 +101,5 @@ export async function extractMoviesFromImageUrl(
 
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return null;
 
-  return extractMoviesFromImage(Buffer.from(bytes).toString("base64"), mimeType);
+  return extractMoviesFromImage(Buffer.from(bytes).toString("base64"), mimeType, context);
 }

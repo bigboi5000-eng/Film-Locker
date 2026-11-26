@@ -49,6 +49,15 @@ export interface EnrichedMatch {
    */
   identified_from?: "text" | "imagery";
   /**
+   * Why this match might be wrong, in the post's own words. Carried
+   * through from the raw match; see GeminiMovieMatch.caveat.
+   *
+   * Pairs with identified_from: a caveat on an "imagery" match is the
+   * dangerous combination, because that is the one the TMDB lookup
+   * cannot sanity-check.
+   */
+  caveat?: string;
+  /**
    * Set when the title matched no film but does match a television series.
    *
    * Only ever populated for an app build that cannot save a series. A build

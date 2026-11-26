@@ -103,6 +103,7 @@
 import { unlinkSync } from "node:fs";
 import { fetchPageCaption, detectPlatform } from "./pageCaptionScraper";
 import { extractMoviesFromPreviewImage, extractMoviesFromImageUrl } from "./previewImageExtractor";
+import { buildImageContext } from "./imageExtractor";
 import {
   hasApifyToken,
   fetchInstagramPostViaApify,
@@ -582,8 +583,17 @@ export async function processSocialLink(
         // 0.9c — the cover frame, from Apify's CDN URL rather than a page
         // this server cannot load.
         if (post.imageUrl) {
+          // The caption and comments go WITH the frame, having found no
+          // titles themselves. Not to identify anything — the picture
+          // does that — but because they are the only thing that can
+          // contradict it, and this is the step whose confident wrong
+          // answers nothing downstream can catch. An AI trailer captioned
+          // "this would be the best trailer ever" is recognised from its
+          // imagery as Godzilla and resolves at TMDB perfectly well; the
+          // comments saying it is AI-generated were fetched three lines
+          // up and discarded.
           const image = await timed("apify-cover-image", warn, () =>
-            extractMoviesFromImageUrl(post.imageUrl!));
+            extractMoviesFromImageUrl(post.imageUrl!, buildImageContext([caption, comments])));
           if (image && image.movies.length > 0) {
             const { matches, saved, listTitle } =
               await enrichAndSaveMatches(image.movies, warn, dryRun, clerkUserId, image.list_title, { sourceUrl: url, supportsTv });

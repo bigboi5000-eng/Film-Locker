@@ -218,6 +218,18 @@ relationship.
   week as the brake so a film TMDB genuinely has no date for is not
   re-fetched every boot), and the upsert fills a blank with
   `coalesce(nullif(existing, ''), new)` rather than leaving it.
+- **A frame recognised as a real film cannot be checked by anything
+  downstream.** A misread TITLE resolves to nothing at TMDB and is
+  dropped; a misrecognised SCENE comes back as a real film at high
+  confidence and the title resolves, so it looks correct all the way to
+  the locker. The only correction available is what the post says about
+  itself, which `processSocialLink` had already fetched and thrown away —
+  the caption and comments are mined for titles, and discarded once the
+  pipeline moves on to the cover frame. They are now passed to the image
+  step as CONTEXT (`buildImageContext`), explicitly not for titles, and
+  the model sets `caveat` when the text says outright that the thing is
+  AI-generated, fan-made, a concept or not a real film. A caveated match
+  is shown and left UNTICKED, never hidden.
 - **Silent failure is the recurring bug in this codebase.** Bare `catch`,
   discarded Expo push tickets, `Promise.allSettled` skipping rejections
   with no log. Nearly every long-lived mystery this project has had traced
