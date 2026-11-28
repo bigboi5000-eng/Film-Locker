@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { SignedOutGate } from '@/components/SignedOutGate';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import {

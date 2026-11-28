@@ -19,6 +19,13 @@ import type { Palette } from '@/constants/colors';
  * Deliberately not a redirect. Bouncing someone to a sign-in screen for
  * tapping a tab is the behaviour that got the app rejected; this leaves them
  * exactly where they are, free to go back to browsing.
+ *
+ * And it says so, with a third action that goes to the films. Two sign-up
+ * buttons and nothing else reads as a wall even when the screen behind it
+ * genuinely has nothing to show a guest -- which is how 5.1.1(v) came back
+ * a third time. Somebody who landed here by tapping along the tab bar
+ * should be told in the same breath that browsing needs no account, and be
+ * given the one tap that proves it.
  */
 export function SignedOutGate({
   icon,
@@ -58,6 +65,20 @@ export function SignedOutGate({
       >
         <Text style={styles.secondaryBtnText}>I already have one</Text>
       </TouchableOpacity>
+
+      <View style={styles.rule} />
+
+      <Text style={styles.freeNote}>
+        Browsing, searching and reading about films needs no account.
+      </Text>
+      <TouchableOpacity
+        style={styles.browseBtn}
+        onPress={() => router.replace('/(tabs)')}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="film-outline" size={16} color={colors.text} />
+        <Text style={styles.browseBtnText}>Browse films</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -90,4 +111,21 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   primaryBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: c.onColor },
   secondaryBtn: { paddingVertical: 16 },
   secondaryBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: c.primary },
+  rule: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: c.border,
+    alignSelf: 'stretch',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  freeNote: {
+    fontSize: 13, fontFamily: 'Inter_400Regular', color: c.textMuted,
+    textAlign: 'center', marginBottom: 12,
+  },
+  browseBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+    borderRadius: 12, paddingVertical: 13, alignSelf: 'stretch',
+  },
+  browseBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: c.text },
 });

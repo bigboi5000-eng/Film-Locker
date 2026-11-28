@@ -135,6 +135,46 @@ means a new store release.
   App Store Connect stops asking on every upload.
 - **Rate limiting**, and production error messages that don't leak internals.
 
+### 5.1.1(v) — registration walls, rejected three times
+
+The same guideline came back three times, each time for a different wall,
+so the rule to apply is broader than any one fix: **a guest must never meet
+a full screen whose only actions are "create an account" and "sign in".**
+Apple's wording moved from "film listing" to "film information" between
+rounds, which is not a different complaint — it is the same reviewer tapping
+somewhere new.
+
+What was removed, in order:
+
+1. `(tabs)/_layout.tsx` redirected a signed-out visitor to sign-in. Gone.
+2. The Films tab showed a guest no films, only a panel about the watchlist
+   they could not have. It lists trending ones now.
+3. The **Feed** and **Community** tabs were full-screen sign-up panels —
+   half the tab bar. The Feed now shows public playlists (`/playlists/public`
+   needs no token), and `SignedOutGate`, which is all that remains on
+   Community, says outright that browsing needs no account and has a
+   "Browse films" button that goes to Home.
+
+What a guest can reach, all verified against the live API with no bearer
+token — if any of these ever starts needing auth, the rejection is back:
+
+| Screen | Endpoint |
+|---|---|
+| Home rails | `/movies/trending`, `/movies/new-releases` |
+| Search (Home and Films) | `/movies/search` |
+| Films tab grid | `/movies/trending` |
+| Feed | `/playlists/public` |
+| A public list | `/playlists/{id}` |
+| Film sheet | `/movies/tmdb/{id}`, `/movies/tmdb/{id}/similar`, `/films/{id}/community-score`, `/films/{id}/comments` |
+| Cast and crew | `/people/{id}` |
+
+Account prompts live at the point of use (`useRequireAccount`), on the
+action that keeps something — saving, rating, commenting, recommending.
+That is the part Apple permits, and it is worth saying so in the review
+notes rather than waiting to be asked: name the tabs that are open, say
+that an account is needed only to save and to post, and point out that
+no screen bounces a guest to sign-in.
+
 ## 5. What the app collects, for the App Privacy questionnaire
 
 - Email address (via Clerk), optional username, display initials, avatar

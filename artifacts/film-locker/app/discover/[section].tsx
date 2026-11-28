@@ -16,12 +16,15 @@ import {
   useGetTrending,
   useGetNewReleases,
   useGetRecommendations,
+  getGetRecommendationsQueryKey,
   useListMovies,
+  getListMoviesQueryKey,
   type TmdbMovieCard,
 } from '@workspace/api-client-react';
 import { DiscoverCard } from '@/components/DiscoverCard';
 import { FilmDetailModal } from '@/components/FilmDetailModal';
 import { LoadError } from '@/components/LoadError';
+import { useAuth } from '@clerk/expo';
 import { useLockerStatusByTitle, titleKey, asMediaType } from '@/hooks/useLockerTitles';
 import { FilterBar, FilterState, applyFilters, countNoun } from '@/components/FilterBar';
 import { applySort, type SortState } from '@/components/SortSheet';
@@ -87,18 +90,36 @@ export default function DiscoverScreen() {
 
   const region = useMemo(() => getDeviceRegion(), []);
   const lockerStatusByTitle = useLockerStatusByTitle();
+  const { isSignedIn } = useAuth();
 
-  // Fetch data for whichever section we're in
+  // Fetch data for whichever section we're in.
+  //
+  // Trending and new releases are public; recommendations and the locker
+  // are not -- they are built from your own films. A guest reaching this
+  // screen through "See all" on Trending was firing both anyway and
+  // getting a 401 for each, which nothing rendered: the section it came
+  // for loaded fine, so the only trace was a pair of failures in the
+  // server log. Same treatment as Home, which has always disabled them.
   const trending = useGetTrending({ region });
   const newReleases = useGetNewReleases({ region });
-  const recommendations = useGetRecommendations({ region });
+  const recommendations = useGetRecommendations(
+    { region },
+    {
+      query: {
+        queryKey: getGetRecommendationsQueryKey({ region }),
+        enabled: Boolean(isSignedIn),
+      },
+    },
+  );
   const { data: trendingData, isLoading: trendingLoading } = trending;
   const { data: newReleasesData, isLoading: newReleasesLoading } = newReleases;
   const { data: recommendationsData, isLoading: recommendationsLoading } = recommendations;
   /** Whichever of the three this screen is actually showing. */
   const active =
     section === 'trending' ? trending : section === 'new-releases' ? newReleases : recommendations;
-  const { data: lockerData } = useListMovies();
+  const { data: lockerData } = useListMovies({
+    query: { queryKey: getListMoviesQueryKey(), enabled: Boolean(isSignedIn) },
+  });
 
   const rawMovies: TmdbMovieCard[] = useMemo(() => {
     if (section === 'trending') return trendingData?.movies ?? [];
